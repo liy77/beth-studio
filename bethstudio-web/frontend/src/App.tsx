@@ -404,6 +404,23 @@ export function App() {
     conn.setWatched(activeLeaves.filter((l) => !l.leaf.gone && paneById.has(l.leaf.pane)).map((l) => l.leaf.pane));
   }, [activeLeaves, paneById]);
 
+  // Escondido na bandeja ou minimizado por mais de 3 s: para de observar (a
+  // ponte deixa de consultar as telas a cada 30 ms). Voltou: observa de novo.
+  useEffect(() => {
+    let t: number | undefined;
+    const apply = () => {
+      window.clearTimeout(t);
+      if (document.visibilityState === "hidden") t = window.setTimeout(() => conn.setWatchPaused(true), 3000);
+      else conn.setWatchPaused(false);
+    };
+    document.addEventListener("visibilitychange", apply);
+    apply();
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener("visibilitychange", apply);
+    };
+  }, []);
+
   // --- acoes -----------------------------------------------------------
   // "Abrir arquivo…": janela do Windows, começando na pasta do terminal em foco
   // pasta do terminal em foco, como caminho do Windows (\\wsl.localhost\... no WSL)

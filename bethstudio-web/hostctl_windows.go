@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -117,11 +118,35 @@ func (c realHostCtl) terminateByPidFile() error {
 	return windows.TerminateProcess(h, 0)
 }
 
+// guiCheck: o resultado do GUIRunning, guardado. A janela nativa saiu na Fase
+// B; procurar por ela tira uma foto de todos os processos do PC (Toolhelp32),
+// e o supervisor pergunta a cada 2 s. Com 600 processos isso custava ~0,4
+// núcleo em modo kernel (medido em 2026-11-21). "Não está" vale 60 s;
+// "está" é conferido de novo a cada vez, para assumir logo quando ela sair.
+var guiCheck struct {
+	mu  sync.Mutex
+	at  time.Time
+	yes bool
+}
+
+const guiCheckTTL = 60 * time.Second
+
 // GUIRunning: existe um bethterm-gui.exe (a GUI antiga) rodando?
 func (realHostCtl) GUIRunning() bool {
 	if ignoreOldGUI() {
 		return false
 	}
+	guiCheck.mu.Lock()
+	defer guiCheck.mu.Unlock()
+	if !guiCheck.yes && !guiCheck.at.IsZero() && time.Since(guiCheck.at) < guiCheckTTL {
+		return false
+	}
+	guiCheck.yes = guiProcessRunning()
+	guiCheck.at = time.Now()
+	return guiCheck.yes
+}
+
+func guiProcessRunning() bool {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
 		return false

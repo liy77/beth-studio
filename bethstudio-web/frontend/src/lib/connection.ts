@@ -82,6 +82,7 @@ export class Connection {
     resumeOffers: [],
   };
   private spawns = new Pending<SpawnedEvent>();
+  private watchPaused = false;
   private separations = new Pending<number>();
   private errorListeners = new Set<(msg: string) => void>();
   private termDragListeners = new Set<(e: TermDragEvent) => void>();
@@ -199,7 +200,7 @@ export class Connection {
       void this.api<{ panes: number[] }>("/api/term/list")
         .then((r) => this.patch({ termWindows: r.panes ?? [] }))
         .catch(() => {});
-      if (this.watched.length) this.raw({ op: "watch", pane_ids: this.watched });
+      if (this.watched.length && !this.watchPaused) this.raw({ op: "watch", pane_ids: this.watched });
       for (const [pane_id, offset] of this.offsets) if (offset > 0) this.raw({ op: "scroll", pane_id, offset });
     };
     ws.onmessage = (m) => {
@@ -405,12 +406,23 @@ export class Connection {
     this.watched = next;
     for (const id of [...this.lastScreens.keys()]) if (!next.includes(id)) this.lastScreens.delete(id);
     for (const id of [...this.offsets.keys()]) if (!next.includes(id)) this.offsets.delete(id);
-    this.raw({ op: "watch", pane_ids: next });
+    if (!this.watchPaused) this.raw({ op: "watch", pane_ids: next });
+  }
+
+  /**
+   * Studio escondido (bandeja ou minimizado): para de pedir as telas ao host
+   * sem esquecer o que observa nem a posição no histórico. A ponte deixa de
+   * consultar esses terminais a cada 30 ms; ao voltar, pede tudo de novo.
+   */
+  setWatchPaused(paused: boolean) {
+    if (paused === this.watchPaused) return;
+    this.watchPaused = paused;
+    this.raw({ op: "watch", pane_ids: paused ? [] : this.watched });
   }
 
   /** Pede uma fotografia nova ao bridge, sem escrever no terminal. */
   refreshScreen(paneId: number) {
-    if (this.watched.includes(paneId)) this.raw({ op: "watch", pane_ids: this.watched });
+    if (this.watched.includes(paneId) && !this.watchPaused) this.raw({ op: "watch", pane_ids: this.watched });
   }
 
   /** Texto SGR da ultima tela recebida (so' panes observados). */
