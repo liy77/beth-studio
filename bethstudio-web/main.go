@@ -127,6 +127,8 @@ func main() {
 		hub.restore = newHubRestore(hub)
 		// Bandeja do Studio (tray_windows.go): só sobe se a GUI antiga não estiver cuidando dela.
 		go runTrayWhenFree(ctx, hub, hub.sup, ctl)
+		// Processos deixados pelos agentes (agent_procs.go): um retrato por minuto.
+		go hub.runAgentProcs(ctx)
 	}
 	go br.run(ctx)
 	// Tipos dos terminais: pane-commands.json da GUI pode mudar sem a lista

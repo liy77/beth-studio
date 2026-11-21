@@ -192,6 +192,7 @@ export type ServerEvent =
   | { ev: "ui_open"; what: "tasks" | "reload" }
   | import("./restoreBanner").RestoreEvent
   | import("./agentResume").AgentResumeEvent
+  | import("./agentProcs").AgentProcsEvent
   | { ev: "term_drag"; pane: number; x: number; y: number; end: boolean; attach?: boolean }
   | import("./agents").AgentEvent;
 

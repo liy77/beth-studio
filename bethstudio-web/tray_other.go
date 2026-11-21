@@ -10,3 +10,5 @@ func runTrayWhenFree(ctx context.Context, h *hub, sup *supervisor, ctl hostCtl) 
 }
 
 func stopTray() {}
+
+func trayBalloon(title, text string) { _, _ = title, text }

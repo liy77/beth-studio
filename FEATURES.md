@@ -121,8 +121,8 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   (crash, **Encerrar tudo**, new version, reboot) the Studio already recreates
   the terminals in their folders; now it also knows which Claude Code session
   ran in each one and types `claude --resume <id>` in the right terminal, so
-  the conversation comes back with its history. Configurações → **Retomar
-  sessões**: **Ligar** for Windows and for each WSL distro writes a Claude hook
+  the conversation comes back with its history. Configurações → **Sessões e
+  processos** → Retomar: **Ligar** for Windows and for each WSL distro writes a Claude hook
   (SessionStart and SessionEnd, `bethstudio-tool.exe agent-hook`, with a
   backup of `settings.json`) that only records the session id and the
   terminal (`WEZTERM_PANE`; patch 0205 carries it into WSL). After a restore,
@@ -135,6 +135,20 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   opened by a host without patch 0205 has no pane id: the session is
   recorded by folder and goes to the only terminal of that side in that
   folder (none if there are two). Only on the PC. Each resume goes to
+  `host-life.log`.
+- 🟢 **Processos deixados pelos agentes** (2026-11-21). Once a minute the
+  Studio looks at the Windows process tree and at every WSL distro that is
+  already running (it never starts a stopped one) for processes an agent
+  started by command (agent → shell → dev server, build, script) that are
+  still running, including the ones left behind after the agent exited.
+  Past the limit (default 30 min) it shows a Windows notification from the
+  tray and a bar in the Studio with each process (name, Windows/WSL, PID,
+  how long, memory, CPU of the last minute, the agent's folder, command
+  line) and **Encerrar** (the process and its children; the PID's start time
+  is checked first), **Ignorar** and **Lembrar em 1 h**. Nothing is ended
+  without a click. Claude's MCP servers, hooks of the Studio and anything
+  with "mcp" in the command line are left out. Configurações → **Sessões e
+  processos** turns it off or changes the limit. Every kill goes to
   `host-life.log`.
 - 🟢 **Session file** — `%APPDATA%\bethstudio\session.json` is written
   atomically in the background with a 2 s timeout, and restore drops

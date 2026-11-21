@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import { cn } from "@/lib/utils";
 import type { AgentResumeView, ResumeMode } from "@/lib/agentResume";
+import type { AgentProcSettings } from "@/lib/agentProcs";
 
 // Configurações > Retomar sessões (agent_resume.go).
 
@@ -56,6 +57,30 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
   const [busy, setBusy] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, SetupResult>>({});
   const [err, setErr] = useState<string | null>(null);
+  const [procs, setProcs] = useState<AgentProcSettings | null>(null);
+  const [minutes, setMinutes] = useState("30");
+
+  useEffect(() => {
+    conn
+      .api<{ settings: AgentProcSettings }>("/api/agent-procs")
+      .then((r) => {
+        setProcs(r.settings);
+        setMinutes(String(r.settings.minutes));
+      })
+      .catch(() => undefined);
+  }, [conn]);
+
+  const saveProcs = (next: AgentProcSettings) => {
+    setErr(null);
+    conn
+      .api<{ settings: AgentProcSettings }>("/api/agent-procs/settings", next)
+      .then((r) => {
+        setProcs(r.settings);
+        setMinutes(String(r.settings.minutes));
+        onMessage("Salvo");
+      })
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
+  };
 
   const load = useCallback(() => {
     conn
@@ -169,6 +194,33 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
           <code className="font-mono">{"{id}"}</code> vira o id da sessão. Ex.: <code className="font-mono">claude --dangerously-skip-permissions --resume {"{id}"}</code>
         </p>
       </section>
+      {procs && (
+        <section className="space-y-2 border-t border-border pt-4">
+          <h3 className="text-[13px] font-semibold">Processos deixados pelos agentes</h3>
+          <p className="text-text-2">
+            A cada minuto o Studio procura, no Windows e nas distros do WSL que já estão rodando, os processos que um agente abriu por comando (servidor de
+            desenvolvimento, build, script) e que continuam rodando. Passado o tempo abaixo, avisa na bandeja e mostra uma faixa com <b>Encerrar</b>,{" "}
+            <b>Ignorar</b> e <b>Lembrar em 1 h</b>. Nunca encerra sozinho. Os servidores MCP do Claude ficam de fora.
+          </p>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={!procs.off} onChange={(e) => saveProcs({ ...procs, off: !e.target.checked })} />
+            Avisar sobre processos rodando há mais de
+            <input
+              className="w-16 rounded border border-border bg-bg-term px-2 py-0.5 text-right"
+              inputMode="numeric"
+              value={minutes}
+              disabled={procs.off}
+              onChange={(e) => setMinutes(e.target.value.replace(/\D/g, ""))}
+              onBlur={() => {
+                const n = Number(minutes);
+                if (n && n !== procs.minutes) saveProcs({ ...procs, minutes: n });
+                else setMinutes(String(procs.minutes));
+              }}
+            />
+            min
+          </label>
+        </section>
+      )}
       {err && <div className="text-status-err">{err}</div>}
     </div>
   );

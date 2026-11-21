@@ -86,6 +86,8 @@ type webSettings struct {
 	TempClean *TempCleanSettings `json:"temp_clean,omitempty"`
 	// Retomar sessões do Claude depois que o host reinicia (agent_resume.go).
 	AgentResume *AgentResumeSettings `json:"agent_resume,omitempty"`
+	// Processos deixados pelos agentes (agent_procs.go).
+	AgentProcs *AgentProcSettings `json:"agent_procs,omitempty"`
 }
 
 type SidebarPrefs struct {

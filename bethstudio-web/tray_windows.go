@@ -502,3 +502,28 @@ func paintAmberDot(pixels []byte, w, h int) {
 		}
 	}
 }
+
+// trayBalloon mostra um aviso do Windows saindo do ícone da bandeja.
+func trayBalloon(title, text string) {
+	if !trayActive.Load() || trayHwnd == 0 {
+		return
+	}
+	const nifInfo, niifInfo = 0x10, 0x1
+	var nid notifyIconData
+	nid.CbSize = uint32(unsafe.Sizeof(nid))
+	nid.HWnd = trayHwnd
+	nid.UID = 1
+	nid.UFlags = nifInfo
+	nid.DwInfoFlags = niifInfo
+	copy16 := func(dst []uint16, s string) {
+		for i, ch := range windows.StringToUTF16(s) {
+			if i >= len(dst)-1 {
+				break
+			}
+			dst[i] = ch
+		}
+	}
+	copy16(nid.SzInfoTitle[:], title)
+	copy16(nid.SzInfo[:], text)
+	_, _, _ = trayProcNotify.Call(nimModify, uintptr(unsafe.Pointer(&nid)))
+}

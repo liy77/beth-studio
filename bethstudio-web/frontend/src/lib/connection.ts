@@ -6,6 +6,7 @@ import type { TermDragEvent } from "./termDrop";
 import type { HostEvent } from "./hostBanner";
 import type { RestoreEvent } from "./restoreBanner";
 import type { ResumeOffer } from "./agentResume";
+import type { AgentProc } from "./agentProcs";
 
 // Conexao WebSocket com o backend Go. Um unico socket por pagina; as telas
 // (screen) vao direto para os assinantes de cada pane, sem passar pelo
@@ -33,6 +34,8 @@ export interface ConnectionSnapshot {
   restoreFinishedAt: number;
   /** terminais recriados que tinham uma sessão do Claude (agent_resume.go) */
   resumeOffers: ResumeOffer[];
+  /** processos deixados pelos agentes rodando há muito tempo (agent_procs.go) */
+  agentProcs: AgentProc[];
 }
 
 function readParams() {
@@ -80,6 +83,7 @@ export class Connection {
     restore: null,
     restoreFinishedAt: 0,
     resumeOffers: [],
+    agentProcs: [],
   };
   private spawns = new Pending<SpawnedEvent>();
   private watchPaused = false;
@@ -284,6 +288,9 @@ export class Connection {
           break;
         case "agent_resume":
           this.patch({ resumeOffers: ev.offers ?? [] });
+          break;
+        case "agent_procs":
+          this.patch({ agentProcs: ev.items ?? [] });
           break;
         case "ui_open":
           if (ev.what === "reload") {
