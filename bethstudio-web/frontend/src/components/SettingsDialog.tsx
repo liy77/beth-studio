@@ -20,6 +20,7 @@ import { UpdateSection } from "./UpdateSection";
 import { PerformanceSection } from "./PerformanceSection";
 import { TempCleanSection } from "./TempCleanSection";
 import { PonteSection } from "./PonteSection";
+import { LaunchersSection } from "./LaunchersSection";
 import { AgentResumeSection } from "./AgentResumeSection";
 import { isRemote } from "@/lib/remote";
 
@@ -127,6 +128,7 @@ export function SettingsDialog(p: Props) {
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   <PhoneRemoteSection conn={p.conn} onMessage={p.onMessage} />
+                  <LaunchersSection conn={p.conn} onMessage={p.onMessage} />
                   <div className="px-5">
                     <VpsInstallWizard conn={p.conn} onMessage={p.onMessage} />
                   </div>

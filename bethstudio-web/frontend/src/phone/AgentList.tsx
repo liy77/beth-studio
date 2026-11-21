@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { LayoutGrid, List, LogOut, MoreVertical, RefreshCw, Search, X } from "lucide-react";
+import { LayoutGrid, List, LogOut, MoreVertical, Plus, RefreshCw, Search, X } from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import type { AgentState } from "@/lib/agents";
 import type { PaneInfo } from "@/lib/types";
@@ -9,6 +9,7 @@ import { Mark } from "./Mark";
 import { logout } from "./session";
 import { ThemePicker } from "./theme";
 import { PaneGrid } from "./PaneGrid";
+import { LaunchScreen } from "./LaunchScreen";
 import { byRecent, filterPanes, kindChips, kindText, KIND_LABELS, waitedFor, type KindFilter, type Recent } from "./text";
 
 // Busca e filtro sobrevivem a abrir um terminal e voltar.
@@ -60,6 +61,30 @@ interface Props {
 
 export function AgentList({ conn, panes, agents, recent, nameOf, online, gone, banner, canLogout, kindOrder, onOpen, onLogout }: Props) {
   const [menu, setMenu] = useState(false);
+  // "Abrir agente" (LaunchScreen) e o terminal novo que espera aparecer na lista
+  const [launching, setLaunching] = useState(false);
+  const [waitPane, setWaitPane] = useState<number | null>(null);
+  useEffect(() => {
+    if (waitPane == null) return;
+    if (panes?.some((p) => p.pane_id === waitPane)) {
+      setWaitPane(null);
+      setLaunching(false);
+      onOpen(waitPane);
+      return;
+    }
+    conn.refreshList();
+    const t = window.setTimeout(() => conn.refreshList(), 1500);
+    return () => window.clearTimeout(t);
+  }, [waitPane, panes, conn, onOpen]);
+  // não fica preso em "Abrindo…" se o terminal não aparecer
+  useEffect(() => {
+    if (waitPane == null) return;
+    const t = window.setTimeout(() => {
+      setWaitPane(null);
+      setLaunching(false);
+    }, 20000);
+    return () => window.clearTimeout(t);
+  }, [waitPane]);
   const [view, setViewState] = useState<View>(loadView);
   const setView = (v: View) => {
     setViewState(v);
@@ -124,6 +149,19 @@ export function AgentList({ conn, panes, agents, recent, nameOf, online, gone, b
     );
   };
 
+  if (launching) {
+    return waitPane != null ? (
+      <div className="p-scroll">
+        <div className="p-empty">
+          <strong>Abrindo o terminal no PC…</strong>
+          O agente começa em instantes.
+        </div>
+      </div>
+    ) : (
+      <LaunchScreen conn={conn} onBack={() => setLaunching(false)} onLaunched={setWaitPane} />
+    );
+  }
+
   return (
     <>
       <header className="p-top">
@@ -143,6 +181,9 @@ export function AgentList({ conn, panes, agents, recent, nameOf, online, gone, b
           onClick={() => setView(view === "grid" ? "list" : "grid")}
         >
           {view === "grid" ? <List size={20} /> : <LayoutGrid size={20} />}
+        </button>
+        <button type="button" className="p-icon-btn" aria-label="Abrir agente" disabled={!online} onClick={() => setLaunching(true)}>
+          <Plus size={22} />
         </button>
         <button type="button" className="p-icon-btn" aria-label="Atualizar a lista" onClick={() => conn.refreshList()}>
           <RefreshCw size={20} />

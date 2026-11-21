@@ -329,6 +329,18 @@ ends the shell together with everything it started (patch 0203).
   and overall (also for the phone login), and every sign-in, failure and
   ended session goes to `remote-access.log` (listed in Configurações →
   Sobre).
+- 🟢 **Celular: abrir agente por atalho** (2026-11-21). Configurações →
+  Celular → **Atalhos de agentes no celular**: each shortcut has a name, a
+  shell (PowerShell, WSL…), a default folder and a command (`claude`,
+  `codex`…); ready-made suggestions on first use. On the phone, the **+** in
+  the terminal list shows the shortcuts; pick one, pick the folder (the
+  shortcut's own, or the folder of any open terminal on the same side —
+  Windows or WSL — without typing) and **Abrir**: a new terminal opens on the
+  PC, the command runs in it and the phone goes straight to it. The phone
+  never opens a terminal with a free command: the server only accepts a
+  saved shortcut and one of those folders. **O celular pode criar e editar
+  atalhos** (off by default) lets the phone edit the list too. Every launch
+  goes to `host-life.log`.
 - 🟢 **Celular: QR code, aparelhos e PC offline** (2026-10-18). Configurações
   → Celular → **Conectar um celular** shows a QR code and a link that open
   the phone web app already signed in: single use, valid 5 minutes, the
