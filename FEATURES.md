@@ -163,7 +163,9 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   without a click. Claude's MCP servers, hooks of the Studio and anything
   with "mcp" in the command line are left out. Configurações → **Sessões e
   processos** turns it off or changes the limit. Every kill goes to
-  `host-life.log`.
+  `host-life.log`. **Ignorar** and **Lembrar em 1 h** are saved
+  (`agent-procs-hold.json`) and survive restarting the Studio while the same
+  process lives; a process already announced is not announced again.
 - 🟢 **Session file** — `%APPDATA%\bethstudio\session.json` is written
   atomically in the background with a 2 s timeout, and restore drops
   unreachable network/WSL working directories after a 300 ms probe
