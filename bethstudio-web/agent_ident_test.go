@@ -19,6 +19,10 @@ func TestAgentOfNode(t *testing.T) {
 		{apNode{Name: "node", Cmd: "node vite --port 5173"}, ""},
 		{apNode{Name: "bash", Cmd: "bash -c claude --resume x"}, ""},
 		{apNode{Name: "cursor"}, ""}, // o editor Cursor não é o agente
+		{apNode{Name: "codex", Cmd: `"C:\x\codex.exe" app-server --listen unix:// --managed-daemon`}, ""},
+		{apNode{Name: "codex", Cmd: "codex mcp-server"}, ""},
+		{apNode{Name: "codex", Cmd: "codex --full-auto"}, "codex"},
+		{apNode{Name: "opencode", Cmd: "opencode serve --port 4096"}, ""},
 	}
 	for _, c := range cases {
 		if got := agentOfNode(c.n); got != c.want {

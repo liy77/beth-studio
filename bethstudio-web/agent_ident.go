@@ -21,8 +21,26 @@ import (
 // Agentes reconhecidos (o id vai para a interface).
 var agentIDs = []string{"claude", "codex", "opencode", "cursor", "grok", "gemini"}
 
+// agentServerArgs: o agente rodando como servidor em segundo plano (o
+// app-server do Codex, servidor MCP, daemon). Ele herda o terminal de onde
+// foi aberto e continua depois que a sessão sai: não é "agente no terminal".
+var agentServerArgs = []string{" app-server", "--managed-daemon", " mcp", "mcp-server", " daemon", " serve", "--headless"}
+
+func agentIsServer(cmd string) bool {
+	c := " " + strings.ToLower(cmd)
+	for _, a := range agentServerArgs {
+		if strings.Contains(c, a) {
+			return true
+		}
+	}
+	return false
+}
+
 // agentOfNode: o agente que este processo é ("" = nenhum).
 func agentOfNode(n apNode) string {
+	if agentIsServer(n.Cmd) {
+		return ""
+	}
 	switch n.Name {
 	case "claude":
 		return "claude"

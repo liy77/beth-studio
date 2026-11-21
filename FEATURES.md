@@ -140,7 +140,8 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   **Claude**, **Codex**, **OpenCode**, **Cursor**, **Grok**, **Gemini** — on
   the terminal grid, the sidebar, the phone list and the phone grid, so a
   free terminal is easy to spot. It comes from the processes, not the screen
-  (a screen that still shows `claude --resume …` is not counted): every 15 s
+  (a screen that still shows `claude --resume …` is not counted, nor an agent
+  left running as a background server, like `codex app-server`): every 15 s
   the Studio reads the Windows processes and, in each WSL distro that is
   already running, `ps`; the terminal is the process's `WEZTERM_PANE` (in
   WSL since patch 0205). A WSL terminal opened by an older host is matched

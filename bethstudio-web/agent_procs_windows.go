@@ -87,7 +87,9 @@ func apWindowsNodes() ([]apNode, map[int]*procInfo, error) {
 		// runtimes de JavaScript (Codex, Grok... rodam em node): poucos
 		if par, ok := byPID[int(p.PPID)]; ok && apShells[name(par)] {
 			n.Cmd = apCmdline(p)
-		} else if n.Name == "node" || n.Name == "bun" || n.Name == "deno" {
+		} else if n.Name == "node" || n.Name == "bun" || n.Name == "deno" || agentOfNode(n) != "" {
+			// runtimes de JavaScript e os próprios agentes (para separar o
+			// servidor em segundo plano, ex. "codex app-server", da sessão)
 			n.Cmd = apCmdline(p)
 		}
 		if n.Name == "claude" {
