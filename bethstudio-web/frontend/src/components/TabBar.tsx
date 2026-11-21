@@ -64,6 +64,8 @@ interface Props {
   onSpeak?: () => void;
   /** os botoes de ferramenta estao na barra lateral (nao repetir aqui) */
   hideActions?: boolean;
+  /** avisos com ícone (processos deixados pelos agentes), à direita das abas */
+  alerts?: ReactNode;
   /**
    * "Matar terminal…" / "Reiniciar este terminal…" do terminal em foco da aba
    * (null = aba sem terminal vivo ou somente leitura). `restartBlocked`: por que nao da' para reiniciar.
@@ -93,6 +95,7 @@ export function TabBar({
   onNewTab,
   sidebarCollapsed,
   onToggleSidebar,
+  alerts,
   tabTitle,
   status,
   onSpeak,
@@ -322,6 +325,7 @@ export function TabBar({
         onDoubleClick={() => winCommand("toggle")}
         title={frameless ? "Arraste para mover a janela; duplo clique maximiza" : undefined}
       />
+      {alerts}
       {plan.shown.map(({ id, label }) => {
         const a = actById.get(id)!;
         return (

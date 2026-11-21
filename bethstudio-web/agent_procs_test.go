@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,7 +12,7 @@ func apSample(start int64) []apNode {
 	return []apNode{
 		{PID: 10, PPID: 1, Name: "pwsh", Start: start},
 		{PID: 20, PPID: 10, Name: "claude", Start: start + 1, Cwd: `C:\repo`},
-		{PID: 30, PPID: 20, Name: "node", Cmd: "node C:/x/server.js", Start: start + 2},                // MCP: filho direto
+		{PID: 30, PPID: 20, Name: "node", Cmd: "node C:/x/server.js", Start: start + 2},                  // MCP: filho direto
 		{PID: 31, PPID: 20, Name: "cmd", Cmd: "cmd /c npx -y @modelcontextprotocol/x", Start: start + 2}, // não é shell do agente
 		{PID: 40, PPID: 20, Name: "bash", Start: start + 3},
 		{PID: 41, PPID: 40, Name: "npm", Cmd: "npm run dev", Start: start + 3},
@@ -35,7 +36,7 @@ func TestAPCandidates(t *testing.T) {
 }
 
 func TestAPMonitorThresholdOrphanIgnore(t *testing.T) {
-	m := &agentProcMonitor{seen: map[string]*apSeen{}, ignored: map[string]bool{}, snooze: map[string]time.Time{}, alerted: map[string]bool{}, nodes: map[string][]apNode{}}
+	m := newAgentProcMonitor("")
 	t0 := time.Unix(100000, 0)
 	start := t0.Unix() - 10*60 // começou há 10 min
 	items, fresh := m.update("windows", "", apSample(start), t0, 30)
@@ -77,8 +78,58 @@ func TestAPMonitorThresholdOrphanIgnore(t *testing.T) {
 	}
 }
 
+func TestAPHoldSurvivesRestart(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "hold.json")
+	now := time.Now()
+	nodes := apSample(now.Unix() - 3600)
+	m := newAgentProcMonitor(file)
+	items, fresh := m.update("wsl", "Debian", nodes, now, 30)
+	if len(items) != 1 || len(fresh) != 1 {
+		t.Fatalf("%+v", items)
+	}
+	m.drop(items[0].ID, time.Hour)
+
+	// Studio reiniciado: monitor novo lendo o mesmo arquivo; a leitura tem 1 s de diferença
+	m2 := newAgentProcMonitor(file)
+	jit := apSample(now.Unix() - 3600 + 1)
+	if items, fresh = m2.update("wsl", "Debian", jit, now.Add(time.Minute), 30); len(items) != 0 || len(fresh) != 0 {
+		t.Fatalf("o lembrar em 1 h não sobreviveu: %+v", items)
+	}
+	// passou a hora: volta, e avisa de novo
+	if items, fresh = m2.update("wsl", "Debian", jit, now.Add(61*time.Minute), 30); len(items) != 1 || len(fresh) != 1 {
+		t.Fatalf("depois da hora: %+v fresh=%d", items, len(fresh))
+	}
+	m2.drop(items[0].ID, 0)
+	m3 := newAgentProcMonitor(file)
+	if items, _ = m3.update("wsl", "Debian", jit, now.Add(2*time.Hour), 30); len(items) != 0 {
+		t.Fatal("o ignorar não sobreviveu")
+	}
+	// já avisado na bandeja não avisa de novo depois de reiniciar
+	m4 := newAgentProcMonitor(file)
+	other := apSample(now.Unix() - 7200)
+	for i := range other {
+		other[i].PID += 1000
+		other[i].PPID += 1000
+	}
+	_, fresh = m4.update("windows", "", other, now, 30)
+	m5 := newAgentProcMonitor(file)
+	_, fresh2 := m5.update("windows", "", other, now.Add(time.Minute), 30)
+	if len(fresh) != 1 || len(fresh2) != 0 {
+		t.Fatalf("aviso repetido: %d %d", len(fresh), len(fresh2))
+	}
+	// o processo acabou: some do arquivo
+	m5.update("wsl", "Debian", nil, now.Add(3*time.Hour), 30)
+	m6 := newAgentProcMonitor(file)
+	m6.loadHoldsLocked()
+	for _, h := range m6.holds {
+		if h.Side == "wsl" {
+			t.Fatalf("registro de processo morto ficou: %+v", h)
+		}
+	}
+}
+
 func TestAPLinuxStartJitterKeepsIdentity(t *testing.T) {
-	m := &agentProcMonitor{seen: map[string]*apSeen{}, ignored: map[string]bool{}, snooze: map[string]time.Time{}, alerted: map[string]bool{}, nodes: map[string][]apNode{}}
+	m := newAgentProcMonitor("")
 	now := time.Unix(200000, 0)
 	a := apSample(now.Unix() - 3600)
 	items, _ := m.update("wsl", "Ubuntu", a, now, 30)

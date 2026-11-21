@@ -15,7 +15,7 @@ import { HostBanner } from "@/components/HostBanner";
 import { hostBanner } from "@/lib/hostBanner";
 import { RestoreBanner } from "@/components/RestoreBanner";
 import { ResumeBanner } from "@/components/ResumeBanner";
-import { AgentProcsBanner } from "@/components/AgentProcsBanner";
+import { AgentProcsBell } from "@/components/AgentProcsBanner";
 import { restoreBanner } from "@/lib/restoreBanner";
 import { GoneLeaf, SplitView } from "@/components/SplitView";
 import { PaneMenu, type PaneMenuActions } from "@/components/PaneMenu";
@@ -942,6 +942,7 @@ export function App() {
               waitingTabs={waitingTabs}
               sidebarCollapsed={sidebarCollapsed}
               onToggleSidebar={() => saveSidebar({ collapsed: !sidebarCollapsed })}
+              alerts={<AgentProcsBell conn={conn} items={snap.agentProcs} />}
               status={sidebarCollapsed ? connLed : undefined}
               onNewTab={() => setNewTab(true)}
               tabTerminal={tabTerminal}
@@ -949,7 +950,6 @@ export function App() {
           )}
           {hostBanner(snap.host) && <HostBanner conn={conn} info={hostBanner(snap.host)!} />}
           {!restoreDismissed && restoreInfo && <RestoreBanner conn={conn} info={restoreInfo} onDismiss={() => setRestoreDismissed(true)} />}
-          {snap.agentProcs.length > 0 && <AgentProcsBanner conn={conn} items={snap.agentProcs} />}
           {snap.resumeOffers.length > 0 && <ResumeBanner conn={conn} offers={snap.resumeOffers} nameOf={(id) => storedName(id) || undefined} />}
           <div className="flex min-h-0 flex-1 p-2">
             {!layout || !act ? (

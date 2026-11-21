@@ -20,7 +20,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -176,9 +178,72 @@ type agentProcMonitor struct {
 	items   []AgentProc
 	alerted map[string]bool // já avisados na bandeja
 	nodes   map[string][]apNode
+
+	// Ignorar, Lembrar em 1 h e "já avisado" sobrevivem a reiniciar o Studio
+	// (antes voltava tudo a cada reinício): ficam num arquivo, por processo.
+	holdFile    string // "" = não grava (testes)
+	holds       []apHold
+	holdsLoaded bool
 }
 
-var agentProcs = &agentProcMonitor{seen: map[string]*apSeen{}, ignored: map[string]bool{}, snooze: map[string]time.Time{}, alerted: map[string]bool{}, nodes: map[string][]apNode{}}
+// apHold: o que a pessoa decidiu sobre um processo (enquanto ele existir).
+type apHold struct {
+	Side    string `json:"side"`
+	Distro  string `json:"distro,omitempty"`
+	PID     int    `json:"pid"`
+	Start   int64  `json:"start"`
+	Ignored bool   `json:"ignored,omitempty"`
+	Until   int64  `json:"until,omitempty"` // lembrar depois (unix)
+	Alerted bool   `json:"alerted,omitempty"`
+}
+
+func (h apHold) is(k apKey) bool {
+	return h.Side == k.Side && h.Distro == k.Distro && h.PID == k.PID && apAbs(h.Start-k.Start) <= 3
+}
+
+func newAgentProcMonitor(holdFile string) *agentProcMonitor {
+	return &agentProcMonitor{seen: map[string]*apSeen{}, ignored: map[string]bool{}, snooze: map[string]time.Time{}, alerted: map[string]bool{}, nodes: map[string][]apNode{}, holdFile: holdFile}
+}
+
+var agentProcs = newAgentProcMonitor(filepath.Join(dataDir(), "agent-procs-hold.json"))
+
+func (m *agentProcMonitor) loadHoldsLocked() {
+	if m.holdsLoaded {
+		return
+	}
+	m.holdsLoaded = true
+	if m.holdFile == "" {
+		return
+	}
+	if b, err := os.ReadFile(m.holdFile); err == nil {
+		_ = json.Unmarshal(b, &m.holds)
+	}
+}
+
+func (m *agentProcMonitor) saveHoldsLocked() {
+	if m.holdFile == "" {
+		return
+	}
+	b, err := json.Marshal(m.holds)
+	if err == nil {
+		_ = writeAtomic(m.holdFile, b)
+	}
+}
+
+// setHoldLocked atualiza (ou cria) o registro do processo e grava.
+func (m *agentProcMonitor) setHoldLocked(k apKey, f func(*apHold)) {
+	for i := range m.holds {
+		if m.holds[i].is(k) {
+			f(&m.holds[i])
+			m.saveHoldsLocked()
+			return
+		}
+	}
+	h := apHold{Side: k.Side, Distro: k.Distro, PID: k.PID, Start: k.Start}
+	f(&h)
+	m.holds = append(m.holds, h)
+	m.saveHoldsLocked()
+}
 
 // AgentProcSettings: Configurações > Processos dos agentes.
 type AgentProcSettings struct {
@@ -215,6 +280,7 @@ func (st *settingsStore) setAgentProcs(a AgentProcSettings) error {
 func (m *agentProcMonitor) update(side, distro string, nodes []apNode, now time.Time, minutes int) (items []AgentProc, fresh []AgentProc) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.loadHoldsLocked()
 	scope := side + "|" + distro
 	m.nodes[scope] = nodes
 	byPID := map[int]apNode{}
@@ -236,6 +302,20 @@ func (m *agentProcMonitor) update(side, distro string, nodes []apNode, now time.
 			delete(m.alerted, id)
 		}
 	}
+	// o registro de quem já terminou some do arquivo
+	var holds []apHold
+	for _, h := range m.holds {
+		if h.Side == side && h.Distro == distro {
+			if n, ok := byPID[h.PID]; !ok || apAbs(n.Start-h.Start) > 3 {
+				continue
+			}
+		}
+		holds = append(holds, h)
+	}
+	if len(holds) != len(m.holds) {
+		m.holds = holds
+		m.saveHoldsLocked()
+	}
 	known := map[int]bool{}
 	for _, s := range m.seen {
 		if s.key.Side == side && s.key.Distro == distro {
@@ -248,6 +328,15 @@ func (m *agentProcMonitor) update(side, distro string, nodes []apNode, now time.
 		}
 		k := apKey{side, distro, pid, byPID[pid].Start}
 		m.seen[k.id()] = &apSeen{key: k, agentCwd: byPID[agent].Cwd}
+		for _, h := range m.holds { // decisão de antes de reiniciar o Studio
+			if h.is(k) {
+				m.ignored[k.id()] = h.Ignored
+				if h.Until > 0 {
+					m.snooze[k.id()] = time.Unix(h.Until, 0)
+				}
+				m.alerted[k.id()] = h.Alerted
+			}
+		}
 	}
 	// refaz os itens deste lado, mantém os dos outros
 	var keep []AgentProc
@@ -279,6 +368,7 @@ func (m *agentProcMonitor) update(side, distro string, nodes []apNode, now time.
 		if !m.alerted[id] {
 			m.alerted[id] = true
 			fresh = append(fresh, it)
+			m.setHoldLocked(s.key, func(h *apHold) { h.Alerted = true })
 		}
 	}
 	sort.Slice(keep, func(i, j int) bool { return keep[i].Started < keep[j].Started })
@@ -322,11 +412,22 @@ func (m *agentProcMonitor) find(id string) (AgentProc, []apNode, bool) {
 func (m *agentProcMonitor) drop(id string, snoozeFor time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.loadHoldsLocked()
+	until := time.Now().Add(snoozeFor)
 	if snoozeFor > 0 {
-		m.snooze[id] = time.Now().Add(snoozeFor)
+		m.snooze[id] = until
 		delete(m.alerted, id) // avisa de novo quando voltar
 	} else {
 		m.ignored[id] = true
+	}
+	if s, ok := m.seen[id]; ok {
+		m.setHoldLocked(s.key, func(h *apHold) {
+			if snoozeFor > 0 {
+				h.Until, h.Alerted = until.Unix(), false
+			} else {
+				h.Ignored = true
+			}
+		})
 	}
 	var keep []AgentProc
 	for _, it := range m.items {

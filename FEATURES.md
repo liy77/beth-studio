@@ -155,7 +155,8 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   started by command (agent → shell → dev server, build, script) that are
   still running, including the ones left behind after the agent exited.
   Past the limit (default 30 min) it shows a Windows notification from the
-  tray and a bar in the Studio with each process (name, Windows/WSL, PID,
+  tray and a bell with the count in the tab bar (it does not push the terminal
+  down); a click opens the list with each process (name, Windows/WSL, PID,
   how long, memory, CPU of the last minute, the agent's folder, command
   line) and **Encerrar** (the process and its children; the PID's start time
   is checked first), **Ignorar** and **Lembrar em 1 h**. Nothing is ended
