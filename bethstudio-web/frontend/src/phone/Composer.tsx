@@ -10,7 +10,7 @@ import { prepareImage } from "./image";
 import { pastedImages } from "./imageFit";
 import { runWithRetry } from "./retry";
 import { clearTake, loadTake, saveTake } from "./takeStore";
-import { QUICK_KEYS } from "./text";
+import { AGENT_NAMES, QUICK_KEYS, modelCommands, type AgentKind } from "./text";
 
 /** O que o PC deixa o celular saber da voz (phone_gate.go, phoneVoiceView). */
 interface PhoneVoice {
@@ -62,9 +62,12 @@ interface ComposerProps {
   focusRef?: MutableRefObject<(() => void) | null>;
   /** tamanho da fonte do terminal (A−/A+): o campo usa o mesmo */
   fontSize?: number;
+  /** agente detectado neste terminal (null = não é agente): mostra o botão Modelo */
+  agentKind?: AgentKind | null;
 }
 
-export function Composer({ conn, paneId, readOnly, focusRef, fontSize }: ComposerProps) {
+export function Composer({ conn, paneId, readOnly, focusRef, fontSize, agentKind }: ComposerProps) {
+  const [models, setModels] = useState(false);
   const [draft, setDraftState] = useState<Draft>(() => drafts.get(paneId) ?? EMPTY);
   const [attachments, setAttachmentsState] = useState<Attachment[]>(() => attachmentsByPane.get(paneId) ?? []);
   const attachRef = useRef(attachments);
@@ -389,19 +392,54 @@ export function Composer({ conn, paneId, readOnly, focusRef, fontSize }: Compose
     if (!conn.send(paneId, data)) setNote({ text: "Sem conexão com o PC.", err: true });
   };
 
+  // Digita o comando como teclas (o agente abre o autocompletar do "/") e
+  // só depois manda o Enter, para ele não entrar no meio do texto.
+  const command = (text: string) => {
+    setModels(false);
+    if (readOnly) return;
+    if (!conn.send(paneId, text)) {
+      setNote({ text: "Sem conexão com o PC.", err: true });
+      return;
+    }
+    window.setTimeout(() => conn.send(paneId, "\r"), 250);
+    navigator.vibrate?.(10);
+    setNote({ text: `Enviado: ${text}` });
+    conn.scroll(paneId, 0);
+  };
+
   const hasText = draft.text.trim().length > 0 || attachments.length > 0;
   const showPrefix = draft.voice && hasText && voice?.settings.prefix_enabled !== false && voice?.settings.prefix_text.trim();
 
   return (
     <div className="p-dock">
       {phase === "idle" && !hasText && !readOnly && (
-        <div className="p-keys" role="toolbar" aria-label="Teclas rápidas">
+        <div className={agentKind ? "p-keys p-keys--model" : "p-keys"} role="toolbar" aria-label="Teclas rápidas">
           {QUICK_KEYS.map((k) => (
             <button key={k.label} type="button" className="p-key" aria-label={k.aria} onClick={() => key(k.data)}>
               {k.label}
             </button>
           ))}
+          {agentKind && (
+            <button type="button" className="p-key" aria-label="Trocar o modelo do agente" aria-expanded={models} onClick={() => setModels((m) => !m)}>
+              Modelo
+            </button>
+          )}
         </div>
+      )}
+      {models && agentKind && (
+        <>
+          <div className="p-scrim" onClick={() => setModels(false)} />
+          <div className="p-menu p-menu--up" role="dialog" aria-label="Trocar o modelo">
+            <div className="p-menu__hint">Trocar o modelo · {AGENT_NAMES[agentKind]}</div>
+            {modelCommands(agentKind).map((c) => (
+              <button key={c.text} type="button" onClick={() => command(c.text)}>
+                {c.label}
+                <code className="p-menu__cmd">{c.text}</code>
+              </button>
+            ))}
+            <div className="p-menu__hint">Na lista do agente, use ↑ ↓ e Enter.</div>
+          </div>
+        </>
       )}
 
       {phase === "privacy" && (

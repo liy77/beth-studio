@@ -13,7 +13,7 @@
 > When a user-facing feature is added, changed, or removed, update this
 > file in the same change (`.cursor/rules/features-catalog.mdc`).
 
-Last updated: 2026-11-07.
+Last updated: 2026-11-21.
 
 ---
 
@@ -246,7 +246,13 @@ ends the shell together with everything it started (patch 0203).
   once, with agents waiting on you first and how long they have waited,
   then one terminal in large text with history scroll, text size and
   line-wrap options, and the agent's `───` rules drawn as thin dividers.
-  Quick keys send 1, 2, 3, ↑, ↓, Enter and Esc for agent menus.
+  Quick keys send 1, 2, 3, ↑, ↓, Enter and Esc for agent menus. In an
+  agent terminal a **Modelo** key detects the agent (Claude Code, Codex,
+  Gemini CLI, by title and screen) and offers its model commands: Opus,
+  Sonnet, Haiku (`/model <name>`) for Claude Code, and **Escolher na lista**
+  (`/model`) for every agent; the command is typed and sent with Enter
+  (2026-11-21). The list menu has a **Tamanho do texto** A−/A+ (80% to 160%,
+  saved on the phone) for the terminal names and folders (2026-11-21).
   **Falar** records with a live level meter; the transcription (and the
   AI correction, streamed) lands in the composer for review, with
   **Voltar ao que foi transcrito** and **Apagar**. Nothing goes to the

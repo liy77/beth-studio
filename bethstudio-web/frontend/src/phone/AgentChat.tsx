@@ -6,7 +6,7 @@ import type { PaneInfo } from "@/lib/types";
 import { nextScrollOffset, plainScreen } from "@/lib/phoneScreen";
 import { Composer } from "./Composer";
 import { ThemePicker } from "./theme";
-import { screenLines, waitedFor } from "./text";
+import { detectAgent, screenLines, waitedFor, type AgentKind } from "./text";
 
 interface ViewPrefs {
   size: number;
@@ -14,6 +14,9 @@ interface ViewPrefs {
 }
 
 const PREFS_KEY = "bethphone.view";
+
+// Agente já reconhecido em cada terminal nesta visita ao app.
+const seenAgent = new Map<number, AgentKind>();
 
 function loadPrefs(): ViewPrefs {
   try {
@@ -55,6 +58,14 @@ export function AgentChat({ conn, info, agent, name, readOnly, banner, onBack }:
   const scrollbackRef = useRef(0);
   offsetRef.current = offset;
   scrollbackRef.current = scrollback;
+
+  // O banner do agente (Codex etc.) sai da tela com o tempo: guarda o que já foi visto neste terminal.
+  const agentKind = useMemo(() => {
+    const k = detectAgent(info.title, screen, info.agent);
+    const seen = seenAgent.get(info.pane_id);
+    if (k && k !== "other") seenAgent.set(info.pane_id, k);
+    return k === "other" || !k ? (seen ?? k) : k;
+  }, [info.pane_id, info.title, info.agent, screen]);
 
   const setView = (p: ViewPrefs) => {
     setPrefs(p);
@@ -219,7 +230,7 @@ export function AgentChat({ conn, info, agent, name, readOnly, banner, onBack }:
           </button>
         )}
       </div>
-      <Composer conn={conn} paneId={info.pane_id} readOnly={readOnly} focusRef={focusField} fontSize={prefs.size} />
+      <Composer conn={conn} paneId={info.pane_id} readOnly={readOnly} focusRef={focusField} fontSize={prefs.size} agentKind={agentKind} />
     </>
   );
 }

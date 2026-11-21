@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { LayoutGrid, List, LogOut, MoreVertical, RefreshCw, Search, X } from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import type { AgentState } from "@/lib/agents";
@@ -23,6 +23,21 @@ function loadView(): View {
   } catch {
     return "list";
   }
+}
+
+// Tamanho do texto da lista, em % do tamanho normal; salvo no celular.
+const SCALE_KEY = "bethphone.listScale";
+const SCALE_MIN = 80;
+const SCALE_MAX = 160;
+const SCALE_STEP = 10;
+function loadScale(): number {
+  try {
+    const v = Number(localStorage.getItem(SCALE_KEY));
+    if (Number.isFinite(v) && v >= SCALE_MIN && v <= SCALE_MAX) return v;
+  } catch {
+    /* sem storage */
+  }
+  return 100;
 }
 
 interface Props {
@@ -50,6 +65,16 @@ export function AgentList({ conn, panes, agents, recent, nameOf, online, gone, b
     setViewState(v);
     try {
       localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* sem storage */
+    }
+  };
+  const [scale, setScaleState] = useState(loadScale);
+  const setScale = (v: number) => {
+    const n = Math.min(SCALE_MAX, Math.max(SCALE_MIN, v));
+    setScaleState(n);
+    try {
+      localStorage.setItem(SCALE_KEY, String(n));
     } catch {
       /* sem storage */
     }
@@ -130,6 +155,22 @@ export function AgentList({ conn, panes, agents, recent, nameOf, online, gone, b
         <>
           <div className="p-scrim" onClick={() => setMenu(false)} />
           <div className="p-menu" role="dialog" aria-label="Opções">
+            <label>
+              Tamanho do texto
+              <span className="p-stepper">
+                <button type="button" aria-label="Diminuir" disabled={scale <= SCALE_MIN} onClick={() => setScale(scale - SCALE_STEP)}>
+                  A−
+                </button>
+                <button type="button" aria-label="Aumentar" disabled={scale >= SCALE_MAX} onClick={() => setScale(scale + SCALE_STEP)}>
+                  A+
+                </button>
+              </span>
+            </label>
+            {scale !== 100 && (
+              <button type="button" onClick={() => setScale(100)}>
+                Voltar ao tamanho normal ({scale}%)
+              </button>
+            )}
             <ThemePicker />
             {canLogout && (
               <button
@@ -179,7 +220,7 @@ export function AgentList({ conn, panes, agents, recent, nameOf, online, gone, b
           )}
         </div>
       )}
-      <div className="p-scroll">
+      <div className="p-scroll" style={{ "--list-scale": scale / 100 } as CSSProperties}>
         {gone && <p className="p-note">Esse terminal foi encerrado no PC.</p>}
         {!list && (
           <div className="p-empty">

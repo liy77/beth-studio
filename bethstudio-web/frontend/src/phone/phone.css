@@ -273,7 +273,7 @@ button:disabled {
 
 .p-group {
   padding: 18px 16px 6px;
-  font-size: 13px;
+  font-size: calc(13px * var(--list-scale, 1));
   font-weight: 600;
   color: var(--muted);
 }
@@ -289,7 +289,7 @@ button:disabled {
   gap: 12px;
   padding: 12px 16px;
   text-align: left;
-  min-height: 64px;
+  min-height: calc(64px * var(--list-scale, 1));
   position: relative;
 }
 
@@ -317,7 +317,7 @@ button:disabled {
 }
 
 .p-item__name {
-  font-size: 17px;
+  font-size: calc(17px * var(--list-scale, 1));
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -325,7 +325,7 @@ button:disabled {
 }
 
 .p-item__meta {
-  font-size: 13px;
+  font-size: calc(13px * var(--list-scale, 1));
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -333,7 +333,7 @@ button:disabled {
 }
 
 .p-item__when {
-  font-size: 13px;
+  font-size: calc(13px * var(--list-scale, 1));
   color: var(--wait);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
@@ -471,6 +471,17 @@ button:disabled {
 
 .p-menu button:active {
   background: var(--surface-2);
+}
+
+.p-menu--up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.p-menu__cmd {
+  font-family: var(--term-font);
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .p-menu__hint {
@@ -644,6 +655,10 @@ button:disabled {
   padding: 8px 10px 0;
 }
 
+.p-keys--model {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(3, minmax(0, 1.4fr));
+}
+
 .p-keys::-webkit-scrollbar {
   display: none;
 }
@@ -666,6 +681,7 @@ button:disabled {
 /* --- composer ---------------------------------------------------------- */
 
 .p-dock {
+  position: relative;
   flex-shrink: 0;
   background: var(--surface);
   border-top: 1px solid var(--line);

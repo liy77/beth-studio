@@ -20,6 +20,44 @@ export const QUICK_KEYS: { label: string; aria: string; data: string }[] = [
   { label: "Esc", aria: "Esc", data: "\x1b" },
 ];
 
+export type AgentKind = "claude" | "codex" | "gemini" | "other";
+
+export const AGENT_NAMES: Record<AgentKind, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  gemini: "Gemini CLI",
+  other: "Agente",
+};
+
+/**
+ * Qual agente roda no terminal, pelo título e pelo texto da tela.
+ * `flagged` é o `agent` da lista (glifo de status no título). null = não é agente.
+ */
+export function detectAgent(title: string, screen: string, flagged: boolean | undefined): AgentKind | null {
+  const t = title.toLowerCase();
+  if (/claude/.test(t) || /^\s*[✳✻]/u.test(title)) return "claude";
+  if (/codex/.test(t)) return "codex";
+  if (/gemini/.test(t)) return "gemini";
+  if (/claude code/i.test(screen)) return "claude";
+  if (/openai codex/i.test(screen)) return "codex";
+  if (/gemini/i.test(screen) && /\/model|gemini-\d/i.test(screen)) return "gemini";
+  return flagged ? "other" : null;
+}
+
+/** Comandos de troca de modelo; o último sempre abre a lista do próprio agente. */
+export function modelCommands(kind: AgentKind): { label: string; text: string }[] {
+  const pick = { label: "Escolher na lista", text: "/model" };
+  if (kind === "claude") {
+    return [
+      { label: "Opus", text: "/model opus" },
+      { label: "Sonnet", text: "/model sonnet" },
+      { label: "Haiku", text: "/model haiku" },
+      pick,
+    ];
+  }
+  return [pick];
+}
+
 // Símbolo de status que os agentes põem no começo do título (✳ ◐ ⠋ …).
 const titleGlyph = /^[⠀-⣿◐-◓✢-✽⏺●○·*]+\s+/u;
 

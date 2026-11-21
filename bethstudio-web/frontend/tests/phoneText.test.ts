@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { QUICK_KEYS, waitedFor } from "../src/phone/text.ts";
+import { QUICK_KEYS, detectAgent, modelCommands, waitedFor } from "../src/phone/text.ts";
 
 test("waitedFor", () => {
   const now = 10 * 3600_000;
@@ -82,4 +82,20 @@ test("byRecent: o último aberto vai para o topo", () => {
 test("touchRecent esquece terminais fechados", () => {
   const r = touchRecent({ 1: 5, 9: 6 }, 2, 10, new Set([1, 2]));
   assert.deepEqual(r, { 1: 5, 2: 10 });
+});
+
+test("detecta o agente pelo título e pela tela", () => {
+  assert.equal(detectAgent("✳ Arrumar o build", "", true), "claude");
+  assert.equal(detectAgent("pwsh", "╭───╮\n│ ✻ Welcome to Claude Code │", false), "claude");
+  assert.equal(detectAgent("node", ">_ OpenAI Codex (v0.40)\nmodel: gpt-5", false), "codex");
+  assert.equal(detectAgent("Gemini CLI", "", false), "gemini");
+  assert.equal(detectAgent("bash", "user@pc:~$ ls", false), null);
+  assert.equal(detectAgent("algo", "", true), "other");
+});
+
+test("comandos de modelo por agente", () => {
+  const claude = modelCommands("claude").map((c) => c.text);
+  assert.deepEqual(claude, ["/model opus", "/model sonnet", "/model haiku", "/model"]);
+  assert.deepEqual(modelCommands("codex").map((c) => c.text), ["/model"]);
+  assert.deepEqual(modelCommands("other").map((c) => c.text), ["/model"]);
 });
