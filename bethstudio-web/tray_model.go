@@ -16,6 +16,7 @@ const (
 	trayQuitTray  = 3
 	trayKillAll   = 4
 	trayReload    = 5
+	trayRestart   = 6
 	trayShellBase = 100 // + índice do shell
 )
 
@@ -38,7 +39,7 @@ type trayItem struct {
 	Sub     []trayItem
 }
 
-// trayMenu: Beth Studio primeiro (negrito), Novo terminal, Sistema, Reiniciar interface e as duas saídas.
+// trayMenu: Beth Studio primeiro (negrito), Novo terminal, Sistema, Reiniciar Beth Studio e as duas saídas.
 func trayMenu(shells []trayShell, hostRunning bool) []trayItem {
 	var sub []trayItem
 	for i, s := range shells {
@@ -51,7 +52,7 @@ func trayMenu(shells []trayShell, hostRunning bool) []trayItem {
 		{ID: trayOpen, Label: "Beth Studio", Default: true},
 		{Label: "Novo terminal", Sub: sub, Grayed: !hostRunning},
 		{ID: trayTasks, Label: "Sistema (CPU, memória, disco)"},
-		{ID: trayReload, Label: "Reiniciar interface (terminais continuam)"},
+		{ID: trayRestart, Label: "Reiniciar Beth Studio (terminais continuam)"},
 		{Sep: true},
 		{ID: trayQuitTray, Label: "Sair da bandeja (terminais continuam)"},
 	}

@@ -53,6 +53,7 @@ func main() {
 		dbWindow  = flag.Bool("db", false, "abre só a janela Banco de dados (barra de tarefas própria)")
 		supervise = flag.Bool("supervise", false, "liga a supervisão do host mesmo com --no-window (testes)")
 		termPane  = flag.Int("term", -1, "abre só a janela destacada do terminal <pane> (aberta pelo Studio)")
+		afterPID  = flag.Int("after-pid", 0, "espera este processo (o Studio anterior) terminar antes de abrir: Reiniciar Beth Studio")
 	)
 	flag.Parse()
 
@@ -73,6 +74,10 @@ func main() {
 	logClose := setupLog()
 	defer logClose()
 
+	// Reiniciar Beth Studio (studio_restart_windows.go): o anterior ainda está saindo.
+	if *afterPID > 0 {
+		waitStudioGone(*afterPID)
+	}
 	// Um Studio só (startup_windows.go): o segundo clique traz a janela aberta.
 	if !*noWindow && !claimSingleStudio() {
 		return

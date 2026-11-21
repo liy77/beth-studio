@@ -357,6 +357,8 @@ func handleTrayCommand(id int) {
 		lifeLog("interface recarregada pelo menu da bandeja")
 		showStudioWindow()
 		trayCtx.hub.broadcast(map[string]any{"ev": "ui_open", "what": "reload"})
+	case id == trayRestart:
+		restartStudio()
 	case id == trayQuitTray:
 		lifeLog("saindo da bandeja; o host e os terminais continuam")
 		quitStudio()
