@@ -11,6 +11,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -95,7 +96,11 @@ func structKey(specs []paneSpec) string {
 		if s.Tool != nil {
 			tool = s.Tool.Kind + ":" + s.Tool.ID
 		}
-		fmt.Fprintf(&b, "%d|%s|%s|%s|%s;", s.PaneID, s.ShellID, s.Distro, s.Cwd, tool)
+		resume := ""
+		if s.Resume != nil { // sessão do Claude nova ou encerrada também regrava a receita na hora
+			resume = s.Resume.SessionID + strconv.FormatBool(s.Resume.Ended)
+		}
+		fmt.Fprintf(&b, "%d|%s|%s|%s|%s|%s;", s.PaneID, s.ShellID, s.Distro, s.Cwd, tool, resume)
 	}
 	return b.String()
 }

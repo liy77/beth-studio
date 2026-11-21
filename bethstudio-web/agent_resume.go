@@ -81,9 +81,17 @@ func agentHookMain(args []string, in io.Reader) int {
 	}
 	b, _ := io.ReadAll(io.LimitReader(in, 1<<20))
 	_ = json.Unmarshal(b, &input)
+	if !agentSessionIDRe.MatchString(input.SessionID) {
+		return 0
+	}
+	// Sem WEZTERM_PANE (terminal WSL aberto por um host sem o patch 0205, ou
+	// fora do Studio): grava só pela pasta; o Studio casa pela pasta se der.
 	pane, err := strconv.Atoi(strings.TrimSpace(os.Getenv("WEZTERM_PANE")))
-	if err != nil || pane < 0 || !agentSessionIDRe.MatchString(input.SessionID) {
-		return 0 // fora de um terminal do Beth Studio, ou sem sessão
+	if err != nil || pane < 0 {
+		pane = -1
+		if strings.TrimSpace(input.Cwd) == "" {
+			return 0
+		}
 	}
 	side := "windows"
 	for i := 0; i+1 < len(args); i++ {
@@ -99,18 +107,20 @@ func agentHookMain(args []string, in io.Reader) int {
 	dir := filepath.Join(data, "agent-sessions")
 	_ = os.MkdirAll(dir, 0o755)
 	file := agentRecordFile(dir, host, pane)
+	if pane < 0 {
+		file = filepath.Join(dir, strings.TrimSuffix(filepath.Base(agentRecordFile(dir, host, 0)), "-0.json")+"-s-"+input.SessionID+".json")
+	}
 	now := time.Now().Unix()
+	rec := agentRecord{Agent: "claude", SessionID: input.SessionID, Pane: pane, Host: host, Cwd: input.Cwd, Side: side, At: now}
 	if input.Event == "SessionEnd" {
+		// Sessão aberta antes de o hook existir também conta: a pessoa sai do
+		// Claude e a sessão fica anotada (encerrada) para retomar depois.
 		var old agentRecord
 		if raw, err := os.ReadFile(file); err == nil && json.Unmarshal(raw, &old) == nil && old.SessionID == input.SessionID {
-			old.Ended = now
-			if out, err := json.Marshal(old); err == nil {
-				_ = writeAtomic(file, out)
-			}
+			rec = old
 		}
-		return 0
+		rec.Ended = now
 	}
-	rec := agentRecord{Agent: "claude", SessionID: input.SessionID, Pane: pane, Host: host, Cwd: input.Cwd, Side: side, At: now}
 	if out, err := json.Marshal(rec); err == nil {
 		_ = writeAtomic(file, out)
 	}
@@ -123,19 +133,19 @@ var agentRecCache struct {
 	mu   sync.Mutex
 	at   time.Time
 	host string
-	recs map[int]agentRecord
+	recs []agentRecord
 }
 
 // agentRecordsFor: as sessões gravadas para os terminais do host `host`
 // (lido no máximo a cada 3 s; a lista chega a cada 2 s). Arquivos de hosts
 // antigos com mais de 14 dias são apagados.
-func agentRecordsFor(dir, host string) map[int]agentRecord {
+func agentRecordsFor(dir, host string) []agentRecord {
 	agentRecCache.mu.Lock()
 	defer agentRecCache.mu.Unlock()
 	if agentRecCache.host == host && time.Since(agentRecCache.at) < 3*time.Second && agentRecCache.recs != nil {
 		return agentRecCache.recs
 	}
-	out := map[int]agentRecord{}
+	var out []agentRecord
 	files, _ := filepath.Glob(filepath.Join(dir, "*.json"))
 	for _, f := range files {
 		st, err := os.Stat(f)
@@ -154,18 +164,72 @@ func agentRecordsFor(dir, host string) map[int]agentRecord {
 			continue
 		}
 		if agentSessionIDRe.MatchString(r.SessionID) {
-			out[r.Pane] = r
+			out = append(out, r)
 		}
+	}
+	if out == nil {
+		out = []agentRecord{}
 	}
 	agentRecCache.at, agentRecCache.host, agentRecCache.recs = time.Now(), host, out
 	return out
 }
 
+// sameCwd: pastas iguais sem ligar para maiúsculas, barras e barra no fim.
+func sameCwd(a, b string) bool {
+	n := func(s string) string {
+		s = strings.ReplaceAll(strings.TrimSpace(s), `\`, "/")
+		return strings.ToLower(strings.TrimRight(s, "/"))
+	}
+	return a != "" && b != "" && n(a) == n(b)
+}
+
 // attachAgentSessions põe na receita a sessão de cada terminal.
-func attachAgentSessions(specs []paneSpec, recs map[int]agentRecord) []paneSpec {
+//
+// Registro com terminal: vai para esse terminal. Registro só com a pasta: vai
+// para o terminal do mesmo lado (WSL ou Windows) nessa pasta, se for o único
+// terminal ali sem sessão; com mais de um registro na pasta, o mais recente.
+func attachAgentSessions(specs []paneSpec, recs []agentRecord) []paneSpec {
+	set := func(i int, r agentRecord) {
+		specs[i].Resume = &resumeSpec{Agent: r.Agent, SessionID: r.SessionID, Ended: r.Ended != 0, At: r.At}
+	}
+	byPane := map[int]agentRecord{}
+	var loose []agentRecord
+	for _, r := range recs {
+		if r.Pane >= 0 {
+			if old, ok := byPane[r.Pane]; !ok || r.At >= old.At {
+				byPane[r.Pane] = r
+			}
+		} else {
+			loose = append(loose, r)
+		}
+	}
 	for i := range specs {
-		if r, ok := recs[specs[i].PaneID]; ok {
-			specs[i].Resume = &resumeSpec{Agent: r.Agent, SessionID: r.SessionID, Ended: r.Ended != 0, At: r.At}
+		if r, ok := byPane[specs[i].PaneID]; ok {
+			set(i, r)
+		}
+	}
+	sort.SliceStable(loose, func(i, j int) bool { return loose[i].At > loose[j].At })
+	used := map[string]bool{}
+	for _, r := range loose {
+		key := r.Side + "|" + strings.ToLower(r.Cwd)
+		if used[key] {
+			continue // a pasta já recebeu a sessão mais recente
+		}
+		match := -1
+		for i := range specs {
+			wsl := specs[i].Kind == "wsl"
+			if (r.Side == "wsl") != wsl || specs[i].Tool != nil || !sameCwd(specs[i].Cwd, r.Cwd) {
+				continue
+			}
+			if match >= 0 {
+				match = -2 // dois terminais na mesma pasta: não dá para saber qual
+				break
+			}
+			match = i
+		}
+		used[key] = true
+		if match >= 0 && specs[match].Resume == nil {
+			set(match, r)
 		}
 	}
 	return specs

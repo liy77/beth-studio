@@ -33,8 +33,8 @@ func TestAgentHookRecordsPaneSession(t *testing.T) {
 	agentHookMain([]string{"--lado", "wsl"}, strings.NewReader(`{"session_id":"`+testSID+`","cwd":"/home/u/p","hook_event_name":"SessionStart"}`))
 	agentRecCache.recs = nil
 	recs := agentRecordsFor(filepath.Join(dir, "agent-sessions"), host)
-	r, ok := recs[7]
-	if !ok || r.SessionID != testSID || r.Side != "wsl" || r.Cwd != "/home/u/p" || r.Ended != 0 {
+	r := recs[0]
+	if len(recs) != 1 || r.Pane != 7 || r.SessionID != testSID || r.Side != "wsl" || r.Cwd != "/home/u/p" || r.Ended != 0 {
 		t.Fatalf("registro %+v", recs)
 	}
 
@@ -43,9 +43,26 @@ func TestAgentHookRecordsPaneSession(t *testing.T) {
 	// SessionEnd marca o fim da mesma sessão
 	agentHookMain(nil, strings.NewReader(`{"session_id":"`+testSID+`","hook_event_name":"SessionEnd"}`))
 	agentRecCache.recs = nil
-	r = agentRecordsFor(filepath.Join(dir, "agent-sessions"), host)[7]
+	r = agentRecordsFor(filepath.Join(dir, "agent-sessions"), host)[0]
 	if r.SessionID != testSID || r.Ended == 0 {
 		t.Fatalf("depois do SessionEnd: %+v", r)
+	}
+
+	// sessão aberta antes do hook: o SessionEnd sozinho já anota (encerrada);
+	// sem WEZTERM_PANE fica só a pasta
+	t.Setenv("WEZTERM_PANE", "")
+	other := "11111111-2222-3333-4444-555555555555"
+	agentHookMain([]string{"--lado", "wsl"}, strings.NewReader(`{"session_id":"`+other+`","cwd":"/mnt/k/repo","hook_event_name":"SessionEnd"}`))
+	agentRecCache.recs = nil
+	var loose *agentRecord
+	for _, x := range agentRecordsFor(filepath.Join(dir, "agent-sessions"), host) {
+		if x.SessionID == other {
+			x := x
+			loose = &x
+		}
+	}
+	if loose == nil || loose.Pane != -1 || loose.Ended == 0 || loose.Cwd != "/mnt/k/repo" {
+		t.Fatalf("SessionEnd sem registro: %+v", loose)
 	}
 
 	// outro host não vale
@@ -57,9 +74,9 @@ func TestAgentHookRecordsPaneSession(t *testing.T) {
 
 func TestResumeOffersFromSpecs(t *testing.T) {
 	specs := []paneSpec{{PaneID: 3, Title: "a", ShellID: "pwsh"}, {PaneID: 5, Title: "b", ShellID: "wsl.default"}, {PaneID: 9, ShellID: "cmd"}}
-	specs = attachAgentSessions(specs, map[int]agentRecord{
-		5: {Agent: "claude", SessionID: testSID},
-		9: {Agent: "claude", SessionID: testSID, Ended: 10},
+	specs = attachAgentSessions(specs, []agentRecord{
+		{Agent: "claude", SessionID: testSID, Pane: 5},
+		{Agent: "claude", SessionID: testSID, Pane: 9, Ended: 10},
 	})
 	if specs[0].Resume != nil || specs[1].Resume == nil || !specs[2].Resume.Ended {
 		t.Fatalf("%+v", specs)
@@ -133,5 +150,36 @@ func TestAgentHookEditKeepsOthers(t *testing.T) {
 	}
 	if got := agentHookCommand(`C:\Users\Public\BethStudio\bethstudio-tool.exe`, true); got != `'/mnt/c/Users/Public/BethStudio/bethstudio-tool.exe' agent-hook --lado wsl` {
 		t.Fatal(got)
+	}
+}
+
+func TestAttachByFolder(t *testing.T) {
+	specs := []paneSpec{
+		{PaneID: 1, Kind: "wsl", Cwd: "/mnt/k/a"},
+		{PaneID: 2, Kind: "wsl", Cwd: "/mnt/k/b"},
+		{PaneID: 3, Kind: "wsl", Cwd: "/mnt/k/b"},
+		{PaneID: 4, Kind: "pwsh", Cwd: `C:\Repo\X`},
+		{PaneID: 5, Kind: "wsl", Cwd: "/mnt/k/c"},
+	}
+	a1 := "aaaaaaaa-0000-0000-0000-000000000001"
+	a2 := "aaaaaaaa-0000-0000-0000-000000000002"
+	specs = attachAgentSessions(specs, []agentRecord{
+		{Agent: "claude", SessionID: a1, Pane: -1, Side: "wsl", Cwd: "/mnt/k/a/", At: 1},
+		{Agent: "claude", SessionID: a2, Pane: -1, Side: "wsl", Cwd: "/mnt/k/a", At: 5}, // mais recente na mesma pasta
+		{Agent: "claude", SessionID: testSID, Pane: -1, Side: "wsl", Cwd: "/mnt/k/b"},       // dois terminais: ninguém
+		{Agent: "claude", SessionID: testSID, Pane: -1, Side: "windows", Cwd: `c:/repo/x/`},
+		{Agent: "claude", SessionID: testSID, Pane: -1, Side: "windows", Cwd: "/mnt/k/c"}, // lado errado
+	})
+	if specs[0].Resume == nil || specs[0].Resume.SessionID != a2 {
+		t.Fatalf("pasta a: %+v", specs[0].Resume)
+	}
+	if specs[1].Resume != nil || specs[2].Resume != nil {
+		t.Fatal("pasta com dois terminais recebeu sessão")
+	}
+	if specs[3].Resume == nil {
+		t.Fatal("Windows pela pasta")
+	}
+	if specs[4].Resume != nil {
+		t.Fatal("registro do Windows casou com terminal WSL")
 	}
 }

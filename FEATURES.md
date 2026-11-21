@@ -130,7 +130,11 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   (one by one, marking sessions you had already left) and **Agora não**;
   **Retomar sozinho** resumes the sessions that were open; **Não oferecer**
   turns it off. The typed command is editable (`{id}` = session id, e.g. to
-  add `--dangerously-skip-permissions`). Only on the PC. Each resume goes to
+  add `--dangerously-skip-permissions`). A session opened before the hook
+  was on is recorded when you leave Claude (SessionEnd). A WSL terminal
+  opened by a host without patch 0205 has no pane id: the session is
+  recorded by folder and goes to the only terminal of that side in that
+  folder (none if there are two). Only on the PC. Each resume goes to
   `host-life.log`.
 - 🟢 **Session file** — `%APPDATA%\bethstudio\session.json` is written
   atomically in the background with a 2 s timeout, and restore drops
