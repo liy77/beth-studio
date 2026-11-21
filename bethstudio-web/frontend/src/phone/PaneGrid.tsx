@@ -1,3 +1,4 @@
+import { AgentChip } from "./AgentChip";
 import { useEffect, useMemo, useState } from "react";
 import { FolderOpen, Search, X } from "lucide-react";
 import type { Connection } from "@/lib/connection";
@@ -195,6 +196,7 @@ export function PaneGrid({ conn, panes, kindOrder, agents, nameOf, now, onOpen }
                   {lines.length ? lines.map((l, j) => <span key={j}>{l}</span>) : <em>{gone ? "encerrado" : "sem texto"}</em>}
                 </span>
                 <span className="p-card__name">
+                  <AgentChip name={c.info?.agent_name} />
                   {c.title}
                   <small>#{c.pane}</small>
                 </span>

@@ -51,6 +51,8 @@ type hub struct {
 	resumeMsg  []byte
 	// processos deixados pelos agentes (agent_procs.go)
 	agentProcsMsg []byte
+	// agente de cada terminal (agent_ident.go)
+	paneAgentsMsg []byte
 	spawnWait  map[string]chan spawnResult
 	// initAsk: pergunta "executar o init do WSL?" aberta por distro; initSkip: init em
 	// andamento por distro, para "continuar assim mesmo" (restore_init.go)
@@ -131,6 +133,7 @@ func (h *hub) add() *client {
 	restoreMsg := h.restoreMsg
 	resumeMsg := h.resumeMsg
 	agentProcsMsg := h.agentProcsMsg
+	paneAgentsMsg := h.paneAgentsMsg
 	h.mu.Unlock()
 	c.enqueue(st)
 	if hostMsg != nil {
@@ -144,6 +147,9 @@ func (h *hub) add() *client {
 	}
 	if agentProcsMsg != nil {
 		c.enqueue(agentProcsMsg)
+	}
+	if paneAgentsMsg != nil {
+		c.enqueue(paneAgentsMsg)
 	}
 	if list != nil {
 		c.enqueue(list)

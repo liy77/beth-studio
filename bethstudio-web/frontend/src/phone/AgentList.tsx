@@ -10,6 +10,7 @@ import { logout } from "./session";
 import { ThemePicker } from "./theme";
 import { PaneGrid } from "./PaneGrid";
 import { LaunchScreen } from "./LaunchScreen";
+import { AgentChip } from "./AgentChip";
 import { byRecent, filterPanes, kindChips, kindText, KIND_LABELS, waitedFor, type KindFilter, type Recent } from "./text";
 
 // Busca e filtro sobrevivem a abrir um terminal e voltar.
@@ -138,6 +139,7 @@ export function AgentList({ conn, panes, agents, recent, nameOf, online, gone, b
       <button key={p.pane_id} type="button" className={a ? "p-item p-item--wait" : "p-item"} onClick={() => onOpen(p.pane_id)}>
         <span className="p-item__body">
           <span className="p-item__name" style={{ display: "block" }}>
+            <AgentChip name={p.agent_name} />
             {label(p)}
           </span>
           <span className="p-item__meta" style={{ display: "block" }}>

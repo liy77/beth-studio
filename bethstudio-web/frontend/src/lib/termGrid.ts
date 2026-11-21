@@ -107,7 +107,7 @@ function inFilter(c: GridCard, f: GridFilter): boolean {
 
 /** Texto onde a busca procura (minusculo): titulo, pasta, caminho, tipo, aba, id e, se houver, a tela. */
 function haystack(c: GridCard, screen?: string): string {
-  return [c.title, c.info ? paneLabel(c.info) : "", lastFolder(c.path), c.path, c.kindLabel, c.where, c.info?.ssh_host ?? "", `#${c.pane} pane ${c.pane}`, screen ?? ""]
+  return [c.title, c.info ? paneLabel(c.info) : "", lastFolder(c.path), c.path, c.kindLabel, c.where, c.info?.ssh_host ?? "", c.info?.agent_name ?? "", `#${c.pane} pane ${c.pane}`, screen ?? ""]
     .join("\n")
     .toLowerCase();
 }

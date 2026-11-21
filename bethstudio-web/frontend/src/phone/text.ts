@@ -93,6 +93,7 @@ export interface PaneLike {
   kind_label?: string;
   distro?: string;
   agent?: boolean;
+  agent_name?: string;
   ssh_host?: string;
 }
 
@@ -130,7 +131,7 @@ export function kindGroup(p: PaneLike): Exclude<KindFilter, "all" | "agent"> {
 export function kindChips(panes: PaneLike[]): KindFilter[] {
   const has = new Set<KindFilter>();
   for (const p of panes) {
-    if (p.agent) has.add("agent");
+    if (p.agent || p.agent_name) has.add("agent");
     has.add(kindGroup(p));
   }
   const order: KindFilter[] = ["agent", "wsl", "powershell", "cmd", "gitbash", "ssh", "other"];
@@ -145,10 +146,10 @@ function fold(s: string): string {
 export function filterPanes<T extends PaneLike>(panes: T[], query: string, kind: KindFilter, label: (p: T) => string): T[] {
   const words = fold(query).split(/\s+/).filter(Boolean);
   return panes.filter((p) => {
-    if (kind === "agent" && !p.agent) return false;
+    if (kind === "agent" && !p.agent && !p.agent_name) return false;
     if (kind !== "all" && kind !== "agent" && kindGroup(p) !== kind) return false;
     if (!words.length) return true;
-    const hay = fold([label(p), p.title, p.cwd, p.kind_label ?? "", p.distro ?? "", p.ssh_host ?? ""].join(" "));
+    const hay = fold([label(p), p.title, p.cwd, p.kind_label ?? "", p.distro ?? "", p.ssh_host ?? "", p.agent_name ?? ""].join(" "));
     return words.every((w) => hay.includes(w));
   });
 }

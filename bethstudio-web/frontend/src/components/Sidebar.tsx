@@ -387,7 +387,7 @@ function PaneItem(p: {
           <div className="flex min-w-0 items-center gap-1.5">
             <KindIcon pane={x} />
             <span className={cn("truncate text-[13px] text-text-1", p.focused && "font-semibold")}>{paneLabel(x)}</span>
-            {x.agent && <AgentBadge />}
+            {(x.agent_name || x.agent) && <AgentBadge name={x.agent_name} />}
           </div>
           {cwd.name && (
             <div className="flex min-w-0 items-center gap-1 font-mono text-[11px]">

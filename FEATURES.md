@@ -136,6 +136,18 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   recorded by folder and goes to the only terminal of that side in that
   folder (none if there are two). Only on the PC. Each resume goes to
   `host-life.log`.
+- 🟢 **Qual agente roda em cada terminal** (2026-11-21). A colored chip —
+  **Claude**, **Codex**, **OpenCode**, **Cursor**, **Grok**, **Gemini** — on
+  the terminal grid, the sidebar, the phone list and the phone grid, so a
+  free terminal is easy to spot. It comes from the processes, not the screen
+  (a screen that still shows `claude --resume …` is not counted): every 15 s
+  the Studio reads the Windows processes and, in each WSL distro that is
+  already running, `ps`; the terminal is the process's `WEZTERM_PANE` (in
+  WSL since patch 0205). A WSL terminal opened by an older host is matched
+  by folder, only for agents attached to a terminal, and only when the
+  number of such agents and terminals in that folder is the same. The
+  **Agentes** filter counts them and the search finds "codex", "grok"…; the
+  phone **Modelo** key uses it too.
 - 🟢 **Processos deixados pelos agentes** (2026-11-21). Once a minute the
   Studio looks at the Windows process tree and at every WSL distro that is
   already running (it never starts a stopped one) for processes an agent

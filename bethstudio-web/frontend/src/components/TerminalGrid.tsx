@@ -227,7 +227,7 @@ function Card({ c, lines, first, onOpen, onBeside }: { c: GridCard; lines: strin
           <div className="min-w-0 flex-1">
             <div className={cn("flex items-center gap-1 text-[13px] text-text-1", gone && "line-through decoration-text-3")}>
               <span className="truncate">{c.title}</span>
-              {c.info?.agent && <AgentBadge />}
+              {(c.info?.agent_name || c.info?.agent) && <AgentBadge name={c.info?.agent_name} />}
               <span className="ml-auto shrink-0 text-[10px] text-text-3">#{c.pane}</span>
             </div>
             {c.path && (

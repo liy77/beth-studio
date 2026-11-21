@@ -32,6 +32,8 @@ export interface PaneInfo {
   ssh_host_id?: string;
   /** titulo de agente (Claude Code etc.) */
   agent?: boolean;
+  /** agente que roda no terminal, pelo processo (agent_ident.go): claude | codex | opencode | cursor | grok | gemini */
+  agent_name?: string;
   kind_source?: "gui" | "web" | "heuristic";
   /** roda dentro do WSL (kind wsl, ou agente/outro com cwd Linux) — panekind.go */
   wsl?: boolean;
@@ -193,6 +195,7 @@ export type ServerEvent =
   | import("./restoreBanner").RestoreEvent
   | import("./agentResume").AgentResumeEvent
   | import("./agentProcs").AgentProcsEvent
+  | { ev: "pane_agents"; agents: Record<string, string> }
   | { ev: "term_drag"; pane: number; x: number; y: number; end: boolean; attach?: boolean }
   | import("./agents").AgentEvent;
 

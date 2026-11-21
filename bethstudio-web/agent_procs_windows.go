@@ -6,8 +6,8 @@ package main
 import (
 	"context"
 	"errors"
-	"net/http"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -83,12 +83,21 @@ func apWindowsNodes() ([]apNode, map[int]*procInfo, error) {
 	nodes := make([]apNode, 0, len(ps))
 	for _, p := range ps {
 		n := apNode{PID: int(p.PID), PPID: int(p.PPID), Name: name(p), Start: apUnix(p.Created), CPUSec: float64(p.CPUTime) / 1e7, Mem: p.WS}
-		// linha de comando só de quem é filho de shell (os candidatos): poucos
+		// linha de comando só de quem é filho de shell (os candidatos) e dos
+		// runtimes de JavaScript (Codex, Grok... rodam em node): poucos
 		if par, ok := byPID[int(p.PPID)]; ok && apShells[name(par)] {
+			n.Cmd = apCmdline(p)
+		} else if n.Name == "node" || n.Name == "bun" || n.Name == "deno" {
 			n.Cmd = apCmdline(p)
 		}
 		if n.Name == "claude" {
 			n.Cwd = cwd[n.PID]
+		}
+		// o terminal de cada agente: WEZTERM_PANE no ambiente do processo
+		if agentOfNode(n) != "" {
+			if pn, ok := apPaneEnv(p); ok {
+				n.Pane, n.HasPane = pn, true
+			}
 		}
 		nodes = append(nodes, n)
 	}
@@ -127,35 +136,69 @@ func apLinuxNodes(distro string) ([]apNode, error) {
 	return parseLinuxProcs(string(o)), nil
 }
 
-// runAgentProcs: o laço de um minuto. Só trabalha com o monitor ligado.
+// apIdentEvery: de quanto em quanto tempo a etiqueta do agente de cada
+// terminal é atualizada. O monitor de processos esquecidos usa a mesma leitura
+// uma vez por minuto.
+const apIdentEvery = 15 * time.Second
+
+// runAgentProcs: lê os processos (Windows e WSL já ligados) a cada 15 s para
+// as etiquetas de agente e, a cada minuto, alimenta o monitor de processos.
 func (h *hub) runAgentProcs(ctx context.Context) {
-	t := time.NewTimer(30 * time.Second) // deixa o Studio subir primeiro
+	t := time.NewTimer(8 * time.Second) // deixa o Studio subir primeiro
 	defer t.Stop()
+	var lastMonitor time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 		}
-		cfg := settings.agentProcs()
-		if !cfg.Off {
-			h.scanAgentProcs(cfg.Minutes)
-		}
-		t.Reset(apEvery)
+		h.scanProcesses(&lastMonitor)
+		t.Reset(apIdentEvery)
 	}
 }
 
-func (h *hub) scanAgentProcs(minutes int) {
+func (h *hub) scanProcesses(lastMonitor *time.Time) {
 	now := time.Now()
+	win, _, werr := apWindowsNodes()
+	running := apRunningDistros()
+	linux := map[string][]apNode{}
+	for _, d := range running {
+		if nodes, err := apLinuxNodes(d); err == nil {
+			linux[d] = nodes
+		}
+	}
+	// etiquetas: um mapa só para os dois lados (os ids de terminal são do host)
+	h.mu.Lock()
+	list := h.lastList
+	h.mu.Unlock()
+
+	agents := paneAgents(win, nil)
+	cwds := wslPaneCwds(list)
+	for _, nodes := range linux {
+		for k, v := range paneAgents(nodes, cwds) {
+			if _, ok := agents[k]; !ok {
+				agents[k] = v
+			}
+		}
+	}
+
+	h.publishPaneAgents(agents)
+
+	cfg := settings.agentProcs()
+	if cfg.Off || now.Sub(*lastMonitor) < apEvery-time.Second {
+		return
+	}
+	*lastMonitor = now
+	minutes := cfg.Minutes
 	var fresh []AgentProc
 	var items []AgentProc
-	if nodes, _, err := apWindowsNodes(); err == nil {
-		items, fresh = agentProcs.update("windows", "", nodes, now, minutes)
+	if werr == nil {
+		items, fresh = agentProcs.update("windows", "", win, now, minutes)
 	}
-	running := apRunningDistros()
 	for _, d := range running {
-		nodes, err := apLinuxNodes(d)
-		if err != nil {
+		nodes, ok := linux[d]
+		if !ok {
 			continue
 		}
 		var f []AgentProc

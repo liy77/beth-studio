@@ -7,6 +7,7 @@ import type { HostEvent } from "./hostBanner";
 import type { RestoreEvent } from "./restoreBanner";
 import type { ResumeOffer } from "./agentResume";
 import type { AgentProc } from "./agentProcs";
+import { withAgentNames } from "./agentNames";
 
 // Conexao WebSocket com o backend Go. Um unico socket por pagina; as telas
 // (screen) vao direto para os assinantes de cada pane, sem passar pelo
@@ -87,6 +88,8 @@ export class Connection {
   };
   private spawns = new Pending<SpawnedEvent>();
   private watchPaused = false;
+  /** agente de cada terminal (pane_agents), juntado em cada lista */
+  private paneAgentNames: Record<string, string> = {};
   private separations = new Pending<number>();
   private errorListeners = new Set<(msg: string) => void>();
   private termDragListeners = new Set<(e: TermDragEvent) => void>();
@@ -230,7 +233,11 @@ export class Connection {
           break;
         }
         case "list":
-          this.patch({ panes: ev.panes });
+          this.patch({ panes: withAgentNames(ev.panes, this.paneAgentNames) });
+          break;
+        case "pane_agents":
+          this.paneAgentNames = ev.agents ?? {};
+          this.patch({ panes: withAgentNames(this.snapshot.panes, this.paneAgentNames) });
           break;
         case "status": {
           // ponte pronta: some qualquer aviso antigo de conexao/ponte

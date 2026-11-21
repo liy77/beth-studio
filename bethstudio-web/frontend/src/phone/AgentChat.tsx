@@ -61,11 +61,12 @@ export function AgentChat({ conn, info, agent, name, readOnly, banner, onBack }:
 
   // O banner do agente (Codex etc.) sai da tela com o tempo: guarda o que já foi visto neste terminal.
   const agentKind = useMemo(() => {
-    const k = detectAgent(info.title, screen, info.agent);
+    const byProc = info.agent_name; // pelo processo (agent_ident.go): mais certo que a tela
+    const k = byProc === "claude" || byProc === "codex" || byProc === "gemini" ? byProc : byProc ? "other" : detectAgent(info.title, screen, info.agent);
     const seen = seenAgent.get(info.pane_id);
     if (k && k !== "other") seenAgent.set(info.pane_id, k);
     return k === "other" || !k ? (seen ?? k) : k;
-  }, [info.pane_id, info.title, info.agent, screen]);
+  }, [info.pane_id, info.title, info.agent, info.agent_name, screen]);
 
   const setView = (p: ViewPrefs) => {
     setPrefs(p);

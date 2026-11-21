@@ -39,6 +39,9 @@ type apNode struct {
 	CPUSec    float64 // tempo de CPU acumulado (s)
 	Mem       uint64  // bytes
 	Cwd       string  // só do agente, quando se sabe
+	Pane      int     // WEZTERM_PANE do processo (só dos agentes), se HasPane
+	HasPane   bool
+	TTY       string // Linux: o terminal do agente (/dev/pts/N); vazio = sem terminal
 }
 
 // apKey identifica um processo sem confundir PIDs reciclados.
@@ -446,12 +449,14 @@ func (s *server) serveAgentProcs(w http.ResponseWriter, r *http.Request) {
 // --- Linux: saída do ps ----------------------------------------------------
 
 // apLinuxScript: uma linha por processo e a pasta de cada claude.
-const apLinuxScript = `now=$(date +%s); echo NOW $now; ps -eo pid=,ppid=,etimes=,times=,rss=,comm=,args= 2>/dev/null; for p in $(pgrep -x claude 2>/dev/null); do echo CWD $p $(readlink /proc/$p/cwd 2>/dev/null); done`
+const apLinuxScript = `now=$(date +%s); echo NOW $now; ps -eo pid=,ppid=,etimes=,times=,rss=,comm=,args= 2>/dev/null; ps -eo pid=,args= 2>/dev/null | grep -iE 'claude|codex|opencode|cursor-agent|grok|gemini' | while read p rest; do e=$(tr '\0' '\n' < /proc/$p/environ 2>/dev/null | sed -n 's/^WEZTERM_PANE=//p'); t=$(readlink /proc/$p/fd/0 2>/dev/null); echo "AG $p ${e:--} ${t:--} $(readlink /proc/$p/cwd 2>/dev/null)"; done`
 
 // parseLinuxProcs lê a saída de apLinuxScript.
 func parseLinuxProcs(out string) []apNode {
 	var now int64
 	cwd := map[int]string{}
+	paneOf := map[int]int{}
+	ttyOf := map[int]string{}
 	var nodes []apNode
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
@@ -461,6 +466,20 @@ func parseLinuxProcs(out string) []apNode {
 		f := strings.Fields(line)
 		if f[0] == "NOW" && len(f) == 2 {
 			now, _ = strconv.ParseInt(f[1], 10, 64)
+			continue
+		}
+		if f[0] == "AG" && len(f) >= 3 {
+			if pid, err := strconv.Atoi(f[1]); err == nil {
+				if pn, err := strconv.Atoi(f[2]); err == nil && pn >= 0 {
+					paneOf[pid] = pn
+				}
+				if len(f) >= 4 && f[3] != "-" {
+					ttyOf[pid] = f[3]
+				}
+				if len(f) >= 5 {
+					cwd[pid] = strings.Join(f[4:], " ")
+				}
+			}
 			continue
 		}
 		if f[0] == "CWD" && len(f) >= 3 {
@@ -490,6 +509,10 @@ func parseLinuxProcs(out string) []apNode {
 	}
 	for i := range nodes {
 		nodes[i].Cwd = cwd[nodes[i].PID]
+		nodes[i].TTY = ttyOf[nodes[i].PID]
+		if pn, ok := paneOf[nodes[i].PID]; ok {
+			nodes[i].Pane, nodes[i].HasPane = pn, true
+		}
 	}
 	return nodes
 }

@@ -77,7 +77,7 @@ export function kindGroup(p: Pick<PaneInfo, "kind">): KindGroup {
 export function passesKindFilter(p: PaneInfo, selected: string[]): boolean {
   if (selected.length === 0) return true;
   const kinds = selected.filter((s) => s !== AGENT_FILTER);
-  if (selected.includes(AGENT_FILTER) && !p.agent) return false;
+  if (selected.includes(AGENT_FILTER) && !p.agent && !p.agent_name) return false;
   return kinds.length === 0 || kinds.includes(kindGroup(p));
 }
 
@@ -85,7 +85,7 @@ export function countKinds(panes: PaneInfo[]): Record<KindGroup | "agent", numbe
   const c = { wsl: 0, powershell: 0, cmd: 0, gitbash: 0, ssh: 0, serial: 0, other: 0, unknown: 0, agent: 0 };
   for (const p of panes) {
     c[kindGroup(p)]++;
-    if (p.agent) c.agent++;
+    if (p.agent || p.agent_name) c.agent++;
   }
   return c;
 }
