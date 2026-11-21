@@ -48,6 +48,7 @@ var remoteOnlyOnPC = map[string]bool{
 	// grava hooks no settings.json do Claude e o comando digitado ao retomar
 	"/api/agent-resume/setup":    true,
 	"/api/agent-resume/settings": true,
+	"/api/launchers":             true, // inclui a chave "o celular pode editar"
 }
 
 func remoteBlocked(sub, method string) bool {

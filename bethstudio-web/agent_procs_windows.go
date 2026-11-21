@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -262,4 +263,14 @@ func apKillLinux(it AgentProc) error {
 		return fmt.Errorf("não consegui encerrar no WSL: %w", err)
 	}
 	return nil
+}
+
+// serveWSLRunning: GET /api/wsl/running -> {running: [...]}. As telas que
+// conferem algo dentro do WSL sozinhas só fazem isso nas distros já ligadas.
+func serveWSLRunning(w http.ResponseWriter, _ *http.Request) {
+	r := apRunningDistros()
+	if r == nil {
+		r = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"running": r})
 }

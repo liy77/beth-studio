@@ -88,6 +88,8 @@ type webSettings struct {
 	AgentResume *AgentResumeSettings `json:"agent_resume,omitempty"`
 	// Processos deixados pelos agentes (agent_procs.go).
 	AgentProcs *AgentProcSettings `json:"agent_procs,omitempty"`
+	// Atalhos para abrir agentes pelo celular (launchers.go).
+	Launchers *LauncherSettings `json:"launchers,omitempty"`
 }
 
 type SidebarPrefs struct {

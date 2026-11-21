@@ -206,6 +206,10 @@ func (s *server) route(w http.ResponseWriter, r *http.Request, remoteKey string)
 		b, _ := io.ReadAll(http.MaxBytesReader(w, r.Body, 16<<10))
 		log.Printf("diag: %s", b)
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	case "/api/wsl/running":
+		serveWSLRunning(w, r)
+	case "/api/launchers":
+		s.serveLaunchers(w, r)
 	case "/api/agent-procs", "/api/agent-procs/kill", "/api/agent-procs/ignore", "/api/agent-procs/snooze", "/api/agent-procs/settings":
 		s.serveAgentProcs(w, r)
 	case "/api/agent-resume", "/api/agent-resume/settings", "/api/agent-resume/run", "/api/agent-resume/dismiss", "/api/agent-resume/setup":

@@ -209,6 +209,9 @@ func (s *server) servePhoneAuthed(w http.ResponseWriter, r *http.Request, device
 		// Texto longo: grava num arquivo no PC e devolve a instrução curta;
 		// o celular é quem cola (como o Falar no desktop).
 		s.servePasteText(w, r)
+	case r.URL.Path == "/api/phone/launchers" || r.URL.Path == "/api/phone/launch":
+		// Atalhos de agentes (launchers.go): o celular só escolhe um atalho do PC.
+		s.servePhoneLaunchers(w, r)
 	case strings.HasPrefix(r.URL.Path, "/api/voice"):
 		s.servePhoneVoice(w, r)
 	default:

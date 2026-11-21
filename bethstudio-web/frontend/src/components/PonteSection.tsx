@@ -3,6 +3,7 @@ import { Copy, Loader2 } from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
+import { SideBadge, stateAfter, type SideState } from "./SideStatus";
 
 // Configurações > Ponte de agentes (ponte.go / ponte_mcp.go). Tem que ser
 // simples: ligar, registrar nos dois lados com um clique e usar.
@@ -50,6 +51,7 @@ function CommandBox({ cmd, onMessage }: { cmd: string; onMessage: (m: string) =>
 /** "Ouvir sozinho": liga/desliga o hook que acorda a sessão do Claude parada. */
 function ListenCard(p: {
   title: string;
+  state: SideState;
   busy: boolean;
   result: SetupResult | null;
   onRun: (action: "hook-add" | "hook-remove" | "hook-check") => void;
@@ -59,6 +61,7 @@ function ListenCard(p: {
     <div className="space-y-2 rounded-md border border-border bg-bg-panel p-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex-1 text-[13px] font-semibold text-text-1">{p.title}</div>
+        <SideBadge state={p.state} />
         {p.children}
       </div>
       <div className="flex flex-wrap gap-2">
@@ -84,6 +87,7 @@ function ListenCard(p: {
 
 function SideCard(p: {
   title: string;
+  state: SideState;
   where: string;
   cmd: string;
   busy: boolean;
@@ -96,6 +100,7 @@ function SideCard(p: {
     <div className="space-y-2 rounded-md border border-border bg-bg-panel p-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex-1 text-[13px] font-semibold text-text-1">{p.title}</div>
+        <SideBadge state={p.state} />
         {p.children}
       </div>
       <div className="flex flex-wrap gap-2">
@@ -132,6 +137,9 @@ export function PonteSection({ conn, onMessage }: { conn: Connection; onMessage:
   const [distro, setDistro] = useState("");
   const [busy, setBusy] = useState<"windows" | "wsl" | null>(null);
   const [res, setRes] = useState<{ windows: SetupResult | null; wsl: SetupResult | null }>({ windows: null, wsl: null });
+  // estado sempre visível de cada cartão (registro e "ouvir sozinho"), conferido ao abrir
+  const [st, setSt] = useState<Record<string, SideState>>({});
+  const setState = (k: string, s: SideState) => setSt((m) => ({ ...m, [k]: s }));
 
   const load = useCallback(() => {
     conn
@@ -165,8 +173,14 @@ export function PonteSection({ conn, onMessage }: { conn: Connection; onMessage:
     setRes((r) => ({ ...r, [target]: null }));
     void conn
       .api<SetupResult>("/api/ponte/setup", { target, distro, action })
-      .then((r) => setRes((x) => ({ ...x, [target]: r })))
-      .catch((e) => setRes((x) => ({ ...x, [target]: { ok: false, output: "", error: (e as Error).message } })))
+      .then((r) => {
+        setRes((x) => ({ ...x, [target]: r }));
+        setState("reg:" + target, stateAfter(action, r.ok, r.error));
+      })
+      .catch((e) => {
+        setRes((x) => ({ ...x, [target]: { ok: false, output: "", error: (e as Error).message } }));
+        setState("reg:" + target, "error");
+      })
       .finally(() => setBusy(null));
   };
 
@@ -177,10 +191,55 @@ export function PonteSection({ conn, onMessage }: { conn: Connection; onMessage:
     setResHook((r) => ({ ...r, [target]: null }));
     void conn
       .api<SetupResult>("/api/ponte/setup", { target, distro, action })
-      .then((r) => setResHook((x) => ({ ...x, [target]: r })))
-      .catch((e) => setResHook((x) => ({ ...x, [target]: { ok: false, output: "", error: (e as Error).message } })))
+      .then((r) => {
+        setResHook((x) => ({ ...x, [target]: r }));
+        setState("hook:" + target, stateAfter(action, r.ok, r.error));
+      })
+      .catch((e) => {
+        setResHook((x) => ({ ...x, [target]: { ok: false, output: "", error: (e as Error).message } }));
+        setState("hook:" + target, "error");
+      })
       .finally(() => setBusyHook(null));
   };
+
+  // Ao abrir (e ao trocar a distro): confere sozinho, sem mostrar a saída. No
+  // WSL só se a distro já estiver rodando: abrir as Configurações não liga o WSL.
+  const enabled = view?.enabled ?? false;
+  useEffect(() => {
+    if (!enabled) return;
+    let gone = false;
+    const check = (key: string, target: "windows" | "wsl", action: string) => {
+      setState(key, "checking");
+      conn
+        .api<SetupResult>("/api/ponte/setup", { target, distro, action })
+        .then((r) => {
+          if (!gone) setState(key, stateAfter(action, r.ok, r.error));
+        })
+        .catch(() => {
+          if (!gone) setState(key, "error");
+        });
+    };
+    check("reg:windows", "windows", "check");
+    check("hook:windows", "windows", "hook-check");
+    if (distro) {
+      conn
+        .api<{ running: string[] }>("/api/wsl/running")
+        .then((r) => {
+          if (gone) return;
+          if (r.running.includes(distro)) {
+            check("reg:wsl", "wsl", "check");
+            check("hook:wsl", "wsl", "hook-check");
+          } else {
+            setState("reg:wsl", "stopped");
+            setState("hook:wsl", "stopped");
+          }
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      gone = true;
+    };
+  }, [conn, enabled, distro]);
 
   if (!view) {
     return <div className="px-5 py-4 text-[13px] text-text-2">{err ? `Não consegui carregar: ${err}` : "Carregando…"}</div>;
@@ -212,6 +271,7 @@ export function PonteSection({ conn, onMessage }: { conn: Connection; onMessage:
             )}
             <SideCard
               title="Claude no Windows"
+              state={st["reg:windows"] ?? null}
               where="no PowerShell ou no Prompt de Comando"
               cmd={view.commands.windows}
               busy={busy === "windows"}
@@ -224,6 +284,7 @@ export function PonteSection({ conn, onMessage }: { conn: Connection; onMessage:
             ) : (
               <SideCard
                 title="Claude no WSL"
+                state={st["reg:wsl"] ?? null}
                 where="no terminal do WSL"
                 cmd={view.commands.wsl}
                 busy={busy === "wsl"}
@@ -260,9 +321,9 @@ export function PonteSection({ conn, onMessage }: { conn: Connection; onMessage:
               mensagem, mesmo parado, lê pela ponte e responde. O Studio acrescenta dois avisos (<code>SessionStart</code> e <code>Stop</code>) no arquivo de
               configurações do Claude desse lado, guarda uma cópia do original e você desfaz com “Desligar”. Vale para sessões abertas a partir de agora.
             </p>
-            <ListenCard title="Claude no Windows" busy={busyHook === "windows"} result={resHook.windows} onRun={(a) => runHook("windows", a)} />
+            <ListenCard title="Claude no Windows" state={st["hook:windows"] ?? null} busy={busyHook === "windows"} result={resHook.windows} onRun={(a) => runHook("windows", a)} />
             {view.distros.length > 0 && (
-              <ListenCard title="Claude no WSL" busy={busyHook === "wsl"} result={resHook.wsl} onRun={(a) => runHook("wsl", a)}>
+              <ListenCard title="Claude no WSL" state={st["hook:wsl"] ?? null} busy={busyHook === "wsl"} result={resHook.wsl} onRun={(a) => runHook("wsl", a)}>
                 {view.distros.length > 1 && (
                   <select className="h-7 rounded border border-border bg-bg-term px-2 text-[12px] text-text-1" value={distro} onChange={(e) => setDistro(e.target.value)}>
                     {view.distros.map((d) => (

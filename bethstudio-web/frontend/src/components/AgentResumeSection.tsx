@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import { cn } from "@/lib/utils";
+import { SideBadge, stateAfter, type SideState } from "./SideStatus";
 import type { AgentResumeView, ResumeMode } from "@/lib/agentResume";
 import type { AgentProcSettings } from "@/lib/agentProcs";
 
@@ -22,11 +23,12 @@ const MODES: { id: ResumeMode; label: string; hint: string }[] = [
   { id: "off", label: "Não oferecer", hint: "Os terminais voltam sem o Claude, como antes." },
 ];
 
-function HookCard(p: { title: string; busy: boolean; result: SetupResult | null; onRun: (a: "add" | "remove" | "check") => void; children?: React.ReactNode }) {
+function HookCard(p: { title: string; state: SideState; busy: boolean; result: SetupResult | null; onRun: (a: "add" | "remove" | "check") => void; children?: React.ReactNode }) {
   return (
     <div className="space-y-2 rounded-md border border-border bg-bg-panel p-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex-1 text-[13px] font-semibold text-text-1">{p.title}</div>
+        <SideBadge state={p.state} />
         {p.children}
       </div>
       <div className="flex flex-wrap gap-2">
@@ -56,6 +58,7 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
   const [distro, setDistro] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, SetupResult>>({});
+  const [st, setSt] = useState<Record<string, SideState>>({});
   const [err, setErr] = useState<string | null>(null);
   const [procs, setProcs] = useState<AgentProcSettings | null>(null);
   const [minutes, setMinutes] = useState("30");
@@ -111,10 +114,49 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
     setBusy(key);
     conn
       .api<SetupResult>("/api/agent-resume/setup", { target, distro, action })
-      .then((r) => setResults((m) => ({ ...m, [key]: r })))
-      .catch((e: unknown) => setResults((m) => ({ ...m, [key]: { ok: false, output: "", error: e instanceof Error ? e.message : String(e) } })))
+      .then((r) => {
+        setResults((m) => ({ ...m, [key]: r }));
+        setSt((m) => ({ ...m, [key]: stateAfter(action, r.ok, r.error) }));
+      })
+      .catch((e: unknown) => {
+        setResults((m) => ({ ...m, [key]: { ok: false, output: "", error: e instanceof Error ? e.message : String(e) } }));
+        setSt((m) => ({ ...m, [key]: "error" }));
+      })
       .finally(() => setBusy(null));
   };
+
+  // Ao abrir (e ao trocar a distro): confere sozinho. WSL só se já estiver rodando.
+  const loaded = !!view;
+  useEffect(() => {
+    if (!loaded) return;
+    let gone = false;
+    const check = (key: string, target: "windows" | "wsl") => {
+      setSt((m) => ({ ...m, [key]: "checking" }));
+      conn
+        .api<SetupResult>("/api/agent-resume/setup", { target, distro, action: "check" })
+        .then((r) => {
+          if (!gone) setSt((m) => ({ ...m, [key]: stateAfter("check", r.ok, r.error) }));
+        })
+        .catch(() => {
+          if (!gone) setSt((m) => ({ ...m, [key]: "error" }));
+        });
+    };
+    check("windows", "windows");
+    if (distro) {
+      const key = "wsl:" + distro;
+      conn
+        .api<{ running: string[] }>("/api/wsl/running")
+        .then((r) => {
+          if (gone) return;
+          if (r.running.includes(distro)) check(key, "wsl");
+          else setSt((m) => ({ ...m, [key]: "stopped" }));
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      gone = true;
+    };
+  }, [conn, loaded, distro]);
 
   if (!view) {
     return <div className="px-5 py-4 text-[13px] text-text-2">{err ?? "Carregando…"}</div>;
@@ -138,9 +180,9 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
 
       <section className="space-y-2">
         <h3 className="text-[13px] font-semibold">1. Registrar as sessões</h3>
-        <HookCard title="Windows" busy={busy === "windows"} result={results.windows ?? null} onRun={(a) => setup("windows", a)} />
+        <HookCard title="Windows" state={st.windows ?? null} busy={busy === "windows"} result={results.windows ?? null} onRun={(a) => setup("windows", a)} />
         {view.distros.length > 0 ? (
-          <HookCard title="WSL" busy={busy === wslKey} result={results[wslKey] ?? null} onRun={(a) => setup("wsl", a)}>
+          <HookCard title="WSL" state={st[wslKey] ?? null} busy={busy === wslKey} result={results[wslKey] ?? null} onRun={(a) => setup("wsl", a)}>
             {view.distros.length > 1 && (
               <select className="rounded border border-border bg-bg-panel px-2 py-1 text-[12px]" value={distro} onChange={(e) => setDistro(e.target.value)}>
                 {view.distros.map((d) => (
