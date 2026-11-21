@@ -42,6 +42,10 @@ func toolHelperMain(args []string) (code int, handled bool) {
 	if len(args) >= 1 && args[0] == ponteHookFlag {
 		return ponteHookMain(args[1:], os.Stdin, os.Stderr), true
 	}
+	// Hook "Retomar sessões" (agent_resume.go): grava a sessão do terminal.
+	if len(args) >= 1 && args[0] == agentHookFlag {
+		return agentHookMain(args[1:], os.Stdin), true
+	}
 	if len(args) != 2 {
 		return 0, false
 	}

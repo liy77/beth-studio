@@ -41,6 +41,8 @@ type paneSpec struct {
 	OrigHost string          `json:"orig_host,omitempty"`
 	OrigName *PaneName       `json:"orig_name,omitempty"`
 	OrigLook *PaneAppearance `json:"orig_look,omitempty"`
+	// Sessão do agente (Claude) que rodava no terminal: agent_resume.go.
+	Resume *resumeSpec `json:"resume,omitempty"`
 }
 
 type specsFile struct {

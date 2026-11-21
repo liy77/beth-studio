@@ -46,6 +46,9 @@ type hub struct {
 	hostMsg []byte
 	// restoreMsg: ultimo {"ev":"restore",...}; spawnWait: request_id -> espera pelo `spawned`
 	restoreMsg []byte
+	// ofertas de "Retomar sessão" depois da restauração (agent_resume.go)
+	resumeList []resumeOffer
+	resumeMsg  []byte
 	spawnWait  map[string]chan spawnResult
 	// initAsk: pergunta "executar o init do WSL?" aberta por distro; initSkip: init em
 	// andamento por distro, para "continuar assim mesmo" (restore_init.go)
@@ -124,6 +127,7 @@ func (h *hub) add() *client {
 	shells := h.shells
 	hostMsg := h.hostMsg
 	restoreMsg := h.restoreMsg
+	resumeMsg := h.resumeMsg
 	h.mu.Unlock()
 	c.enqueue(st)
 	if hostMsg != nil {
@@ -131,6 +135,9 @@ func (h *hub) add() *client {
 	}
 	if restoreMsg != nil {
 		c.enqueue(restoreMsg)
+	}
+	if resumeMsg != nil {
+		c.enqueue(resumeMsg)
 	}
 	if list != nil {
 		c.enqueue(list)

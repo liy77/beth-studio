@@ -84,6 +84,8 @@ type webSettings struct {
 	Ponte *PonteSettings `json:"ponte,omitempty"`
 	// Limpeza automatica dos temporarios do Studio (tempclean.go).
 	TempClean *TempCleanSettings `json:"temp_clean,omitempty"`
+	// Retomar sessões do Claude depois que o host reinicia (agent_resume.go).
+	AgentResume *AgentResumeSettings `json:"agent_resume,omitempty"`
 }
 
 type SidebarPrefs struct {

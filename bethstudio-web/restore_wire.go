@@ -166,7 +166,8 @@ func newHubRestore(h *hub) *restoreCoordinator {
 		loadSpecs: func() (specsFile, bool) { return loadSpecs(specsPath()) },
 		saveSpecs: func(f specsFile) error { return saveSpecs(specsPath(), f) },
 		buildSpecs: func(list []byte) []paneSpec {
-			return buildSpecs(list, settings.spawnedMap(), settings.snapshot().Layout)
+			specs := buildSpecs(list, settings.spawnedMap(), settings.snapshot().Layout)
+			return attachAgentSessions(specs, agentRecordsFor(agentSessionsDir(), settings.hostID()))
 		},
 		freeze: settings.setFrozen,
 		active: func() bool {
@@ -234,6 +235,7 @@ func (h *hub) runRestoreJob(file specsFile, c *restoreCoordinator) {
 	if len(res.Pending) > 0 {
 		h.startPendingRetry()
 	}
+	h.afterRestoreResume(file.Specs, res.Map)
 }
 
 // pendingDeps: o que as ações sobre terminais pendentes usam, ligado ao hub e ao Studio de verdade.

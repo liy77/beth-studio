@@ -117,6 +117,21 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   updating Beth Studio does not kill agents. Reopening attaches to the same
   panes (patch 0121). The Studio also recreates terminals after a host crash
   (see section 7).
+- 🟢 **Retomar sessões do Claude** (2026-11-21). When the host restarts
+  (crash, **Encerrar tudo**, new version, reboot) the Studio already recreates
+  the terminals in their folders; now it also knows which Claude Code session
+  ran in each one and types `claude --resume <id>` in the right terminal, so
+  the conversation comes back with its history. Configurações → **Retomar
+  sessões**: **Ligar** for Windows and for each WSL distro writes a Claude hook
+  (SessionStart and SessionEnd, `bethstudio-tool.exe agent-hook`, with a
+  backup of `settings.json`) that only records the session id and the
+  terminal (`WEZTERM_PANE`; patch 0205 carries it into WSL). After a restore,
+  **Perguntar** (default) shows a bar with **Retomar todas**, **Escolher**
+  (one by one, marking sessions you had already left) and **Agora não**;
+  **Retomar sozinho** resumes the sessions that were open; **Não oferecer**
+  turns it off. The typed command is editable (`{id}` = session id, e.g. to
+  add `--dangerously-skip-permissions`). Only on the PC. Each resume goes to
+  `host-life.log`.
 - 🟢 **Session file** — `%APPDATA%\bethstudio\session.json` is written
   atomically in the background with a 2 s timeout, and restore drops
   unreachable network/WSL working directories after a 300 ms probe

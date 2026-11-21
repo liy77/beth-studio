@@ -14,6 +14,7 @@ import { buildStudioActions } from "@/components/StudioActions";
 import { HostBanner } from "@/components/HostBanner";
 import { hostBanner } from "@/lib/hostBanner";
 import { RestoreBanner } from "@/components/RestoreBanner";
+import { ResumeBanner } from "@/components/ResumeBanner";
 import { restoreBanner } from "@/lib/restoreBanner";
 import { GoneLeaf, SplitView } from "@/components/SplitView";
 import { PaneMenu, type PaneMenuActions } from "@/components/PaneMenu";
@@ -930,6 +931,7 @@ export function App() {
           )}
           {hostBanner(snap.host) && <HostBanner conn={conn} info={hostBanner(snap.host)!} />}
           {!restoreDismissed && restoreInfo && <RestoreBanner conn={conn} info={restoreInfo} onDismiss={() => setRestoreDismissed(true)} />}
+          {snap.resumeOffers.length > 0 && <ResumeBanner conn={conn} offers={snap.resumeOffers} nameOf={(id) => storedName(id) || undefined} />}
           <div className="flex min-h-0 flex-1 p-2">
             {!layout || !act ? (
               <div className="flex flex-1 items-center justify-center text-text-2">Carregando…</div>

@@ -179,9 +179,31 @@ func ponteHookIsOurs(h any) bool {
 	return strings.Contains(cmd, ponteHookMarker) && strings.Contains(strings.ToLower(cmd), "bethstudio-tool")
 }
 
+// claudeHookSpec: um hook nosso no settings.json do Claude (eventos, como
+// reconhecer o nosso e a entrada a gravar).
+type claudeHookSpec struct {
+	events []string
+	isOurs func(any) bool
+	entry  func() map[string]any
+}
+
+func ponteHookSpec(command string) claudeHookSpec {
+	return claudeHookSpec{
+		events: ponteHookEvents,
+		isOurs: ponteHookIsOurs,
+		entry: func() map[string]any {
+			return map[string]any{"type": "command", "command": command, "asyncRewake": true, "timeout": ponteHookTimeout}
+		},
+	}
+}
+
 // ponteHookEdit aplica add/remove/check sobre o conteúdo de um settings.json.
 // Devolve o novo conteúdo (nil = sem mudança) e se o hook está ligado depois.
 func ponteHookEdit(raw []byte, action, command string) (out []byte, on bool, err error) {
+	return claudeHookEdit(raw, action, ponteHookSpec(command))
+}
+
+func claudeHookEdit(raw []byte, action string, spec claudeHookSpec) (out []byte, on bool, err error) {
 	root := map[string]any{}
 	if len(bytes.TrimSpace(raw)) > 0 {
 		if err := json.Unmarshal(raw, &root); err != nil {
@@ -194,7 +216,7 @@ func ponteHookEdit(raw []byte, action, command string) (out []byte, on bool, err
 	}
 	changed := false
 	present := 0
-	for _, ev := range ponteHookEvents {
+	for _, ev := range spec.events {
 		groups, _ := hooks[ev].([]any)
 		var keep []any
 		found := false
@@ -203,7 +225,7 @@ func ponteHookEdit(raw []byte, action, command string) (out []byte, on bool, err
 			inner, _ := gm["hooks"].([]any)
 			var innerKeep []any
 			for _, h := range inner {
-				if ponteHookIsOurs(h) {
+				if spec.isOurs(h) {
 					found = true
 					if action == "remove" || action == "add" {
 						changed = true // add: recria abaixo com o caminho atual
@@ -224,9 +246,7 @@ func ponteHookEdit(raw []byte, action, command string) (out []byte, on bool, err
 			present++
 		}
 		if action == "add" {
-			keep = append(keep, map[string]any{"hooks": []any{map[string]any{
-				"type": "command", "command": command, "asyncRewake": true, "timeout": ponteHookTimeout,
-			}}})
+			keep = append(keep, map[string]any{"hooks": []any{spec.entry()}})
 			changed = true
 		}
 		if action == "add" || (action == "remove" && found) {
@@ -239,7 +259,7 @@ func ponteHookEdit(raw []byte, action, command string) (out []byte, on bool, err
 	}
 	switch action {
 	case "check":
-		return nil, present == len(ponteHookEvents), nil
+		return nil, present == len(spec.events), nil
 	case "add":
 		root["hooks"] = hooks
 	case "remove":
@@ -263,11 +283,15 @@ func ponteHookEdit(raw []byte, action, command string) (out []byte, on bool, err
 
 // ponteHookApply lê, edita e grava (com cópia de segurança) um settings.json.
 func ponteHookApply(path, action, command string) (on bool, msg string, err error) {
+	return claudeHookApply(path, action, ponteHookSpec(command))
+}
+
+func claudeHookApply(path, action string, spec claudeHookSpec) (on bool, msg string, err error) {
 	raw, rerr := os.ReadFile(path)
 	if rerr != nil && !os.IsNotExist(rerr) {
 		return false, "", rerr
 	}
-	out, on, err := ponteHookEdit(raw, action, command)
+	out, on, err := claudeHookEdit(raw, action, spec)
 	if err != nil {
 		return false, "", err
 	}

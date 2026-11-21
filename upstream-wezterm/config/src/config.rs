@@ -1595,7 +1595,9 @@ impl Config {
             if !wsl_env.is_empty() {
                 wsl_env.push(':');
             }
-            wsl_env.push_str("TERM:COLORTERM:TERM_PROGRAM:TERM_PROGRAM_VERSION");
+            // Beth Studio (patch 0205): WEZTERM_PANE also crosses into WSL, so a
+            // program there (the Claude hook of "Retomar sessões") knows its pane.
+            wsl_env.push_str("TERM:COLORTERM:TERM_PROGRAM:TERM_PROGRAM_VERSION:WEZTERM_PANE");
             cmd.env("WSLENV", wsl_env);
         }
 
