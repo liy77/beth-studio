@@ -7,6 +7,7 @@ import type { HostEvent } from "./hostBanner";
 import type { RestoreEvent } from "./restoreBanner";
 import type { ResumeOffer } from "./agentResume";
 import type { AgentProc } from "./agentProcs";
+import type { CpuLimit } from "./cpuLimit";
 import { withAgentNames } from "./agentNames";
 
 // Conexao WebSocket com o backend Go. Um unico socket por pagina; as telas
@@ -37,6 +38,8 @@ export interface ConnectionSnapshot {
   resumeOffers: ResumeOffer[];
   /** processos deixados pelos agentes rodando há muito tempo (agent_procs.go) */
   agentProcs: AgentProc[];
+  /** limite de CPU dos terminais (cpu_limit.go; null = ainda sem informação) */
+  cpuLimit: CpuLimit | null;
 }
 
 function readParams() {
@@ -85,6 +88,7 @@ export class Connection {
     restoreFinishedAt: 0,
     resumeOffers: [],
     agentProcs: [],
+    cpuLimit: null,
   };
   private spawns = new Pending<SpawnedEvent>();
   private watchPaused = false;
@@ -298,6 +302,9 @@ export class Connection {
           break;
         case "agent_procs":
           this.patch({ agentProcs: ev.items ?? [] });
+          break;
+        case "cpu_limit":
+          this.patch({ cpuLimit: ev.limit });
           break;
         case "ui_open":
           if (ev.what === "reload") {

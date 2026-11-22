@@ -134,6 +134,9 @@ func main() {
 		go runTrayWhenFree(ctx, hub, hub.sup, ctl)
 		// Processos deixados pelos agentes (agent_procs.go): um retrato por minuto.
 		go hub.runAgentProcs(ctx)
+		// Limite de CPU dos terminais (cpu_limit.go): reaplica e desfaz no prazo.
+		hub.publishCPULimit()
+		go hub.runCPULimit(ctx)
 	}
 	go br.run(ctx)
 	// Tipos dos terminais: pane-commands.json da GUI pode mudar sem a lista

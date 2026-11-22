@@ -208,6 +208,8 @@ func (s *server) route(w http.ResponseWriter, r *http.Request, remoteKey string)
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	case "/api/wsl/running":
 		serveWSLRunning(w, r)
+	case "/api/cpu-limit", "/api/cpu-limit/set", "/api/cpu-limit/off":
+		s.serveCPULimit(w, r)
 	case "/api/launchers":
 		s.serveLaunchers(w, r)
 	case "/api/agent-procs", "/api/agent-procs/kill", "/api/agent-procs/ignore", "/api/agent-procs/snooze", "/api/agent-procs/settings":

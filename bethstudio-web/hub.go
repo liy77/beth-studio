@@ -53,6 +53,7 @@ type hub struct {
 	agentProcsMsg []byte
 	// agente de cada terminal (agent_ident.go)
 	paneAgentsMsg []byte
+	cpuLimitMsg   []byte
 	spawnWait  map[string]chan spawnResult
 	// initAsk: pergunta "executar o init do WSL?" aberta por distro; initSkip: init em
 	// andamento por distro, para "continuar assim mesmo" (restore_init.go)
@@ -134,6 +135,7 @@ func (h *hub) add() *client {
 	resumeMsg := h.resumeMsg
 	agentProcsMsg := h.agentProcsMsg
 	paneAgentsMsg := h.paneAgentsMsg
+	cpuLimitMsg := h.cpuLimitMsg
 	h.mu.Unlock()
 	c.enqueue(st)
 	if hostMsg != nil {
@@ -150,6 +152,9 @@ func (h *hub) add() *client {
 	}
 	if paneAgentsMsg != nil {
 		c.enqueue(paneAgentsMsg)
+	}
+	if cpuLimitMsg != nil {
+		c.enqueue(cpuLimitMsg)
 	}
 	if list != nil {
 		c.enqueue(list)

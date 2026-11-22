@@ -329,7 +329,7 @@ func buildTrayMenu(items []trayItem) (menu uintptr, defID int) {
 }
 
 func showTrayMenu() {
-	items := trayMenu(trayCtx.hub.trayShellList(), trayCtx.ctl.Running())
+	items := trayMenu(trayCtx.hub.trayShellList(), trayCtx.ctl.Running(), cpuLimit.view().CPULimitState)
 	menu, _ := buildTrayMenu(items)
 	if menu == 0 {
 		return
@@ -359,6 +359,21 @@ func handleTrayCommand(id int) {
 		trayCtx.hub.broadcast(map[string]any{"ev": "ui_open", "what": "reload"})
 	case id == trayRestart:
 		restartStudio()
+	case id == trayCPUOff:
+		trayCtx.hub.cpuLimitOff()
+	case id == trayCPUMore:
+		showStudioWindow()
+		trayCtx.hub.broadcast(map[string]any{"ev": "ui_open", "what": "cpulimit"})
+	case id >= trayCPUBase && id < trayCPUBase+len(trayCPUChoices):
+		v := cpuLimit.view()
+		min := v.LastMinutes
+		if v.LastPercent == 0 {
+			min = 60
+		}
+		wsl := v.WSL || v.LastPercent == 0
+		if err := trayCtx.hub.cpuLimitSet(trayCPUChoices[id-trayCPUBase], min, wsl); err != nil {
+			log.Printf("tray: limite de CPU: %v", err)
+		}
 	case id == trayQuitTray:
 		lifeLog("saindo da bandeja; o host e os terminais continuam")
 		quitStudio()

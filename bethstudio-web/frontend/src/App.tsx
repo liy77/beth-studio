@@ -16,6 +16,7 @@ import { hostBanner } from "@/lib/hostBanner";
 import { RestoreBanner } from "@/components/RestoreBanner";
 import { ResumeBanner } from "@/components/ResumeBanner";
 import { AgentProcsBell } from "@/components/AgentProcsBanner";
+import { CpuLimitButton } from "@/components/CpuLimitButton";
 import { restoreBanner } from "@/lib/restoreBanner";
 import { GoneLeaf, SplitView } from "@/components/SplitView";
 import { PaneMenu, type PaneMenuActions } from "@/components/PaneMenu";
@@ -942,7 +943,12 @@ export function App() {
               waitingTabs={waitingTabs}
               sidebarCollapsed={sidebarCollapsed}
               onToggleSidebar={() => saveSidebar({ collapsed: !sidebarCollapsed })}
-              alerts={<AgentProcsBell conn={conn} items={snap.agentProcs} />}
+              alerts={
+                <>
+                  <CpuLimitButton conn={conn} limit={snap.cpuLimit} />
+                  <AgentProcsBell conn={conn} items={snap.agentProcs} />
+                </>
+              }
               status={sidebarCollapsed ? connLed : undefined}
               onNewTab={() => setNewTab(true)}
               tabTerminal={tabTerminal}

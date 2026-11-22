@@ -6,7 +6,7 @@ import (
 )
 
 func TestTrayMenuOrderAndDefaultItem(t *testing.T) {
-	items := trayMenu([]trayShell{{"cmd", "cmd.exe"}, {"wsl.debian", "WSL · Debian"}}, true)
+	items := trayMenu([]trayShell{{"cmd", "cmd.exe"}, {"wsl.debian", "WSL · Debian"}}, true, CPULimitState{})
 	if items[0].ID != trayOpen || !items[0].Default || items[0].Label != "Beth Studio" {
 		t.Fatalf("o primeiro item deve ser o Beth Studio em negrito: %+v", items[0])
 	}
@@ -18,14 +18,14 @@ func TestTrayMenuOrderAndDefaultItem(t *testing.T) {
 			labels = append(labels, it.Label)
 		}
 	}
-	want := []string{"Beth Studio", "Novo terminal", "Sistema (CPU, memória, disco)", "Reiniciar Beth Studio (terminais continuam)", "---", "Sair da bandeja (terminais continuam)", "Encerrar tudo (fecha os terminais)"}
+	want := []string{"Beth Studio", "Novo terminal", "Sistema (CPU, memória, disco)", "Limitar CPU dos terminais", "Reiniciar Beth Studio (terminais continuam)", "---", "Sair da bandeja (terminais continuam)", "Encerrar tudo (fecha os terminais)"}
 	if strings.Join(labels, "|") != strings.Join(want, "|") {
 		t.Fatalf("itens = %v, quero %v", labels, want)
 	}
 }
 
 func TestTrayMenuShellSubmenuIDs(t *testing.T) {
-	items := trayMenu([]trayShell{{"cmd", "cmd.exe"}, {"wsl.debian", "WSL · Debian"}}, true)
+	items := trayMenu([]trayShell{{"cmd", "cmd.exe"}, {"wsl.debian", "WSL · Debian"}}, true, CPULimitState{})
 	sub := items[1].Sub
 	if len(sub) != 2 || sub[0].ID != trayShellBase || sub[1].ID != trayShellBase+1 || sub[1].Label != "WSL · Debian" {
 		t.Fatalf("submenu = %+v", sub)
@@ -33,7 +33,7 @@ func TestTrayMenuShellSubmenuIDs(t *testing.T) {
 }
 
 func TestTrayMenuKillAllOnlyWithRunningHost(t *testing.T) {
-	for _, it := range trayMenu(nil, false) {
+	for _, it := range trayMenu(nil, false, CPULimitState{}) {
 		if it.ID == trayKillAll {
 			t.Fatal("sem host rodando não deve oferecer Encerrar tudo")
 		}
@@ -41,11 +41,11 @@ func TestTrayMenuKillAllOnlyWithRunningHost(t *testing.T) {
 }
 
 func TestTrayMenuNewTerminalGrayedWithoutHostOrShells(t *testing.T) {
-	items := trayMenu(nil, false)
+	items := trayMenu(nil, false, CPULimitState{})
 	if !items[1].Grayed || len(items[1].Sub) != 1 || !items[1].Sub[0].Grayed {
 		t.Fatalf("sem host: Novo terminal deve estar cinza com aviso: %+v", items[1])
 	}
-	items = trayMenu(nil, true)
+	items = trayMenu(nil, true, CPULimitState{})
 	if items[1].Grayed || !items[1].Sub[0].Grayed {
 		t.Fatalf("host rodando mas sem shells: submenu deve ter só o aviso cinza: %+v", items[1])
 	}

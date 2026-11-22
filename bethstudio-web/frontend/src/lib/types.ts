@@ -191,10 +191,11 @@ export type ServerEvent =
   | { ev: "separated"; pane_id: number; tab_id: number; window_id: number }
   | { ev: "term_windows"; panes: number[] }
   | import("./hostBanner").HostEvent
-  | { ev: "ui_open"; what: "tasks" | "reload" }
+  | { ev: "ui_open"; what: "tasks" | "reload" | "cpulimit" }
   | import("./restoreBanner").RestoreEvent
   | import("./agentResume").AgentResumeEvent
   | import("./agentProcs").AgentProcsEvent
+  | import("./cpuLimit").CpuLimitEvent
   | { ev: "pane_agents"; agents: Record<string, string> }
   | { ev: "term_drag"; pane: number; x: number; y: number; end: boolean; attach?: boolean }
   | import("./agents").AgentEvent;

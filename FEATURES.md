@@ -166,6 +166,21 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   `host-life.log`. **Ignorar** and **Lembrar em 1 h** are saved
   (`agent-procs-hold.json`) and survive restarting the Studio while the same
   process lives; a process already announced is not announced again.
+- 🟢 **Limitar CPU dos terminais** (2026-11-21). A ceiling in % of the PC's
+  CPU (5–95%) for the host and everything it opened (shells, agents,
+  builds), without ending anything: they only run slower, and the Studio
+  window stays fast. On Windows it is a job object with a hard CPU cap;
+  processes started later join it on their own. In the WSL terminals (they
+  run in the WSL VM, outside the job) the same ceiling becomes a number of
+  cores (`taskset` on the distro user's processes, only distros already
+  running). A deadline (30 min, 1 h, 2 h, 4 h or until removed) puts
+  everything back to normal by itself, with a tray notification. Set it from
+  the gauge icon in the tab bar (with a limit it shows "CPU 70% · até
+  23:15") or from the tray (**Limitar CPU dos terminais**: 30/50/70% with the
+  last deadline, **Escolher porcentagem e prazo…**, **Voltar ao normal**).
+  The limit is saved (`cpu-limit.json`): it survives restarting the Studio,
+  and a deadline that passed while the Studio was closed is undone at the
+  next start. Each change goes to `host-life.log`.
 - 🟢 **Session file** — `%APPDATA%\bethstudio\session.json` is written
   atomically in the background with a 2 s timeout, and restore drops
   unreachable network/WSL working directories after a 300 ms probe
