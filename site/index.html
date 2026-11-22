@@ -478,6 +478,8 @@
         <li><b>07</b><div><h3>Gerenciador de tarefas interno</h3><p>CPU, memória, GPU e disco, e o consumo de cada terminal, para ver se o peso está na interface ou nos programas que você roda.</p></div></li>
         <li><b>08</b><div><h3>Terminais que voltam depois de uma queda</h3><p>Se o próprio host cair, o Studio o sobe de novo e recria os terminais nas mesmas abas e pastas.</p></div></li>
         <li><b>09</b><div><h3>Agentes do Windows e do WSL2 conversando</h3><p>Peça ao Claude de um lado para falar com o do outro. A mensagem passa pelo Studio, o agente parado acorda e a resposta volta. Veja <a href="#ponte">a ponte entre agentes</a>.</p></div></li>
+        <li><b>10</b><div><h3>Os agentes voltam depois de reiniciar</h3><p>O Studio anota a sessão de cada Claude. Depois que o host reinicia, ele oferece retomar cada uma no seu terminal, ou todas de uma vez, com <code>claude --resume</code>.</p></div></li>
+        <li><b>11</b><div><h3>Limite a CPU sem matar nada</h3><p>Quando os terminais pesam e você precisa do PC para outra coisa, ponha um teto, por exemplo 30% da CPU, por 2 horas. Nada é encerrado, e no fim do prazo tudo volta ao normal sozinho.</p></div></li>
       </ul>
     </div>
   </section>
@@ -497,7 +499,10 @@
           <li><h4>Vistas da barra lateral e busca</h4><p>Minha organização, Como no Beth Studio, Por tipo e Por pasta. Busca por título, pasta, aba e, se quiser, pelo texto da tela.</p></li>
           <li><h4>Todos os terminais</h4><p>Uma grade com um cartão por terminal e uma prévia do texto da tela, com filtros Todos, Em abas, Sem aba e Encerrados. Também existe na página do celular.</p></li>
           <li><h4>Terminal destacado</h4><p>Leve um terminal para uma janela própria, inclusive em outro monitor, e arraste de volta para as abas. Ele continua rodando.<br><span class="tag pc">Só no PC</span></p></li>
-          <li><h4>Encerrar com confirmação</h4><p>Só Encerrar terminal… encerra o processo, e antes pergunta, avisando se há um agente esperando.</p></li>
+          <li><h4>Encerrar com confirmação</h4><p>Só Encerrar terminal… encerra o processo, e antes pergunta, avisando se há um agente esperando. Encerrar leva junto tudo o que o terminal abriu (agentes, servidores MCP, <code>wsl.exe</code>).</p></li>
+          <li><h4>Reiniciar ou matar um terminal</h4><p>No menu da aba, Reiniciar este terminal… abre um shell novo do mesmo tipo, na mesma pasta e lugar, antes de fechar o antigo. Matar terminal… encerra e tira da aba. Os dois pedem confirmação.</p></li>
+          <li><h4>Qual agente está em cada terminal</h4><p>Uma etiqueta mostra Claude, Codex, OpenCode, Cursor, Grok ou Gemini em cada terminal, na grade, na barra lateral e no celular, para achar um terminal livre. Servidores em segundo plano não contam.<br><span class="tag win">Só Windows</span></p></li>
+          <li><h4>Mouse em programas de tela cheia</h4><p>Clique, arraste e roda chegam a programas que usam o mouse (htop, vim, mc), e a cópia OSC 52 vai para a área de transferência.</p></li>
           <li><h4>Reparar visualização</h4><p>Reconstrói só a tela daquele painel no Studio, sem enviar reset ao terminal, e pode ser usado com um agente em execução.</p></li>
           <li><h4>Histórico, print e links</h4><p>Copie ou salve o histórico completo, copie ou salve um print da tela. Links http(s) abrem no navegador; arquivos .md, .txt, .log e imagens abrem num painel de prévia.</p></li>
         </ul>
@@ -535,6 +540,8 @@
           <li><h4>Teste completo da voz</h4><p>Roda o caminho inteiro (microfone, transcrição, correção e texto final) sem enviar nada ao terminal, mostrando tempo e custo de cada etapa.</p></li>
           <li><h4>Onda, volume e pausa na gravação</h4><p>Onda do som com pico retido e dica de nível, volume de entrada de −12 a +12 dB, chaves de ganho automático, ruído e eco, e o botão Pausar / Continuar. Textos longos vão por arquivo temporário em vez de colagem direta.<br><span class="tag pc">Só no PC</span></p></li>
           <li><h4>Ponte entre agentes (Windows e WSL2)</h4><p>O Claude do Windows e o do WSL2 trocam mensagens pelo Studio, com registro por botão, lista de quem está na ponte e a opção “Ouvir sozinho”, que acorda o agente parado. Veja a seção <a href="#ponte">O Claude do Windows fala com o Claude do WSL2</a>.<br><span class="tag win">Só Windows</span> <span class="tag pc">Só no PC</span></p></li>
+          <li><h4>Retomar sessões do Claude</h4><p>Um hook do Claude Code, instalado por um botão, anota a sessão de cada terminal, no Windows e no WSL. Depois que o host reinicia, o Studio pergunta se quer retomar (ou retoma sozinho, se você escolher).<br><span class="tag win">Só Windows</span></p></li>
+          <li><h4>Processos deixados pelos agentes</h4><p>Servidores de desenvolvimento, builds e scripts que um agente abriu e que estão rodando há mais de 30 minutos aparecem num sino na barra de abas, com Encerrar, Ignorar e Lembrar em 1 h. Nada é encerrado sem clique.<br><span class="tag win">Só Windows</span></p></li>
         </ul>
       </div>
 
@@ -545,7 +552,9 @@
           <li><h4>Recuperação automática</h4><p>Se o host cair, o Studio o sobe de novo e recria os terminais nas mesmas abas, pastas, nomes e temas. Uma faixa mostra o andamento e o que não voltou.</p></li>
           <li><h4>Atualizar sem matar terminais</h4><p>Recarregue a interface sem reiniciar o Studio e sem encostar no host.</p></li>
           <li><h4>WSL com início inteligente</h4><p>O terminal WSL espera a distro responder e a pasta aparecer antes de abrir, e aceita um comando de inicialização por distro.<br><span class="tag win">Só Windows</span></p></li>
-          <li><h4>Bandeja do Windows</h4><p>Fechar a janela esconde na bandeja. O menu tem Novo terminal, Sistema, Sair da bandeja (terminais continuam) e Encerrar tudo (pede confirmação). O ícone ganha um ponto âmbar quando um agente espera.<br><span class="tag win">Só Windows</span></p></li>
+          <li><h4>Bandeja do Windows</h4><p>Fechar a janela esconde na bandeja. O menu tem Novo terminal, Sistema, Limitar CPU dos terminais, Reiniciar Beth Studio (terminais continuam), Sair da bandeja (terminais continuam) e Encerrar tudo (pede confirmação). O ícone ganha um ponto âmbar quando um agente espera.<br><span class="tag win">Só Windows</span></p></li>
+          <li><h4>Limitar CPU dos terminais</h4><p>Um teto em % da CPU para o host e tudo o que ele abriu, com prazo opcional (30 min a 4 h, ou até remover). No WSL o teto vira número de núcleos. A janela do Studio continua rápida e nada é encerrado.<br><span class="tag win">Só Windows</span></p></li>
+          <li><h4>Host atualizado no próximo início</h4><p>Se o host estiver rodando durante uma atualização, o novo fica guardado e entra na próxima vez que o host iniciar, com o anterior mantido como cópia.<br><span class="tag win">Só Windows</span></p></li>
           <li><h4>Registro de vida do host</h4><p>Cada início, parada e quem pediu fica anotado em <code>host-life.log</code>, para saber por que um terminal sumiu.</p></li>
         </ul>
       </div>
@@ -566,6 +575,8 @@
         <div class="cat-head"><p class="idx">G</p><h3>Celular, acesso remoto e sistema</h3><p>Desligados por padrão: sem configurar, o Studio só escuta no próprio computador.</p></div>
         <ul class="rows">
           <li><h4>WebApp do celular</h4><p>Página própria, instalável na tela inicial. Lista com os agentes que esperam primeiro, busca e filtros por tipo, conversa por terminal em letras grandes, teclas rápidas, anexar imagem, voz, nove temas e a grade Todos os terminais. Não acessa banco, SSH, SFTP, arquivos nem configurações.</p></li>
+          <li><h4>Abrir agentes pelo celular</h4><p>O botão + da lista abre um terminal com um atalho que você cria no PC (por exemplo, Claude na pasta do projeto), numa pasta fixa ou numa das recentes.</p></li>
+          <li><h4>Escrever pelo celular sem sofrer</h4><p>Tamanho do texto ajustável na lista, botão Modelo que reconhece o agente e manda o comando de trocar de modelo, botão Colar, imagem colada vira anexo e texto longo vai como arquivo para o agente ler.</p></li>
           <li><h4>Studio completo pelo navegador</h4><p>O Studio inteiro no navegador de outro computador, com senha mais código de um app autenticador. Mostra as sessões abertas e permite encerrá-las, e o PC avisa quando alguém está conectado.</p></li>
           <li><h4>Seu servidor, sem abrir portas em casa</h4><p>Os dois usam o <code>bethstudio-proxy</code>, um programa Linux que roda num servidor seu. O PC liga para fora e reconecta se cair.</p></li>
           <li><h4>Monitor do sistema</h4><p>CPU, memória, GPU e disco, o consumo do Studio, de cada terminal e das distros WSL, incluindo a memória da VM do WSL2.<br><span class="tag win">Só Windows</span></p></li>

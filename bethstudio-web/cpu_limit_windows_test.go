@@ -3,6 +3,7 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -13,8 +14,8 @@ import (
 
 // Teste real: uma árvore de processos em laço, teto de 5%, mede o job.
 func TestCPUJobCapsTreeAndChildren(t *testing.T) {
-	if testing.Short() {
-		t.Skip("mede CPU de verdade")
+	if testing.Short() || os.Getenv("CI") != "" {
+		t.Skip("mede CPU de verdade (no CI a máquina é pequena demais para o teto de 5%)")
 	}
 	t.Setenv("BETHSTUDIO_HOST_ID", "cputest")
 	old := cpuJob

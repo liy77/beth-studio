@@ -6,7 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-21
+
+This release changes the host (patches 0202–0205). Running terminals keep the old host until it restarts: the new one is applied the next time the host starts (tray **Encerrar tudo**, then open Beth Studio again). Before that, leave each Claude with `/exit` so **Retomar** can bring the sessions back.
+
 ### Added
+- **Limitar CPU dos terminais**: a ceiling in % of the CPU (5–95%) for the host and everything it started, without ending anything. On Windows it is a job object with a hard cap (processes started later join it); in WSL the ceiling becomes a number of cores (`taskset`). Optional deadline (30 min to 4 h, 2 h by default, or until removed) that puts everything back with a tray notification. From the gauge icon in the tab bar or the tray.
+- **Retomar sessões do Claude** after the host restarts (patch 0205 adds `WEZTERM_PANE` to `WSLENV`): a Claude Code hook (SessionStart/SessionEnd, installed from Configurações → **Sessões e processos**, Windows and WSL) records each terminal's session; after the restore the Studio offers to resume each one (or all) with `claude --resume`, or does it on its own.
+- **Processos deixados pelos agentes**: dev servers, builds and scripts an agent started that run past a limit (30 min by default) show up under a bell in the tab bar and in a tray notification, with Encerrar, Ignorar and Lembrar em 1 h (saved across Studio restarts).
+- Agent tag on each terminal (Claude, Codex, OpenCode, Cursor, Grok, Gemini) in the grid, the sidebar and the phone; background servers (`codex app-server`, MCP, daemons) do not count.
+- Tray: **Reiniciar Beth Studio (terminais continuam)** in place of Reiniciar interface.
+- Phone: **+** in the terminal list opens an agent from a shortcut set on the PC (Configurações → Celular), in a fixed folder or a recent one; text size in the terminal list; **Modelo** button that detects the agent and sends its switch-model command; **Colar** button; a pasted image becomes an attachment; long text goes to the PC as a file and only the instruction to read it is sent.
+- Patch 0204: clicks, drags and the wheel reach full-screen programs that use the mouse; OSC 52 copy goes to the clipboard.
+- Falar: the microphone name in the recording card opens the list to switch it.
 - Indicator for the whole-screen zoom: a "Zoom N%" pill when it is not 100% (click to reset) and a "Redefinir para 100%" button in Configurações > Aparência.
 - Tab right-click menu: **Reiniciar este terminal…** and **Matar terminal…** for the terminal in focus in that tab, both with confirmation. Reiniciar opens a new shell of the same type in the same folder and place (tab name kept) before ending the old one, and leaves the old one alone if the new shell does not open. Matar ends the terminal, takes it out of the tab and closes the tab if it was the only one.
 - **MiniMax** in Provedores de IA: transcription (`asr-1.0`, $0.38/hour) and correction or database assistant (`MiniMax-M3.1-Flash`, `MiniMax-M3`). (Studio update needed.)
@@ -16,6 +28,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - With the side panel collapsed, the tool icons (SSH e Serial, files, Falar, Buscar, Tarefas, Banco de dados, Configurações) are a column in the narrow left strip instead of the top-right corner of the tab bar.
 
 ### Fixed
+- The Studio now applies a staged `bethstudio-host.exe.new` when it starts the host (only the removed native window did it before, so a host update staged while terminals were open never went in). The previous file is kept as `.bak`; a stale `.new` is discarded.
+- Configurações: **Ponte de agentes** and **Sessões e processos** show Ligado/Desligado as soon as they open, without pressing Verificar.
+- The Studio supervisor no longer scans every process every 2 s, and a hidden Studio stops watching the terminal screens.
+- Phone: Enter after a paste waits for the paste to finish (PowerShell and cmd did not send).
 - Patch 0202: the host no longer takes a snapshot of every process on the machine once per pane every 2 s. All panes share one snapshot per second; with 30 panes and ~580 processes the host went from ~6 cores to 0.04 while the Studio is open.
 - Switching between terminal tabs no longer flickers or leaves the text scaled wrong when the WebGL renderer loads.
 
