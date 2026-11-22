@@ -47,6 +47,11 @@ func (c realHostCtl) Start() error {
 	if err != nil {
 		return err
 	}
+	// A atualização com o host vivo deixa bethstudio-host.exe.new: a troca é
+	// aqui, com o host parado (antes só a GUI antiga fazia isso).
+	for _, l := range applyPendingHostFiles(filepath.Dir(exe)) {
+		lifeLog("atualização do host: " + l)
+	}
 	cmd := exec.Command(exe)
 	cmd.Dir = filepath.Dir(exe)
 	cmd.Env = append(os.Environ(), "BETHSTUDIO_ACTIVE=1", "WTINATOR_ACTIVE=1")
