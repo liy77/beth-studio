@@ -350,3 +350,6 @@ func (s *server) serveCPULimit(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "limit": cpuLimit.view()})
 }
+
+// cpuDefaultMinutes: o prazo quando o limite nunca foi usado (2 h).
+const cpuDefaultMinutes = 120

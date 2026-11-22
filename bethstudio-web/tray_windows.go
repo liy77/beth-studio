@@ -368,7 +368,7 @@ func handleTrayCommand(id int) {
 		v := cpuLimit.view()
 		min := v.LastMinutes
 		if v.LastPercent == 0 {
-			min = 60
+			min = cpuDefaultMinutes
 		}
 		wsl := v.WSL || v.LastPercent == 0
 		if err := trayCtx.hub.cpuLimitSet(trayCPUChoices[id-trayCPUBase], min, wsl); err != nil {

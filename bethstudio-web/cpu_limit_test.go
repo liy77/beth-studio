@@ -94,7 +94,7 @@ func TestCPULimitHelpers(t *testing.T) {
 
 func TestTrayCPUSub(t *testing.T) {
 	label, sub := trayCPUSub(CPULimitState{})
-	if label != "Limitar CPU dos terminais" || sub[0].ID != trayCPUBase || !strings.Contains(sub[2].Label, "70% da CPU por 1 h") {
+	if label != "Limitar CPU dos terminais" || sub[0].ID != trayCPUBase || !strings.Contains(sub[2].Label, "70% da CPU por 2 h") {
 		t.Fatalf("%s %+v", label, sub)
 	}
 	label, sub = trayCPUSub(CPULimitState{Percent: 50, LastPercent: 50, LastMinutes: 0})

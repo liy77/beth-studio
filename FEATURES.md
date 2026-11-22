@@ -173,7 +173,7 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   processes started later join it on their own. In the WSL terminals (they
   run in the WSL VM, outside the job) the same ceiling becomes a number of
   cores (`taskset` on the distro user's processes, only distros already
-  running). A deadline (30 min, 1 h, 2 h, 4 h or until removed) puts
+  running). A deadline (30 min, 1 h, 2 h, 4 h or until removed; 2 h by default) puts
   everything back to normal by itself, with a tray notification. Set it from
   the gauge icon in the tab bar (with a limit it shows "CPU 70% · até
   23:15") or from the tray (**Limitar CPU dos terminais**: 30/50/70% with the

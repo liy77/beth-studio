@@ -46,7 +46,7 @@ type trayItem struct {
 var trayCPUChoices = []int{30, 50, 70}
 
 // trayCPUSub: o submenu do limite. Com limite ligado, "Voltar ao normal" vem
-// primeiro; o prazo dos tetos rápidos é o último usado (1 h se nunca usou).
+// primeiro; o prazo dos tetos rápidos é o último usado (2 h se nunca usou).
 func trayCPUSub(st CPULimitState) (string, []trayItem) {
 	label := "Limitar CPU dos terminais"
 	var sub []trayItem
@@ -56,7 +56,7 @@ func trayCPUSub(st CPULimitState) (string, []trayItem) {
 	}
 	min := st.LastMinutes
 	if st.LastPercent == 0 {
-		min = 60
+		min = cpuDefaultMinutes
 	}
 	for i, p := range trayCPUChoices {
 		l := fmt.Sprintf("No máximo %d%% da CPU", p)

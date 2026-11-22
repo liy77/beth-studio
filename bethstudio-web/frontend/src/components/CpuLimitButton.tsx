@@ -25,7 +25,7 @@ export function CpuLimitButton({ conn, limit }: { conn: Connection; limit: CpuLi
   const [open, setOpen] = useState(false);
   const [at, setAt] = useState<{ top: number; right: number } | null>(null);
   const [percent, setPercent] = useState(70);
-  const [minutes, setMinutes] = useState(60);
+  const [minutes, setMinutes] = useState(120);
   const [wsl, setWsl] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export function CpuLimitButton({ conn, limit }: { conn: Connection; limit: CpuLi
   const show = () => {
     if (limit) {
       setPercent(limit.percent || limit.last_percent || 70);
-      setMinutes(limit.percent || limit.last_percent ? (limit.last_minutes ?? 60) : 60);
+      setMinutes(limit.percent || limit.last_percent ? (limit.last_minutes ?? 120) : 120);
       setWsl(limit.last_percent ? limit.wsl : true);
     }
     setErr(null);
