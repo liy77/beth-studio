@@ -451,6 +451,26 @@ export class Connection {
     return this.lastScreens.get(paneId)?.text;
   }
 
+  /**
+   * Observa o pane até a primeira tela chegar, para a aba saber a ferramenta
+   * mesmo sem o terminal estar aberto. Devolve a função que cancela.
+   */
+  peekScreen(paneId: number, onText: (text: string) => void): () => void {
+    const have = this.lastScreens.get(paneId)?.text;
+    if (have) {
+      onText(have);
+      return () => {};
+    }
+    const stop = this.onScreen(paneId, (s) => {
+      onText(s.text);
+      stop();
+    });
+    this.setWatched([...this.watched, paneId]);
+    return () => {
+      stop();
+    };
+  }
+
   onScreen(paneId: number, fn: ScreenListener) {
     let set = this.screenListeners.get(paneId);
     if (!set) {

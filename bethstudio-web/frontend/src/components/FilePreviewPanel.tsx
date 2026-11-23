@@ -38,6 +38,10 @@ import { localFileKind, localFileURL } from "@/lib/localFile";
 import { download, isRemote, sinceLabel } from "@/lib/remote";
 import { loadScratch, saveScratch, UNTITLED_PATH } from "@/lib/folderBrowser";
 import { notesApi, noteWhen, type NoteInfo } from "@/lib/notes";
+import { FileKindIcon } from "./FileKindIcon";
+import { GlassMenu, MenuItem } from "./GlassMenu";
+import { CodeEditor, CodeView } from "./CodeEditor";
+import { langOf } from "@/lib/codeHighlight";
 import { clampRect, defaultRect, dockRect, isRect, moveRect, resizeRect, type Edge, type Rect } from "@/lib/panelRect";
 
 const REMOTE = isRemote();
@@ -107,7 +111,8 @@ function initialRect(): Rect {
  * editor padrão sozinho (só os botões explícitos). Fica por cima de tudo
  * mas não bloqueia o terminal atrás; redimensionável (bordas esquerda e de
  * baixo) e maximizável. Esc fecha; Ctrl+A seleciona só o conteúdo do
- * painel. Texto (.md/.txt/.log mostrado inteiro) tem o modo "Editar": Ctrl+S
+ * painel. Texto (código, .md, .txt, .log, mostrado inteiro) abre no editor
+ * com realce. Ctrl+S
  * grava no próprio arquivo; se ele mudou no disco depois de aberto, pergunta
  * antes de sobrescrever; fechar/abrir outro com alteração pendente pergunta.
  * Fora do modo editar, Ctrl+S salva uma cópia.
@@ -145,6 +150,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
   const kind = localFileKind(path);
   const name = untitled ? "Sem título" : fileBaseName(path);
   const markdown = untitled || /\.(md|markdown)$/i.test(path);
+  const codeLang = untitled || markdown ? "plain" : langOf(name);
   const isText = doc.phase === "text";
 
   // Notas: o "Sem título" é salvo sozinho em <dados>\notes (um .md com timestamp
@@ -300,14 +306,17 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
         const { blob, headers } = await conn.getBlob(localFileURL(path));
         const raw = await blob.text();
         if (!alive) return;
+        const truncated = headers.get("X-Truncated") === "1";
         setDoc({
           phase: "text",
           raw,
-          truncated: headers.get("X-Truncated") === "1",
+          truncated,
           size: Number(headers.get("X-File-Size") || raw.length),
           markdown,
           mtime: headers.get("X-File-Mtime") ?? "",
         });
+        // código abre já no editor; markdown continua na vista formatada
+        if (!markdown && !truncated) setDraft(raw);
       } catch (e) {
         if (alive) setDoc({ phase: "error", message: e instanceof Error ? e.message : String(e) });
       }
@@ -593,7 +602,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
         tabIndex={-1}
         onKeyDown={onKeyDown}
         className={cn(
-          "pointer-events-auto absolute flex flex-col overflow-hidden rounded-lg border border-border-strong bg-bg-card shadow-2xl outline-none",
+          "pointer-events-auto absolute flex flex-col overflow-hidden bt-dialog outline-none",
           maximized && "inset-4",
         )}
         style={maximized ? undefined : { left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
@@ -605,9 +614,10 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
           onDoubleClick={(e) => !(e.target as Element).closest("button") && setMaximized((m) => !m)}
           title={maximized ? undefined : "Arraste para mover · duplo clique maximiza"}
         >
-          <div className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text-1" title={path}>
-            {dirty && !untitled && <span className="mr-1 text-accent" title="Alterações não salvas">●</span>}
-            {name}
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-[13px] font-semibold text-text-1" title={path}>
+            {!untitled && <FileKindIcon name={name} size={18} />}
+            {dirty && !untitled && <span className="text-accent" title="Alterações não salvas">●</span>}
+            <span className="truncate">{name}</span>
             {draft !== null && !untitled && <span className="ml-2 text-[11px] font-normal text-text-3">editando</span>}
             {untitled && (
               <span className="ml-2 text-[11px] font-normal text-text-3">
@@ -923,7 +933,17 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
                   setMenu({ x: e.clientX, y: e.clientY, editing: e.target instanceof HTMLTextAreaElement });
                 }}
               >
-                {showSource && draft !== null ? (
+                {showSource && draft !== null && !markdown ? (
+                  <CodeEditor
+                    value={draft}
+                    onChange={setDraft}
+                    lang={codeLang}
+                    wrap={wrap}
+                    fontPx={font}
+                    label={`Editar ${name}`}
+                    textareaRef={textareaRef}
+                  />
+                ) : showSource && draft !== null ? (
                   <textarea
                     ref={textareaRef}
                     value={draft}
@@ -934,6 +954,8 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
                     style={textStyle}
                     aria-label={`Editar ${name}`}
                   />
+                ) : showSource && !markdown ? (
+                  <CodeView value={doc.raw} lang={codeLang} wrap={wrap} fontPx={font} />
                 ) : showSource ? (
                   <pre
                     className={cn("font-mono text-text-1", wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre")}
@@ -979,11 +1001,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
       </div>
 
       {menu && (
-        <div
-          className="pointer-events-auto fixed z-[60] min-w-[200px] rounded-md border border-border-strong bg-bg-card py-1 shadow-xl"
-          style={{ left: Math.min(menu.x, window.innerWidth - 210), top: Math.min(menu.y, window.innerHeight - 170) }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
+        <GlassMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} className="min-w-[200px]">
           {menu.editing ? (
             <>
               <MenuItem icon={<Scissors size={14} />} label="Recortar" onClick={() => (setMenu(null), void editCut())} />
@@ -996,7 +1014,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
           <MenuItem icon={<TextSelect size={14} />} label="Selecionar tudo" onClick={() => (setMenu(null), selectAll())} />
           <MenuItem icon={<Link size={14} />} label="Copiar caminho" onClick={() => (setMenu(null), void copyPath())} />
           <MenuItem icon={<FileOutput size={14} />} label="Salvar uma cópia como…" onClick={() => (setMenu(null), void saveAs())} />
-        </div>
+        </GlassMenu>
       )}
     </div>
   );
@@ -1006,11 +1024,4 @@ function Sep() {
   return <span className="mx-1 h-4 w-px bg-border-strong" />;
 }
 
-function MenuItem({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
-  return (
-    <button className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-text-1 hover:bg-bg-hover" onClick={onClick}>
-      {icon}
-      {label}
-    </button>
-  );
-}
+
