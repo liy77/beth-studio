@@ -5,6 +5,7 @@ import { shellKind } from "@/lib/agents";
 import { SPLIT_ZONES, ZONE_LABEL, sameShellId, type SplitZone } from "@/lib/splitSpawn";
 import { SHELL_ICON } from "./NewTerminalDialog";
 import type { ToolKind } from "./SshScreen";
+import { GlassMenu } from "./GlassMenu";
 
 export const ZONE_ICON: Record<SplitZone, ReactNode> = {
   right: <PanelRight size={14} />,
@@ -35,16 +36,6 @@ export function SplitShellMenu({ pane, x, y, zone: initialZone, shells, requestS
     requestShells();
   }, [requestShells]);
 
-  useEffect(() => {
-    const close = () => onClose();
-    window.addEventListener("mousedown", close);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("blur", close);
-    };
-  }, [onClose]);
-
   const same = sameShellId(pane, shells);
   const sameLabel = same ? (shells?.find((s) => s.id === same)?.label ?? same) : "";
   const pick = (z: SplitZone, id: string, label: string) => {
@@ -53,16 +44,7 @@ export function SplitShellMenu({ pane, x, y, zone: initialZone, shells, requestS
   };
 
   return (
-    <div
-      className="fixed z-50 w-[280px] overflow-y-auto rounded-md border border-border-strong bg-bg-card py-1 shadow-xl"
-      style={(() => {
-        // a lista de shells cabe inteira na janela (sobe se precisar)
-        const top = Math.max(8, Math.min(y, window.innerHeight - 420));
-        return { left: Math.max(8, Math.min(x, window.innerWidth - 290)), top, maxHeight: window.innerHeight - top - 8 };
-      })()}
-      onMouseDown={(e) => e.stopPropagation()}
-      onContextMenu={(e) => e.preventDefault()}
-    >
+    <GlassMenu x={x} y={y} onClose={onClose} width={280} className="max-h-[70vh] overflow-y-auto">
       {!zone && SPLIT_ZONES.map((z) => <Row key={z} icon={ZONE_ICON[z]} label={ZONE_LABEL[z]} arrow onClick={() => setZone(z)} />)}
       {zone && (
         <>
@@ -106,7 +88,7 @@ export function SplitShellMenu({ pane, x, y, zone: initialZone, shells, requestS
           />
         </>
       )}
-    </div>
+    </GlassMenu>
   );
 }
 

@@ -34,7 +34,7 @@ import { DEFAULT_TERM_THEME, colorsFor, cssFamily, effectiveFor, fontAvailable, 
 const DIAG = new URLSearchParams(window.location.search).get("diag") === "1";
 const REMOTE = isRemote();
 import { AppearancePanel, type Preview } from "./AppearancePanel";
-import { paneLabel, shortCwd } from "@/lib/panes";
+import { cwdPath, paneLabel, shortCwd } from "@/lib/panes";
 import { copyText, readClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./IconButton";
@@ -54,6 +54,7 @@ import { PANE_MIME } from "@/lib/dnd";
 import { fixedFontFor, fontSizeLabel, nextFontSize, smallGridHint } from "@/lib/fontStep";
 import { FitGovernor, effectiveSizeMode, fontForWidth, gridFor, resizeRefusedPane } from "@/lib/hostFit";
 import { KindIcon } from "./KindIcon";
+import { GlassMenu, MenuItem, MenuRule } from "./GlassMenu";
 import { sftpApi } from "@/lib/sshApi";
 import { registerTerm } from "@/lib/termFocus";
 import { ZONE_ICON } from "./SplitShellMenu";
@@ -108,6 +109,59 @@ interface Props {
   overlay?: ReactNode;
   /** clique num caminho de arquivo local (OSC 8 ou solto) na saída do terminal: abre o painel de preview */
   onOpenFile?: (path: string) => void;
+}
+
+// Fora do TerminalView de propósito: um componente declarado lá dentro ganha
+// outro tipo a cada render e o campo de pasta desmonta no clique.
+function LocationBar({ cwd, shown, onGo }: { cwd: string; shown: string; onGo: (dest: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(cwd);
+  const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        data-no-drag
+        draggable={false}
+        className="ml-1 hidden h-6 min-w-0 max-w-[46%] shrink items-center truncate rounded-full bg-bg-hover/60 px-3 text-left font-mono text-[12px] text-text-2 hover:bg-bg-hover hover:text-text-1 xl:flex"
+        title="Clique para ir a outra pasta"
+        onMouseDown={stop}
+        onClick={(e) => {
+          stop(e);
+          setValue(cwd);
+          setEditing(true);
+        }}
+      >
+        {shown}
+      </button>
+    );
+  }
+  return (
+    <input
+      data-no-drag
+      draggable={false}
+      autoFocus
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onMouseDown={stop}
+      onKeyDown={(e) => {
+        stop(e);
+        if (e.key === "Escape") {
+          setEditing(false);
+          return;
+        }
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const dest = value.trim();
+        setEditing(false);
+        if (dest && dest !== cwd) onGo(dest);
+      }}
+      onBlur={() => setEditing(false)}
+      className="ml-1 hidden h-6 min-w-[140px] max-w-[46%] flex-1 select-text rounded-full bg-bg-card px-3 font-mono text-[12px] text-text-1 outline-none ring-1 ring-accent xl:block"
+      style={{ userSelect: "text" }}
+      title="Enter vai para esta pasta; Esc cancela"
+    />
+  );
 }
 
 export function TerminalView({
@@ -1078,17 +1132,21 @@ export function TerminalView({
   }, [menu]);
 
   const gone = listLoaded && !pane;
+
   const title = pane ? paneLabel(pane) : `Terminal ${paneId}`;
   const cwd = pane ? shortCwd(pane.cwd, 4) : "";
 
   return (
     <section
       className={cn(
-        "flex min-w-0 flex-1 flex-col overflow-hidden rounded-md border bg-bg-panel",
-        focused ? "border-accent" : "border-border",
+        "flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-term",
+        focused && "rounded-b-md",
         flashing && "animate-bt-flash",
       )}
-      onMouseDownCapture={onFocus}
+      onMouseDownCapture={(e) => {
+        if ((e.target as HTMLElement).closest("[data-no-drag]")) return;
+        onFocus();
+      }}
       onFocusCapture={onFocus}
     >
       <header
@@ -1099,34 +1157,32 @@ export function TerminalView({
           onOrganize(e.clientX, e.clientY);
         }}
       >
-        <div
-          className={cn("flex min-w-[56px] flex-1 items-center gap-1.5", onHeaderDragStart && "cursor-grab active:cursor-grabbing")}
-          draggable={!!onHeaderDragStart}
-          onDragStart={onHeaderDragStart}
-          onDragEnd={onHeaderDragEnd}
-          title={
-            onHeaderDragStart
-              ? `${title}
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <div
+            className={cn("flex min-w-0 shrink items-center gap-1.5", onHeaderDragStart && "cursor-grab active:cursor-grabbing")}
+            draggable={!!onHeaderDragStart}
+            onDragStart={onHeaderDragStart}
+            onDragEnd={onHeaderDragEnd}
+            title={
+              onHeaderDragStart
+                ? `${title}
 Arraste para outra aba ou para a borda de outro terminal`
-              : title
-          }
-        >
-          {onHeaderDragStart && <GripVertical size={14} className="shrink-0 text-text-3" />}
-          {pane && <KindIcon pane={pane} />}
-          <div className="min-w-0 truncate text-[13px] font-semibold text-text-1">{title}</div>
-          {cwd && (
-            <button
-              type="button"
-              className="hidden min-w-0 shrink-[2] truncate text-left font-mono text-[11px] text-text-3 hover:text-text-1 hover:underline xl:block"
-              title="Abrir esta pasta no Explorer (no WSL, a pasta do WSL no Windows)"
-              onClick={() => {
-                const p = pane?.cwd ? resolveLinkPath(pane.cwd, paneCtxRef.current) : null;
-                if (!p) return flash("Não sei abrir esta pasta no Windows");
-                void conn.api("/api/local-fs/reveal", { path: p, open_folder: true }).catch((e: Error) => flash(e.message));
+                : title
+            }
+          >
+            {onHeaderDragStart && <GripVertical size={14} className="shrink-0 text-text-3" />}
+            {pane && <KindIcon pane={pane} />}
+            <div className="min-w-0 max-w-[16rem] truncate text-[13px] font-semibold text-text-1">{title}</div>
+          </div>
+          {pane?.cwd && (
+            <LocationBar
+              cwd={cwdPath(pane.cwd).path}
+              shown={cwd}
+              onGo={(dest) => {
+                const q = dest.includes(" ") || dest.includes('"') ? `"${dest.replaceAll('"', "")}"` : dest;
+                if (!conn.send(paneId, `cd ${q}\r`)) flash("Sem conexão com o terminal");
               }}
-            >
-              {cwd}
-            </button>
+            />
           )}
         </div>
         {agent && (
@@ -1146,20 +1202,17 @@ Arraste para outra aba ou para a borda de outro terminal`
             )}
           </span>
         )}
+        <div className="bt-termbar">
         {size && (
           <span
-            className="shrink-0 rounded bg-bg-card px-1.5 py-0.5 font-mono text-[11px] text-text-2"
+            className="px-2 font-mono text-[11px] text-text-3"
             title="Tamanho do pane no Beth Studio (colunas × linhas)"
           >
             {size.cols}×{size.rows}
           </span>
         )}
-        <div
-          className="flex shrink-0 items-center rounded border border-border"
-          title="Tamanho da fonte deste terminal (Ctrl + roda do mouse também)"
-        >
-          <button
-            className="px-1.5 py-0.5 text-[11px] font-semibold text-text-2 hover:bg-bg-hover hover:text-text-1"
+        <button
+            className="text-[11px] font-semibold"
             title="Diminuir a fonte (A−)"
             onClick={() => stepFont(-1)}
           >
@@ -1167,7 +1220,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           </button>
           <button
             className={cn(
-              "min-w-[38px] border-x border-border px-1 py-0.5 font-mono text-[11px] hover:bg-bg-hover",
+              "min-w-[38px] font-mono text-[11px]",
               fixedFont ? "text-text-1" : "text-text-3",
             )}
             title={
@@ -1182,20 +1235,16 @@ Arraste para outra aba ou para a borda de outro terminal`
             {fontSizeLabel(fixedFont)}
           </button>
           <button
-            className="px-1.5 py-0.5 text-[11px] font-semibold text-text-2 hover:bg-bg-hover hover:text-text-1"
+            className="text-[11px] font-semibold"
             title="Aumentar a fonte (A+)"
             onClick={() => stepFont(+1)}
           >
             A+
           </button>
-        </div>
         {!REMOTE && (
-        <div className="flex shrink-0 items-center overflow-hidden rounded border border-border">
+          <>
           <button
-            className={cn(
-              "px-1 py-0.5 hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40",
-              sizeMode === "fit" ? "bg-accent-soft text-accent-text" : "text-text-2",
-            )}
+            className={cn("disabled:cursor-not-allowed", sizeMode === "fit" && "bt-on")}
             disabled={readOnly || (!aloneInHost && !onAskSeparate)}
             title={
               !aloneInHost
@@ -1211,36 +1260,33 @@ Arraste para outra aba ou para a borda de outro terminal`
             <Maximize2 size={13} />
           </button>
           <button
-            className={cn(
-              "border-l border-border px-1 py-0.5 hover:bg-bg-hover",
-              sizeMode === "host" ? "bg-accent-soft text-accent-text" : "text-text-2",
-            )}
+            className={cn(sizeMode === "host" && "bt-on")}
             title="Igual ao Beth Studio: mostra o tamanho que o terminal tem lá (a fonte se ajusta)"
             onClick={() => aloneInHost && setPane(conn, paneId, { size_mode: "host" }).catch((e: Error) => flash(`Erro: ${e.message}`))}
           >
             <Monitor size={13} />
           </button>
-        </div>
+          </>
         )}
         {onNewSplit && !readOnly && (
-          <IconButton
-            label="Dividir: abrir mais um terminal à direita, abaixo, acima ou à esquerda"
+          <button
+            title="Dividir: abrir mais um terminal à direita, abaixo, acima ou à esquerda"
             onClick={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
               onNewSplit(undefined, r.left, r.bottom + 2);
             }}
           >
-            <Grid2x2 size={15} />
-          </IconButton>
+            <Grid2x2 size={14} />
+          </button>
         )}
         {onSpeak && !readOnly && (
-          <IconButton label="Falar (microfone): ditar um texto para este terminal" onClick={onSpeak}>
-            <Mic size={15} />
-          </IconButton>
+          <button title="Falar (microfone): ditar um texto para este terminal" onClick={onSpeak}>
+            <Mic size={14} />
+          </button>
         )}
         {pane?.kind === "ssh" && (
-          <IconButton
-            label={
+          <button
+            title={
               pane.ssh_host_id
                 ? "Abrir transferência de arquivos (SFTP) numa janela separada"
                 : "SFTP: este terminal SSH não está ligado a um host salvo"
@@ -1248,42 +1294,42 @@ Arraste para outra aba ou para a borda de outro terminal`
             onClick={() => void openSftp()}
             disabled={!pane.ssh_host_id}
           >
-            <FolderOpen size={15} />
-          </IconButton>
+            <FolderOpen size={14} />
+          </button>
         )}
-        <IconButton label="Aparência: tema, fonte e tamanho" onClick={() => {
+        <button title="Aparência: tema, fonte e tamanho" className={cn(showLook && "bt-on")} onClick={() => {
             // fechar pelo botao tambem descarta a pre-visualizacao (senao o
             // tema so' de passar o mouse ficava na tela ate' trocar de aba)
             if (showLook) setPreview(null);
             setShowLook(!showLook);
           }}
-          active={showLook}
         >
-          <Palette size={15} />
-        </IconButton>
-        <IconButton
-          label="Reparar visualização: reconstrói só a tela deste painel, sem interromper o aplicativo"
+          <Palette size={14} />
+        </button>
+        <button
+          title="Reparar visualização: reconstrói só a tela deste painel, sem interromper o aplicativo"
           onClick={() => repairViewRef.current()}
           disabled={!gotScreen}
         >
-          <RefreshCw size={15} />
-        </IconButton>
-        <IconButton label="Copiar seleção" onClick={doCopy} disabled={!hasSelection}>
-          <Copy size={15} />
-        </IconButton>
-        <IconButton label={readOnly ? "Colar (desabilitado: somente leitura)" : "Colar no terminal"} onClick={doPaste} disabled={readOnly || gone}>
-          <ClipboardPaste size={15} />
-        </IconButton>
+          <RefreshCw size={14} />
+        </button>
+        <button title="Copiar seleção" onClick={doCopy} disabled={!hasSelection}>
+          <Copy size={14} />
+        </button>
+        <button title={readOnly ? "Colar (desabilitado: somente leitura)" : "Colar no terminal"} onClick={doPaste} disabled={readOnly || gone}>
+          <ClipboardPaste size={14} />
+        </button>
         {onDetach && (
-          <IconButton label="Destacar em janela (o terminal continua rodando)" onClick={onDetach}>
-            <AppWindow size={15} />
-          </IconButton>
+          <button title="Destacar em janela (o terminal continua rodando)" onClick={onDetach}>
+            <AppWindow size={14} />
+          </button>
         )}
         {canClose && (
-          <IconButton label="Fechar visualização (o terminal continua rodando)" onClick={onClose}>
-            <X size={15} />
-          </IconButton>
+          <button title="Fechar visualização (o terminal continua rodando)" onClick={onClose}>
+            <X size={14} />
+          </button>
         )}
+        </div>
       </header>
 
       <div
@@ -1451,14 +1497,7 @@ Arraste para outra aba ou para a borda de outro terminal`
       </div>
 
       {menu && (
-        <div
-          className="fixed z-50 min-w-[230px] rounded-md border border-border-strong bg-bg-card py-1 shadow-xl"
-          style={{
-            left: Math.min(menu.x, window.innerWidth - 240),
-            top: Math.min(menu.y, window.innerHeight - (onNewSplit && !readOnly ? 420 : 280)),
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
+        <GlassMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} className="min-w-[230px]">
           {onNewSplit && !readOnly && (
             <>
               {SPLIT_ZONES.map((z) => (
@@ -1473,7 +1512,7 @@ Arraste para outra aba ou para a borda de outro terminal`
                   }}
                 />
               ))}
-              <div className="my-1 border-t border-border" />
+              <MenuRule />
             </>
           )}
           {menuRoute && (
@@ -1490,7 +1529,7 @@ Arraste para outra aba ou para a borda de outro terminal`
                   }}
                 />
               ))}
-              <div className="my-1 border-t border-border" />
+              <MenuRule />
             </>
           )}
           <MenuItem
@@ -1519,7 +1558,7 @@ Arraste para outra aba ou para a borda de outro terminal`
               termRef.current?.selectAll();
             }}
           />
-          <div className="my-1 border-t border-border" />
+          <MenuRule />
           <MenuItem
             icon={<ScrollText size={14} />}
             label="Copiar histórico"
@@ -1564,7 +1603,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           )}
           {onAskKill && (
             <>
-              <div className="my-1 border-t border-border" />
+              <MenuRule />
               <button
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-status-err hover:bg-status-err/10"
                 onClick={() => {
@@ -1588,7 +1627,7 @@ Arraste para outra aba ou para a borda de outro terminal`
               }}
             />
           )}
-        </div>
+        </GlassMenu>
       )}
 
       {pasteOpen && (
@@ -1605,15 +1644,4 @@ Arraste para outra aba ou para a borda de outro terminal`
   );
 }
 
-function MenuItem({ icon, label, disabled, onClick }: { icon: ReactNode; label: string; disabled?: boolean; onClick: () => void }) {
-  return (
-    <button
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-text-1 hover:bg-bg-hover disabled:cursor-default disabled:text-text-3 disabled:hover:bg-transparent"
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
+

@@ -13,7 +13,7 @@
 > When a user-facing feature is added, changed, or removed, update this
 > file in the same change (`.cursor/rules/features-catalog.mdc`).
 
-Last updated: 2026-11-07.
+Last updated: 2026-11-23.
 
 ---
 
@@ -97,7 +97,8 @@ a message asking you to use Beth Studio. See `docs/HISTORY.md`.
 (default + named distros), Git Bash**, surfaced in Beth Studio's new‑terminal menu. Optional
 **MobaXterm local bash** entry appears when its local path exists (patch 0026),
 and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
-(patch 0183).
+(patch 0183). On macOS the same menu offers the login shell, zsh, and bash
+(patch 0205).
 
 ## 3. Themes
 
@@ -408,8 +409,34 @@ ends the shell together with everything it started (patch 0203).
   name become `_`. The remote Studio does not read this computer's clipboard.
   Dropping a file on the terminal still uploads a copy the same way, up to
   25 MB.
+- 🟢 **Pasta da guia** (tab bar, 2026-11-23). The panel-right button opens a
+  sidebar on the right of the active tab only. It lists the files of the
+  focused terminal's folder and, in **Mudanças**, the git status of that
+  same folder (branch and changed, new and deleted files). Switching tabs
+  shows that tab's own sidebar, open or closed as it was left. That choice
+  is saved with the tabs, so the next launch opens each tab the same way.
+  Both sidebars are cards with the same corner, and both can be resized
+  by dragging the edge between them and the terminal. The widths are saved.
+  The left sidebar's collapsed state is saved the same way. Clicking a
+  text or image file opens it in the file panel. The list refreshes every
+  few seconds, so files an agent writes in that folder show up there.
+  Each row uses the file symbols from
+  [vscode-symbols](https://github.com/miguelsolorio/vscode-symbols): Rust,
+  C, C++, Java, Go, Python, TypeScript, and the other languages in that
+  set, plus folder symbols (`src`, `docs`, `assets`). `README.md` and
+  `CLAUDE.md` use their own marks from that set. `.mika` and `.crs`
+  keep the Mikasa mark from Copper, the light bird on a dark theme and the
+  dark bird on a light theme. `.mui` and `app.bundle` use the Mocida mark
+  (the two overlapping squares) from the copper-lang MUI editor, the same
+  logo as mocida. The same icons appear in the folder browser,
+  the file panel title, and the SFTP lists.
 - 🟢 **Abrir arquivo** (tab bar) opens the Windows file dialog in the
-  focused terminal's folder. The file panel edits `.md` / `.txt` / `.log`:
+  focused terminal's folder. The file panel opens text, not only
+  `.md` / `.txt` / `.log`: code (`.crs`, `.mika`, `.mui`, `app.bundle`, Rust, Go, C, C++, Java,
+  Python, TypeScript and the other common source extensions) and config
+  (JSON, YAML, TOML) open in the editor with colored syntax, line numbers
+  and Tab inserting spaces. Ctrl+S writes the file itself. Markdown still
+  toggles source / formatted.
   **Editar**, **Salvar** / Ctrl+S write the file itself (line endings and
   symlinks kept), Markdown toggles source / formatted (formatted shows the
   unsaved text). Closing or opening another file with changes asks
@@ -608,7 +635,11 @@ xterm screen. Remote access from the phone is not wired on the PC yet.
   folder sync.
 - ⚪ X11, RDP, or VNC inside BethStudio.
 - ⚪ Cloud sync of hosts.
-- ⚪ Linux and macOS builds.
+- 🟢 **macOS** (Apple Silicon): the Studio opens in a native window, starts
+  `bethstudio-host`, and keeps terminals after the window is closed
+  (patch 0205). Serial ports, the Windows task manager, and the WSL gate
+  stay Windows-only.
+- ⚪ Linux builds of the Studio window.
 
 ---
 

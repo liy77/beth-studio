@@ -1,10 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AppWindow, ArrowLeft, ChevronRight, Columns2, FolderInput, LogOut, Plus, Power, Rows2, SplitSquareHorizontal, SquarePlus } from "lucide-react";
 import type { PaneInfo } from "@/lib/types";
 import { findPane, type Layout, type WebTab, type Zone } from "@/lib/layout";
 import { SPLIT_ZONES, ZONE_LABEL, type SplitZone } from "@/lib/splitSpawn";
 import { ZONE_ICON } from "./SplitShellMenu";
 import { paneLabel, shortCwd } from "@/lib/panes";
+import { GlassMenu } from "./GlassMenu";
 
 export interface PaneMenuActions {
   moveToTab: (pane: number, tabId: string) => void;
@@ -49,16 +50,6 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
     return t ? title(t) : "";
   };
 
-  useEffect(() => {
-    const close = () => onClose();
-    window.addEventListener("mousedown", close);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("blur", close);
-    };
-  }, [onClose]);
-
   const done = (f: () => void) => () => {
     f();
     onClose();
@@ -66,42 +57,36 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
   const others = panes.filter((p) => p.pane_id !== pane);
 
   return (
-    <div
-      className="fixed z-50 max-h-[70vh] w-[300px] overflow-y-auto rounded-md border border-border-strong bg-bg-card py-1 shadow-xl"
-      style={{
-        left: Math.min(x, window.innerWidth - 310),
-        top: Math.min(y, window.innerHeight - 300),
-      }}
-      onMouseDown={(e) => e.stopPropagation()}
-      onContextMenu={(e) => e.preventDefault()}
-    >
+    <GlassMenu x={x} y={y} onClose={onClose} width={300} className="max-h-[70vh] overflow-y-auto">
       {view === "root" && (
         <>
           {actions.newSplit && at && (
             <>
               {SPLIT_ZONES.map((z) => (
-                <Item key={z} icon={ZONE_ICON[z]} label={ZONE_LABEL[z]} arrow onClick={done(() => actions.newSplit!(pane, z, x, y))} />
+                <Item key={z} icon={ZONE_ICON[z]} symbol={z === "right" || z === "left" ? "panel-right" : "panel-bottom"} label={ZONE_LABEL[z]} arrow onClick={done(() => actions.newSplit!(pane, z, x, y))} />
               ))}
-              <div className="my-1 border-t border-border" />
+              <div className="bt-menu-rule my-1 border-t border-border" />
             </>
           )}
-          <Item icon={<FolderInput size={14} />} label="Mover para aba…" arrow onClick={() => setView("tabs")} />
-          <Item icon={<SquarePlus size={14} />} label="Abrir numa aba nova" onClick={done(() => actions.moveToNewTab(pane))} />
+          <Item icon={<FolderInput size={14} />} symbol="folder-input" label="Mover para aba…" arrow onClick={() => setView("tabs")} />
+          <Item icon={<SquarePlus size={14} />} symbol="plus" label="Abrir numa aba nova" onClick={done(() => actions.moveToNewTab(pane))} />
           {actions.detach && (
             <Item
               icon={<AppWindow size={14} />}
+              symbol="app-window"
               label="Destacar em janela"
               hint="janela separada; o terminal continua rodando"
               onClick={done(() => actions.detach!(pane))}
             />
           )}
-          <Item icon={<Columns2 size={14} />} label="Dividir ao lado com…" arrow onClick={() => setView("right")} />
-          <Item icon={<Rows2 size={14} />} label="Dividir abaixo com…" arrow onClick={() => setView("bottom")} />
+          <Item icon={<Columns2 size={14} />} symbol="columns" label="Dividir ao lado com…" arrow onClick={() => setView("right")} />
+          <Item icon={<Rows2 size={14} />} symbol="rows" label="Dividir abaixo com…" arrow onClick={() => setView("bottom")} />
           {at && (
             <>
-              <div className="my-1 border-t border-border" />
+              <div className="bt-menu-rule my-1 border-t border-border" />
               <Item
                 icon={<LogOut size={14} />}
+                symbol="log-out"
                 label={`Tirar de "${tabName(at.tabId)}"`}
                 hint="continua rodando, em Não organizados"
                 onClick={done(() => actions.unorganize(pane))}
@@ -118,8 +103,9 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
           )}
           {actions.askKill && (
             <>
-              <div className="my-1 border-t border-border" />
+              <div className="bt-menu-rule my-1 border-t border-border" />
               <button
+                data-symbol="power"
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-status-err hover:bg-status-err/10"
                 onClick={done(() => actions.askKill!(pane))}
                 title="Encerra o processo no Beth Studio (pede confirmação)"
@@ -145,7 +131,7 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
               onClick={done(() => actions.moveToTab(pane, t.id))}
             />
           ))}
-          <div className="my-1 border-t border-border" />
+          <div className="bt-menu-rule my-1 border-t border-border" />
           <Item icon={<Plus size={14} />} label="Nova aba" onClick={done(() => actions.moveToNewTab(pane))} />
         </>
       )}
@@ -166,23 +152,24 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
           })}
         </>
       )}
-    </div>
+    </GlassMenu>
   );
 }
 
-function Item(p: { icon?: ReactNode; label: string; hint?: string; arrow?: boolean; disabled?: boolean; onClick: () => void }) {
+function Item(p: { icon?: ReactNode; symbol?: string; label: string; hint?: string; arrow?: boolean; disabled?: boolean; onClick: () => void }) {
   return (
     <button
+      data-symbol={p.symbol}
       className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-text-1 hover:bg-bg-hover disabled:cursor-default disabled:text-text-3 disabled:hover:bg-transparent"
       disabled={p.disabled}
       onClick={p.onClick}
     >
-      <span className="w-4 shrink-0">{p.icon}</span>
+      <span className="w-4 shrink-0" data-symbol={p.symbol}>{p.icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block truncate">{p.label}</span>
         {p.hint && <span className="block truncate text-[11px] text-text-3">{p.hint}</span>}
       </span>
-      {p.arrow && <ChevronRight size={14} className="text-text-3" />}
+      {p.arrow && <ChevronRight size={14} data-symbol="chevron-right" className="text-text-3" />}
     </button>
   );
 }
@@ -193,7 +180,7 @@ function Back({ onClick, label }: { onClick: () => void; label: string }) {
       className="flex w-full items-center gap-2 border-b border-border px-3 py-1.5 text-left font-semibold text-text-2 hover:bg-bg-hover"
       onClick={onClick}
     >
-      <ArrowLeft size={14} /> {label}
+      <ArrowLeft size={14} data-symbol="arrow-left" /> {label}
     </button>
   );
 }

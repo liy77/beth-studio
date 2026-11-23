@@ -20,6 +20,27 @@ export function isFrameless(): boolean {
   return typeof window !== "undefined" && !!window.__bethstudioFrameless && !!window.chrome?.webview;
 }
 
+/**
+ * macOS: a janela nativa esconde a barra de título e a página desenha as
+ * abas no lugar dela. Windows continua com a barra do sistema.
+ */
+export function isMacTitlebar(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Mac/.test(navigator.platform) && !isFrameless();
+}
+
+/** Arrasta a janela do macOS a partir da faixa de abas. */
+export function dragMacWindow() {
+  const w = window as unknown as { webkit?: { messageHandlers?: { bethDrag?: { postMessage: (v: string) => void } } } };
+  w.webkit?.messageHandlers?.bethDrag?.postMessage("drag");
+}
+
+/** Duplo clique na topbar: maximiza ou restaura, como nas outras janelas do macOS. */
+export function zoomMacWindow() {
+  const w = window as unknown as { webkit?: { messageHandlers?: { bethDrag?: { postMessage: (v: string) => void } } } };
+  w.webkit?.messageHandlers?.bethDrag?.postMessage("zoom");
+}
+
 export function winCommand(c: WinCommand) {
   window.chrome?.webview?.postMessage(`win:${c}`);
 }
