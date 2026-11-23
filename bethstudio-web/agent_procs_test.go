@@ -35,6 +35,58 @@ func TestAPCandidates(t *testing.T) {
 	}
 }
 
+// pipeline do agente: claude -> bash -c '... find / | head -3' -> {bash (subshell) -> bfs, head}.
+// Encerrar o head tem de levar a árvore toda do comando, inclusive o find.
+func TestAPKillRootPipeline(t *testing.T) {
+	nodes := []apNode{
+		{PID: 10, PPID: 1, Name: "bash", Start: 500}, // terminal onde o claude roda
+		{PID: 20, PPID: 10, Name: "claude", Start: 600},
+		{PID: 61, PPID: 20, Name: "bash", Start: 1000},
+		{PID: 63, PPID: 61, Name: "bash", Start: 1000},
+		{PID: 64, PPID: 63, Name: "bash", Start: 1000},
+		{PID: 65, PPID: 63, Name: "head", Cmd: "head -3", Start: 1000},
+		{PID: 66, PPID: 64, Name: "bfs", Cmd: "bfs / -name x", Start: 1000},
+	}
+	if r := apKillRoot(nodes, 65); r != 61 {
+		t.Fatalf("raiz %d, queria 61 (o shell do comando, nunca o claude)", r)
+	}
+	sub := apSubtree(nodes, apKillRoot(nodes, 65))
+	got := map[int]bool{}
+	for _, p := range sub {
+		got[p] = true
+	}
+	for _, p := range []int{61, 63, 64, 65, 66} {
+		if !got[p] {
+			t.Fatalf("faltou %d em %v", p, sub)
+		}
+	}
+	if got[20] || got[10] {
+		t.Fatalf("pegou o agente ou o terminal: %v", sub)
+	}
+	// órfão (o agente saiu e o bash foi adotado pelo init): para no bash
+	nodes[2].PPID = 1
+	if r := apKillRoot(nodes, 65); r != 61 {
+		t.Fatalf("órfão: raiz %d", r)
+	}
+}
+
+// Um shell mais antigo que o comando (shell persistente, com outros comandos)
+// não entra: o encerramento para no processo.
+func TestAPKillRootOldShell(t *testing.T) {
+	nodes := []apNode{
+		{PID: 20, PPID: 1, Name: "claude", Start: 600},
+		{PID: 40, PPID: 20, Name: "bash", Start: 700},
+		{PID: 41, PPID: 40, Name: "npm", Cmd: "npm run dev", Start: 1000},
+		{PID: 42, PPID: 40, Name: "python", Cmd: "python outro.py", Start: 1100},
+	}
+	if r := apKillRoot(nodes, 41); r != 41 {
+		t.Fatalf("raiz %d, queria 41", r)
+	}
+	if r := apKillRoot(apSample(1000), 41); r != 40 {
+		t.Fatalf("amostra: raiz %d, queria 40", r)
+	}
+}
+
 func TestAPMonitorThresholdOrphanIgnore(t *testing.T) {
 	m := newAgentProcMonitor("")
 	t0 := time.Unix(100000, 0)

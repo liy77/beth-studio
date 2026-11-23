@@ -149,7 +149,7 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   number of such agents and terminals in that folder is the same. The
   **Agentes** filter counts them and the search finds "codex", "grok"…; the
   phone **Modelo** key uses it too.
-- 🟢 **Processos deixados pelos agentes** (2026-11-21). Once a minute the
+- 🟢 **Processos deixados pelos agentes** (Atualizado 2026-11-22). Once a minute the
   Studio looks at the Windows process tree and at every WSL distro that is
   already running (it never starts a stopped one) for processes an agent
   started by command (agent → shell → dev server, build, script) that are
@@ -158,8 +158,11 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   tray and a bell with the count in the tab bar (it does not push the terminal
   down); a click opens the list with each process (name, Windows/WSL, PID,
   how long, memory, CPU of the last minute, the agent's folder, command
-  line) and **Encerrar** (the process and its children; the PID's start time
-  is checked first), **Ignorar** and **Lembrar em 1 h**. Nothing is ended
+  line) and **Encerrar** (the whole agent command the process belongs to:
+  for a pipeline like `find / | head -3` it ends the agent's shell for that
+  command and everything under it, never the agent itself or an older
+  shell; the PID's start time is checked first), **Ignorar** and
+  **Lembrar em 1 h**. Nothing is ended
   without a click. Claude's MCP servers, hooks of the Studio and anything
   with "mcp" in the command line are left out. Configurações → **Sessões e
   processos** turns it off or changes the limit. Every kill goes to

@@ -146,6 +146,37 @@ func apSubtree(nodes []apNode, root int) []int {
 	return order
 }
 
+// apSameCmdSec: um shell que começou até esta distância do processo é do
+// mesmo comando do agente.
+const apSameCmdSec = 5
+
+// apKillRoot: de onde encerrar. Um comando do agente costuma ser um pipeline
+// (bash -c 'find / | head -3'). O item da lista é um dos estágios, e os
+// irmãos dele (o find) ficavam vivos quando só ele morria. Por isso sobe pelos
+// shells que nasceram junto com o processo, até o shell que o agente abriu
+// para o comando. Para no agente (que não é shell) e num shell mais antigo,
+// que pode ser um shell persistente com outros comandos rodando.
+func apKillRoot(nodes []apNode, pid int) int {
+	byPID := map[int]apNode{}
+	for _, n := range nodes {
+		byPID[n.PID] = n
+	}
+	cur, ok := byPID[pid]
+	if !ok {
+		return pid
+	}
+	start, root := cur.Start, pid
+	for i := 0; i < 8; i++ {
+		p, ok := byPID[cur.PPID]
+		if !ok || p.PID == cur.PID || p.PID <= 1 || !apShells[p.Name] || apIsAgent(p) ||
+			p.Start > cur.Start+2 || apAbs(p.Start-start) > apSameCmdSec {
+			break
+		}
+		root, cur = p.PID, p
+	}
+	return root
+}
+
 // --- estado do monitor ----------------------------------------------------
 
 // AgentProc: um item da faixa.
@@ -438,6 +469,24 @@ func (m *agentProcMonitor) drop(id string, snoozeFor time.Duration) {
 	m.items = keep
 }
 
+// dropTree tira da faixa os outros itens da árvore que acabou de ser
+// encerrada (os outros estágios do mesmo pipeline), sem esperar a próxima leitura.
+func (m *agentProcMonitor) dropTree(it AgentProc, nodes []apNode) {
+	gone := map[int]bool{}
+	for _, pid := range apSubtree(nodes, apKillRoot(nodes, it.PID)) {
+		gone[pid] = true
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var keep []AgentProc
+	for _, x := range m.items {
+		if !(x.Side == it.Side && x.Distro == it.Distro && gone[x.PID]) {
+			keep = append(keep, x)
+		}
+	}
+	m.items = keep
+}
+
 // --- hub: laço e eventos ---------------------------------------------------
 
 func (h *hub) publishAgentProcs(items []AgentProc) {
@@ -537,8 +586,9 @@ func (s *server) serveAgentProcs(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
-		lifeLog(fmt.Sprintf("processos de agente: encerrado %s (PID %d, %s%s) a pedido do usuário: %s", it.Name, it.PID, it.Side, apWhere(it), it.Cmd))
+		lifeLog(fmt.Sprintf("processos de agente: encerrado %s (PID %d, %s%s) e a árvore do comando a pedido do usuário: %s", it.Name, it.PID, it.Side, apWhere(it), it.Cmd))
 		agentProcs.drop(body.ID, 0)
+		agentProcs.dropTree(it, nodes)
 	default:
 		http.NotFound(w, r)
 		return

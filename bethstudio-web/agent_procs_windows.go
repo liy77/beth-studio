@@ -229,8 +229,9 @@ func (h *hub) scanProcesses(lastMonitor *time.Time) {
 	}
 }
 
-// apKill encerra o processo e os descendentes dele, conferindo que é o mesmo
-// processo da lista (PID reciclado não é encerrado).
+// apKill encerra a árvore do comando do agente que contém o processo
+// (apKillRoot: o pipeline inteiro, não só o estágio listado), conferindo que é
+// o mesmo processo da lista (PID reciclado não é encerrado).
 func apKill(it AgentProc, _ []apNode) error {
 	if it.Side == "wsl" {
 		return apKillLinux(it)
@@ -246,7 +247,7 @@ func apKill(it AgentProc, _ []apNode) error {
 	self := os.Getpid()
 	host := int(hostPIDFromFile())
 	var firstErr error
-	for _, pid := range apSubtree(nodes, it.PID) {
+	for _, pid := range apSubtree(nodes, apKillRoot(nodes, it.PID)) {
 		if pid == self || pid == host || pid <= 4 {
 			continue
 		}
@@ -296,7 +297,7 @@ func apKillLinux(it AgentProc) error {
 		return errors.New("o processo já terminou")
 	}
 	var pids []string
-	for _, pid := range apSubtree(nodes, it.PID) {
+	for _, pid := range apSubtree(nodes, apKillRoot(nodes, it.PID)) {
 		if pid > 1 {
 			pids = append(pids, strconv.Itoa(pid))
 		}
