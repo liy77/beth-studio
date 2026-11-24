@@ -119,7 +119,7 @@ export function wantsNativeGlassPlate(className: string): boolean {
   const classes = className.split(/\s+/).filter(Boolean);
   const has = (name: string) => classes.includes(name);
   if (has("bt-folder") || has("bt-chip")) return false;
-  if (has("bt-chat") || has("bt-search") || has("bt-mode") || has("bt-tab") || has("bt-tab-tool") || has("bt-glass-sample")) return true;
+  if (has("bt-chat") || has("bt-search") || has("bt-mode") || has("bt-tab") || has("bt-tab-tool") || has("bt-glass-sample") || has("bt-preview")) return true;
   // Botão só de ícone (h-7). A lista e os chips também levam bt-glass.
   return has("bt-glass") && has("h-7");
 }
@@ -140,7 +140,7 @@ export function glassPlateFields(className: string, label: string): GlassPlateFi
   const chat = classes.includes("bt-chat");
   return {
     className,
-    label: chat ? "" : label,
+    label,
     selected: classes.includes("bt-glass-on"),
     row: chat ? 1 : 0,
   };

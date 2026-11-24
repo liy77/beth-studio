@@ -11,7 +11,7 @@ export const TEXT_FILE_EXT = [
   ".c", ".h", ".cpp", ".cc", ".hpp", ".hh", ".java", ".kt", ".kts", ".cs", ".swift",
   ".rb", ".php", ".lua", ".zig", ".hs", ".ex", ".exs", ".scala", ".pl", ".pm", ".r", ".dart",
   ".vue", ".svelte", ".sh", ".bash", ".zsh", ".ps1",
-  ".json", ".jsonl", ".yaml", ".yml", ".toml", ".xml", ".html", ".htm", ".css", ".scss", ".sql",
+  ".json", ".jsonl", ".kson", ".kmodel", ".yaml", ".yml", ".toml", ".xml", ".html", ".htm", ".css", ".scss", ".sql",
   ".ini", ".cfg", ".conf", ".env", ".csv", ".mod", ".sum", ".lock", ".gitignore",
 ] as const;
 export const IMAGE_FILE_EXT = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"] as const;

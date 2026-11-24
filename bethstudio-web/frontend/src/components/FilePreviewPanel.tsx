@@ -602,7 +602,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
         tabIndex={-1}
         onKeyDown={onKeyDown}
         className={cn(
-          "pointer-events-auto absolute flex flex-col overflow-hidden bt-dialog outline-none",
+          "pointer-events-auto absolute flex flex-col overflow-hidden bt-dialog bt-preview outline-none",
           maximized && "inset-4",
         )}
         style={maximized ? undefined : { left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
