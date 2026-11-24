@@ -109,6 +109,8 @@ interface Props {
   overlay?: ReactNode;
   /** clique num caminho de arquivo local (OSC 8 ou solto) na saída do terminal: abre o painel de preview */
   onOpenFile?: (path: string) => void;
+  /** true quando a troca foi encaminhada para abrir um agente em outra aba. */
+  onAgentFolder?: (dest: string) => boolean;
 }
 
 // Fora do TerminalView de propósito: um componente declarado lá dentro ganha
@@ -190,6 +192,7 @@ export function TerminalView({
   aloneInHost = false,
   overlay,
   onOpenFile,
+  onAgentFolder,
 }: Props) {
   const [flashing, setFlashing] = useState(false);
   useEffect(() => {
@@ -1174,11 +1177,12 @@ Arraste para outra aba ou para a borda de outro terminal`
             {pane && <KindIcon pane={pane} />}
             <div className="min-w-0 max-w-[16rem] truncate text-[13px] font-semibold text-text-1">{title}</div>
           </div>
-          {pane?.cwd && (
+          {pane?.cwd && !readOnly && (
             <LocationBar
               cwd={cwdPath(pane.cwd).path}
               shown={cwd}
               onGo={(dest) => {
+                if (onAgentFolder?.(dest)) return;
                 const q = dest.includes(" ") || dest.includes('"') ? `"${dest.replaceAll('"', "")}"` : dest;
                 if (!conn.send(paneId, `cd ${q}\r`)) flash("Sem conexão com o terminal");
               }}
