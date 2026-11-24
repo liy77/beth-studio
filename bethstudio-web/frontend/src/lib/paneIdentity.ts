@@ -60,11 +60,16 @@ export interface PaneIdentity {
  * aparece como "Codex".
  */
 export function paneIdentity(p: PaneIdentityInput, fallback: string): PaneIdentity {
+  const titleTool = toolInText(p.title);
+  const explicitTitle = titleTool && /^(cursor(?: agent)?|grok|codex|claude(?: code)?|gemini)(?:\s|$)/i.test(p.title?.trim() ?? "")
+    ? titleTool : undefined;
   const tool =
-    (isAgentTool(p.stored) ? p.stored : undefined) ??
+    explicitTitle ??
     (isAgentTool(p.tool) ? p.tool : undefined) ??
+    (/^\s*Cursor Agent\b/im.test(p.screen ?? "") ? "cursor" : undefined) ??
+    (isAgentTool(p.stored) ? p.stored : undefined) ??
     toolInText(p.screen) ??
-    toolInText(p.title) ??
+    titleTool ??
     toolInText(p.kind_label);
   if (tool) return { name: displayName(tool), tool };
   const title = p.title?.trim();

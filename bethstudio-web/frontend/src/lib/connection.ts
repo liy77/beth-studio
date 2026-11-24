@@ -521,7 +521,31 @@ export class Connection {
   }
 
   requestShells() {
-    this.raw({ op: "shells" });
+    return this.raw({ op: "shells" });
+  }
+
+  ensureShells(): Promise<ShellInfo[]> {
+    if (this.snapshot.shells) return Promise.resolve(this.snapshot.shells);
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        unsubscribe();
+        clearTimeout(timer);
+      };
+      const unsubscribe = this.subscribe(() => {
+        const shells = this.snapshot.shells;
+        if (!shells) return;
+        cleanup();
+        resolve(shells);
+      });
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("o host não enviou a lista de shells"));
+      }, 5000);
+      if (!this.requestShells()) {
+        cleanup();
+        reject(new Error("sem conexão com o host"));
+      }
+    });
   }
 
   /** Terminal de ferramenta no host (SSH salvo / porta serial): a ponte monta

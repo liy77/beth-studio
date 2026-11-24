@@ -1017,6 +1017,25 @@ static void bethCenterLights(NSWindow *win) {
 	}
 }
 
+/* Os atalhos padrão do macOS chegam ao editor focado via responder chain. */
+static void bethInstallEditMenu(void) {
+	NSMenu *main = NSApp.mainMenu;
+	if (main == nil) {
+		main = [[NSMenu alloc] initWithTitle:@""];
+		NSApp.mainMenu = main;
+	}
+	if ([main itemWithTitle:@"Editar"] != nil) return;
+	NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:@"Editar" action:nil keyEquivalent:@""];
+	NSMenu *edit = [[NSMenu alloc] initWithTitle:item.title];
+	[edit addItemWithTitle:@"Recortar" action:@selector(cut:) keyEquivalent:@"x"];
+	[edit addItemWithTitle:@"Copiar" action:@selector(copy:) keyEquivalent:@"c"];
+	[edit addItemWithTitle:@"Colar" action:@selector(paste:) keyEquivalent:@"v"];
+	[edit addItem:[NSMenuItem separatorItem]];
+	[edit addItemWithTitle:@"Selecionar tudo" action:@selector(selectAll:) keyEquivalent:@"a"];
+	[main addItem:item];
+	item.submenu = edit;
+}
+
 void bethEnsureApp(void) {
 	[NSApplication sharedApplication];
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -1031,6 +1050,7 @@ void bethEnsureApp(void) {
 void bethOpen(const char *url, const char *title, int width, int height) {
 	bethEnsureApp();
 	[NSApp finishLaunching];
+	bethInstallEditMenu();
 	[[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidResignActiveNotification
 		object:NSApp queue:nil usingBlock:^(NSNotification *note) { (void)note; [bethMenuPop close]; }];
 	NSRect frame = NSMakeRect(0, 0, width, height);

@@ -60,7 +60,7 @@ import { VoiceSettingsDialog } from "@/components/VoiceSettingsDialog";
 import { useAgentAlerts, useNotifyPrefs } from "@/lib/notify";
 import { aloneInHostTab } from "@/lib/hostFit";
 import { paneLabel } from "@/lib/panes";
-import { displayName, isAgentTool, paneIdentity, toolInText } from "@/lib/paneIdentity";
+import { displayName, paneIdentity } from "@/lib/paneIdentity";
 import { AGENT_COMMAND, agentFolder } from "@/lib/agents";
 import { cn } from "@/lib/utils";
 import { eventMatches, shortcutOf } from "@/lib/shortcut";
@@ -481,23 +481,22 @@ export function App() {
   const openAgentFolder = (paneId: number, dest: string): boolean => {
     const info = paneById.get(paneId);
     if (!info) return false;
-    const tool = isAgentTool(info.tool) ? info.tool : toolInText(info.title);
+    const tool = paneIdentity({ title: info.title, tool: info.tool, screen: conn.lastScreenText(paneId) }, "").tool;
     if (!tool) return false;
     if (agentFolderRequests.current.has(paneId)) return true;
-    const shells = snap.shells ?? [];
-    const localShell = shells.find((s) => ["login", "zsh", "bash", "sh"].includes(s.id))?.id;
-    const wsl = info.wsl || info.kind === "wsl";
-    const sameShell = sameShellId(wsl ? { kind: "wsl", distro: info.wsl_distro ?? info.distro } : info, shells);
-    const shell = info.kind === "ssh" || info.kind === "serial" ? null
-      : sameShell ?? (wsl ? null : localShell ?? shells.find((s) => ["pwsh", "powershell", "cmd"].includes(s.id))?.id);
-    const cwd = shell ? agentFolder(dest, info.cwd, shell) : "";
-    if (!shell || !cwd) {
-      setError("Não foi possível abrir o agente nessa pasta. Informe um caminho absoluto para um terminal local.");
-      return true;
-    }
     agentFolderRequests.current.add(paneId);
-    void conn.spawn({ shell_id: shell, window_id: info.window_id, cwd })
-      .then(async ({ pane_id }) => {
+    void (async () => {
+      if (info.kind === "ssh" || info.kind === "serial") throw new Error("esta ação requer um terminal local");
+      const shells = await conn.ensureShells();
+      const localShell = shells.find((s) => ["login", "zsh", "bash", "sh"].includes(s.id))?.id;
+      const wsl = info.wsl || info.kind === "wsl";
+      const sameShell = sameShellId(wsl ? { kind: "wsl", distro: info.wsl_distro ?? info.distro } : info, shells);
+      const shell = sameShell ?? (wsl ? null : localShell ?? shells.find((s) => ["pwsh", "powershell", "cmd"].includes(s.id))?.id);
+      if (!shell) throw new Error("nenhum shell compatível disponível");
+      const cwd = agentFolder(dest, info.cwd, shell);
+      if (!cwd) throw new Error("o caminho informado não é válido para este shell");
+      return conn.spawn({ shell_id: shell, window_id: info.window_id, cwd });
+    })().then(async ({ pane_id }) => {
         await untilListed(pane_id);
         const latest = getLayout();
         if (!latest) throw new Error("a organização das abas não está disponível");

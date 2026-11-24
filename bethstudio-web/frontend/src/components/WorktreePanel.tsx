@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, FolderGit2, GitBranch, Loader2, PanelRightClose, RefreshCw } from "lucide-react";
+import { ChevronRight, Folder, FolderGit2, GitBranch, GitCompareArrows, Loader2, PanelRightClose, RefreshCw } from "lucide-react";
 import { FileKindIcon } from "./FileKindIcon";
 import type { Connection } from "@/lib/connection";
 import { changeAbsPath, changeCounts, joinFolder, splitRel, type WorktreeChange } from "@/lib/worktree";
@@ -125,11 +125,12 @@ export function WorktreePanel({
           <button
             key={id}
             className={cn(
-              "flex-1 rounded-md px-2 py-1 text-[12px] text-text-2 transition-colors hover:text-text-1",
+              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-[12px] text-text-2 transition-colors hover:text-text-1",
               tab === id && "bg-bg-hover text-text-1 shadow-sm",
             )}
             onClick={() => setTab(id)}
           >
+            {id === "arquivos" ? <Folder size={13} className="shrink-0" aria-hidden /> : <GitCompareArrows size={13} className="shrink-0" aria-hidden />}
             {id === "arquivos" ? "Arquivos" : `Mudanças${git?.changes.length ? ` · ${git.changes.length}` : ""}`}
           </button>
         ))}

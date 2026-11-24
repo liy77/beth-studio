@@ -25,3 +25,8 @@ test("ferramenta do painel vence o título brian e devolve o ícone", () => {
   assert.equal(id.name, "Codex");
   assert.equal(id.tool, "codex");
 });
+
+test("Cursor ativo corrige um rótulo Grok guardado na aba", () => {
+  assert.equal(paneIdentity({ title: "Cursor", stored: "grok", tool: "grok" }, "").tool, "cursor");
+  assert.equal(paneIdentity({ title: "brian", stored: "grok", screen: "Cursor Agent\nGrok" }, "").tool, "cursor");
+});
