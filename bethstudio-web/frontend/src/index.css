@@ -387,11 +387,11 @@ html.bt-vibrancy .bt-sidebar .bt-folder.bt-glass-on {
 html.bt-vibrancy .bt-sidebar .bt-chat,
 html.bt-vibrancy .bt-sidebar .bt-chat:hover,
 html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on,
-html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on:hover {
+html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on:hover,
+html.bt-vibrancy .bt-sidebar .bt-chat * {
   background: transparent !important;
   background-color: transparent !important;
-  opacity: 1;
-  color: rgb(var(--bt-text-1));
+  opacity: 0;
 }
 /* Chip sem placa: o vidro nativo cortava "Todos". O fundo é o mesmo
    material, pintado na página, e o nome fica inteiro. */
@@ -597,6 +597,13 @@ html:not(.bt-vibrancy) .bt-sidebar .bt-search svg {
   background: transparent;
 }
 
+/* Com vibrancy no macOS, só o fundo do preview vira liquid glass.
+   A página fica transparente para o material nativo aparecer; o texto
+   e as cores do código continuam por cima. */
+html.bt-vibrancy .bt-preview {
+  background: transparent !important;
+  background-color: transparent !important;
+}
 /* Preview de Markdown (FilePreviewPanel): estilo proprio, no tema do app
    (sem plugin de tipografia). Tamanhos em em: seguem a fonte do painel. */
 .md-view {

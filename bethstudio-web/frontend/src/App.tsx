@@ -783,6 +783,7 @@ export function App() {
     kinds?: string[];
     kind_order?: string[];
     split_by_kind?: boolean;
+    files_width?: number;
   };
   const [sidebarLocal, setSidebarLocal] = useState<SidebarPrefs | null>(null);
   // Pasta da guia: gravada no layout (web-settings.json), não no localStorage.
@@ -900,13 +901,14 @@ export function App() {
       const modal = !!document.querySelector(".bt-modal");
       const found = modal
         ? [...document.querySelectorAll(".bt-glass-sample")]
-        : [...document.querySelectorAll(".bt-tab:not(.bt-tab-active), .bt-tab-tool, .bt-sidebar .bt-glass, .bt-sidebar .bt-search, .bt-sidebar .bt-chat, .bt-sidebar .bt-chip")];
+        : [...document.querySelectorAll(".bt-tab:not(.bt-tab-active), .bt-tab-tool, .bt-sidebar .bt-glass, .bt-sidebar .bt-search, .bt-sidebar .bt-chat, .bt-sidebar .bt-chip, .bt-preview")];
       const nodes = nativeGlassPlates(true, found);
       void Promise.all(nodes.map((el) => iconPng(el))).then((pngs) => {
-        const rects: { x: number; y: number; w: number; h: number; r: number; p: string; t: string; sub: string; hov: number; f: number; on: number; ph: number; tip: number; side: string; ax: number; wrap: number; row: number }[] = [];
+        const rects: { x: number; y: number; w: number; h: number; r: number; p: string; t: string; sub: string; hov: number; f: number; on: number; ph: number; tip: number; side: string; ax: number; wrap: number; row: number; preview: number }[] = [];
         nodes.forEach((el, i) => {
           const b = el.getBoundingClientRect();
-          if (b.width < 8 || b.height < 4 || b.height > 110 || b.width > 420) return;
+          const preview = el.classList.contains("bt-preview");
+          if (!preview && (b.width < 8 || b.height < 4 || b.height > 110 || b.width > 420)) return;
           if (b.bottom < 0 || b.top > window.innerHeight) return;
           const rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 8;
           const field = el.classList.contains("bt-search");
@@ -933,8 +935,8 @@ export function App() {
             h: Math.round(b.height),
             r: field ? 16 : Math.round(rad),
             p: field ? "" : pngs[i] || "",
-            t: chat ? "" : name.slice(0, 48),
-            sub: chat ? "" : sub.slice(0, 48),
+            t: name.slice(0, 48),
+            sub: sub.slice(0, 48),
             hov: el.matches(":hover") ? 1 : 0,
             f: field ? 1 : 0,
             tip: tip ? 1 : 0,
@@ -943,6 +945,7 @@ export function App() {
             on: el.classList.contains("bt-glass-on") ? 1 : 0,
             ph: field && !typed ? 1 : 0,
             wrap: el.classList.contains("bt-mode") ? 1 : 0,
+            preview: preview ? 1 : 0,
             row: chat || (el.closest(".bt-sidebar") && !el.classList.contains("bt-mode") && !el.classList.contains("h-7") && !field) ? 1 : 0,
           });
         });

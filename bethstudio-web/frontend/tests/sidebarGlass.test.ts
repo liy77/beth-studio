@@ -21,8 +21,8 @@ test("chat selecionado e solto viram placa sem rótulo; pasta e chip não", () =
   assert.equal(off.row, 1);
   assert.equal(on.selected, true);
   assert.equal(off.selected, false);
-  assert.equal(on.label, "");
-  assert.equal(off.label, "");
+  assert.equal(on.label, "Cursor");
+  assert.equal(off.label, "copper-lang");
   assert.equal(glassPlateFields("bt-folder flex w-full", "brian"), null);
   assert.equal(glassPlateFields("bt-chip rounded-lg", "Todos"), null);
   const posted = nativeGlassPlates(true, [

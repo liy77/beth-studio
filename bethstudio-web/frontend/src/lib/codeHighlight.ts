@@ -41,8 +41,8 @@ const LANG: Record<string, LangSpec> = {
   // Cores do Dark+ do VS Code, que a extensão usa.
   crs: {
     control: ["if", "else", "guard", "defer", "match", "loop", "while", "for", "in", "break", "continue", "return", "yield"],
-    decl: ["func", "struct", "class", "impl", "trait", "enum", "let", "import", "from", "as", "use"],
-    mod: ["pub", "public", "unsafe", "extern", "async", "await", "static", "const", "dyn", "where", "mut", "ref", "move"],
+    decl: ["func", "struct", "class", "impl", "trait", "enum", "let", "import", "from", "as", "use", "type", "mod"],
+    mod: ["pub", "public", "unsafe", "extern", "async", "await", "static", "const", "dyn", "where", "mut", "ref", "move", "own"],
     lit: ["true", "false", "null", "None", "Some", "Ok", "Err", "self", "Self", "super", "crate"],
     prim: ["int", "float", "str", "string", "bool", "void", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "usize", "isize", "char"],
     capType: true,
@@ -92,7 +92,7 @@ const LANG: Record<string, LangSpec> = {
 };
 
 const EXT_LANG: Record<string, string> = {
-  crs: "crs", mika: "crs", mui: "mui", rs: "rust", go: "go", py: "python", js: "js", jsx: "js", mjs: "js", cjs: "js",
+  crs: "crs", mika: "crs", kson: "json", kmodel: "json", mui: "mui", rs: "rust", go: "go", py: "python", js: "js", jsx: "js", mjs: "js", cjs: "js",
   ts: "js", tsx: "js", c: "c", h: "c", cpp: "c", cc: "c", hpp: "c", hh: "c", java: "java", kt: "java",
   cs: "java", swift: "java", php: "java", scala: "java", dart: "java",
   sh: "shell", bash: "shell", zsh: "shell", ps1: "shell",

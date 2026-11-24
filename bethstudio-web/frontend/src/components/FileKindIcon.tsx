@@ -3,6 +3,9 @@ import mikaDark from "@/assets/mika-icon-dark.png";
 import mikaLight from "@/assets/mika-icon-light.png";
 import muiIcon from "@/assets/mui-icon.svg";
 import bundleIcon from "@/assets/bundle-icon.svg";
+import ksonIcon from "@/assets/kson-icon.svg";
+import kmodelIcon from "@/assets/kmodel-icon.svg";
+
 import { symbolForFile, symbolForFolder } from "@/lib/fileSymbols";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +33,9 @@ export function FileKindIcon({
   if (isDir) {
     return <Symbol src={symbolForFolder(name, !!open)} size={size} className={className} />;
   }
+  if (/\.kson$/i.test(name)) return <Symbol src={ksonIcon} size={size} className={className} title="KSON" />;
+  if (/\.kmodel$/i.test(name)) return <Symbol src={kmodelIcon} size={size} className={className} title="KModel" />;
+
   if (/\.mui$/i.test(name)) return <Symbol src={muiIcon} size={size} className={className} title="Mocida" />;
   if (/^app\.bundle$/i.test(name)) return <Symbol src={bundleIcon} size={size} className={className} title="Mocida" />;
   if (isMikaFile(name)) {

@@ -161,6 +161,7 @@ const EXT: Record<string, string> = {
   http,
   gradle,
   gitignore: ignore,
+  toml: gear,
 };
 
 const NAME: Record<string, string> = {
@@ -170,7 +171,7 @@ const NAME: Record<string, string> = {
   makefile: cmake,
   "cmakelists.txt": cmake,
   "cargo.toml": rust,
-  "cargo.lock": rust,
+  "cargo.lock": lock,
   "go.mod": go,
   "go.sum": go,
   "package.json": document,
