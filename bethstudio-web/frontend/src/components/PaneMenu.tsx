@@ -5,7 +5,8 @@ import { findPane, type Layout, type WebTab, type Zone } from "@/lib/layout";
 import { SPLIT_ZONES, ZONE_LABEL, type SplitZone } from "@/lib/splitSpawn";
 import { ZONE_ICON } from "./SplitShellMenu";
 import { paneLabel, shortCwd } from "@/lib/panes";
-import { GlassMenu } from "./GlassMenu";
+import { cn } from "@/lib/utils";
+import { GlassMenu, MenuRule, menuSymbol } from "./GlassMenu";
 
 export interface PaneMenuActions {
   moveToTab: (pane: number, tabId: string) => void;
@@ -65,7 +66,7 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
               {SPLIT_ZONES.map((z) => (
                 <Item key={z} icon={ZONE_ICON[z]} symbol={z === "right" || z === "left" ? "panel-right" : "panel-bottom"} label={ZONE_LABEL[z]} arrow onClick={done(() => actions.newSplit!(pane, z, x, y))} />
               ))}
-              <div className="bt-menu-rule my-1 border-t border-border" />
+              <MenuRule />
             </>
           )}
           <Item icon={<FolderInput size={14} />} symbol="folder-input" label="Mover para aba…" arrow onClick={() => setView("tabs")} />
@@ -83,7 +84,7 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
           <Item icon={<Rows2 size={14} />} symbol="rows" label="Dividir abaixo com…" arrow onClick={() => setView("bottom")} />
           {at && (
             <>
-              <div className="bt-menu-rule my-1 border-t border-border" />
+              <MenuRule />
               <Item
                 icon={<LogOut size={14} />}
                 symbol="log-out"
@@ -96,6 +97,7 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
           {actions.askSeparate && actions.inHostSplit?.(pane) && (
             <Item
               icon={<SplitSquareHorizontal size={14} />}
+              symbol="app-window"
               label="Separar no Beth Studio para ajustar à janela…"
               hint="sai do split na GUI; nada é encerrado"
               onClick={done(() => actions.askSeparate!(pane))}
@@ -103,18 +105,14 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
           )}
           {actions.askKill && (
             <>
-              <div className="bt-menu-rule my-1 border-t border-border" />
-              <button
-                data-symbol="power"
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-status-err hover:bg-status-err/10"
+              <MenuRule />
+              <Item
+                icon={<Power size={14} />}
+                symbol="power"
+                danger
+                label="Encerrar terminal…"
                 onClick={done(() => actions.askKill!(pane))}
-                title="Encerra o processo no Beth Studio (pede confirmação)"
-              >
-                <span className="w-4 shrink-0">
-                  <Power size={14} />
-                </span>
-                Encerrar terminal…
-              </button>
+              />
             </>
           )}
         </>
@@ -131,8 +129,8 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
               onClick={done(() => actions.moveToTab(pane, t.id))}
             />
           ))}
-          <div className="bt-menu-rule my-1 border-t border-border" />
-          <Item icon={<Plus size={14} />} label="Nova aba" onClick={done(() => actions.moveToNewTab(pane))} />
+          <MenuRule />
+          <Item icon={<Plus size={14} />} symbol="plus" label="Nova aba" onClick={done(() => actions.moveToNewTab(pane))} />
         </>
       )}
       {(view === "right" || view === "bottom") && (
@@ -156,20 +154,26 @@ export function PaneMenu({ pane, x, y, layout, panes, actions, onClose, initialV
   );
 }
 
-function Item(p: { icon?: ReactNode; symbol?: string; label: string; hint?: string; arrow?: boolean; disabled?: boolean; onClick: () => void }) {
+function Item(p: { icon?: ReactNode; symbol?: string; label: string; hint?: string; arrow?: boolean; disabled?: boolean; danger?: boolean; onClick: () => void }) {
+  const symbol = menuSymbol(p.symbol);
   return (
     <button
-      data-symbol={p.symbol}
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-text-1 hover:bg-bg-hover disabled:cursor-default disabled:text-text-3 disabled:hover:bg-transparent"
+      type="button"
+      data-symbol={symbol}
+      title={p.danger ? "Encerra o processo no Beth Studio (pede confirmação)" : undefined}
+      className={cn(
+        "flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-bg-hover disabled:cursor-default disabled:text-text-3 disabled:hover:bg-transparent",
+        p.danger ? "text-status-err hover:bg-status-err/10" : "text-text-1",
+      )}
       disabled={p.disabled}
       onClick={p.onClick}
     >
-      <span className="w-4 shrink-0" data-symbol={p.symbol}>{p.icon}</span>
+      <span className="w-4 shrink-0" data-symbol={symbol}>{p.icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block truncate">{p.label}</span>
         {p.hint && <span className="block truncate text-[11px] text-text-3">{p.hint}</span>}
       </span>
-      {p.arrow && <ChevronRight size={14} data-symbol="chevron-right" className="text-text-3" />}
+      {p.arrow && <ChevronRight size={14} data-symbol="chevron.right" className="text-text-3" />}
     </button>
   );
 }
@@ -177,10 +181,17 @@ function Item(p: { icon?: ReactNode; symbol?: string; label: string; hint?: stri
 function Back({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <button
+      type="button"
+      data-symbol={menuSymbol("arrow-left")}
       className="flex w-full items-center gap-2 border-b border-border px-3 py-1.5 text-left font-semibold text-text-2 hover:bg-bg-hover"
       onClick={onClick}
     >
-      <ArrowLeft size={14} data-symbol="arrow-left" /> {label}
+      <span className="w-4 shrink-0" data-symbol={menuSymbol("arrow-left")}>
+        <ArrowLeft size={14} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+      </span>
     </button>
   );
 }

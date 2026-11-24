@@ -10,6 +10,7 @@ declare global {
     __bethstudioFrameless?: boolean;
     __bethstudioWin?: (max: boolean, active: boolean) => void;
     chrome?: { webview?: { postMessage: (m: string) => void } };
+    webkit?: { messageHandlers?: { bethMenu?: { postMessage: (v: string) => void } } };
   }
 }
 

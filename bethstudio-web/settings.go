@@ -120,7 +120,9 @@ type UITheme struct {
 	ThemeID string `json:"theme_id,omitempty"`
 	// Vibrancy: no macOS, a barra lateral deixa ver o material da janela
 	// (NSVisualEffectView). O Windows ignora.
-	Vibrancy bool `json:"vibrancy,omitempty"`
+	// Sem omitempty: false tem de ir na resposta. Omitido, o cliente trata
+	// como “ainda não carregou” e o localStorage religa o material.
+	Vibrancy bool `json:"vibrancy"`
 	// Glass é a potência do véu do liquid glass no macOS, de 15 a 100. 0 vale 55.
 	Glass int `json:"glass,omitempty"`
 	// GlassAlpha é a transparência do liquid glass, de 15 a 100. 0 vale 70.
@@ -739,8 +741,14 @@ func (st *settingsStore) setUITheme(u UITheme) (SettingsSnapshot, error) {
 	return st.mutate(func() error {
 		// Vibrancy é independente do modo. Quem não manda o campo (as
 		// telas antigas) mantém o que já estava salvo.
-		if st.s.UITheme != nil && !u.Vibrancy {
+		if st.s.UITheme != nil {
 			u.Vibrancy = st.s.UITheme.Vibrancy
+			if u.Glass == 0 {
+				u.Glass = st.s.UITheme.Glass
+			}
+			if u.GlassAlpha == 0 {
+				u.GlassAlpha = st.s.UITheme.GlassAlpha
+			}
 		}
 		st.s.UITheme = &u
 		return st.saveLocked()

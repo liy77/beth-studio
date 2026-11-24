@@ -1004,16 +1004,16 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
         <GlassMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} className="min-w-[200px]">
           {menu.editing ? (
             <>
-              <MenuItem icon={<Scissors size={14} />} label="Recortar" onClick={() => (setMenu(null), void editCut())} />
-              <MenuItem icon={<Copy size={14} />} label="Copiar" onClick={() => (setMenu(null), void editCopy())} />
-              <MenuItem icon={<ClipboardPaste size={14} />} label="Colar" onClick={() => (setMenu(null), void editPaste())} />
+              <MenuItem icon={<Scissors size={14} />} symbol="scissors" label="Recortar" onClick={() => (setMenu(null), void editCut())} />
+              <MenuItem icon={<Copy size={14} />} symbol="copy" label="Copiar" onClick={() => (setMenu(null), void editCopy())} />
+              <MenuItem icon={<ClipboardPaste size={14} />} symbol="paste" label="Colar" onClick={() => (setMenu(null), void editPaste())} />
             </>
           ) : (
-            <MenuItem icon={<Copy size={14} />} label={hasSel ? "Copiar seleção" : "Copiar tudo"} onClick={() => (setMenu(null), void (hasSel ? copySelection() : copyAll()))} />
+            <MenuItem icon={<Copy size={14} />} symbol="copy" label={hasSel ? "Copiar seleção" : "Copiar tudo"} onClick={() => (setMenu(null), void (hasSel ? copySelection() : copyAll()))} />
           )}
-          <MenuItem icon={<TextSelect size={14} />} label="Selecionar tudo" onClick={() => (setMenu(null), selectAll())} />
-          <MenuItem icon={<Link size={14} />} label="Copiar caminho" onClick={() => (setMenu(null), void copyPath())} />
-          <MenuItem icon={<FileOutput size={14} />} label="Salvar uma cópia como…" onClick={() => (setMenu(null), void saveAs())} />
+          <MenuItem icon={<TextSelect size={14} />} symbol="text-select" label="Selecionar tudo" onClick={() => (setMenu(null), selectAll())} />
+          <MenuItem icon={<Link size={14} />} symbol="link" label="Copiar caminho" onClick={() => (setMenu(null), void copyPath())} />
+          <MenuItem icon={<FileOutput size={14} />} symbol="save" label="Salvar uma cópia como…" onClick={() => (setMenu(null), void saveAs())} />
         </GlassMenu>
       )}
     </div>

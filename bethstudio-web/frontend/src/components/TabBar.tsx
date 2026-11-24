@@ -378,6 +378,7 @@ export function TabBar({
                   <MenuItem
                     key={id}
                     icon={a.icon}
+                    symbol={a.symbol}
                     label={a.label}
                     title={a.title}
                     onClick={() => {

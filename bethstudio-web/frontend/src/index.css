@@ -30,11 +30,8 @@ body {
 }
 /* O vão da coluna é a mesma cor da faixa das abas (26,26,26 no tema
    escuro). Transparente aqui deixa o material nativo aparecer. */
-html.bt-vibrancy .bt-side-col,
 html.bt-vibrancy .bt-mac-gutter,
-html.bt-vibrancy .bt-side-slot-left,
 html.bt-vibrancy .bt-side-slot-right,
-html.bt-vibrancy .bt-side-slot,
 html.bt-vibrancy .bt-tabstrip,
 html.bt-vibrancy .bt-main,
 html.bt-vibrancy .bt-main-mac {
@@ -42,17 +39,28 @@ html.bt-vibrancy .bt-main-mac {
   background-color: rgb(19, 19, 19) !important;
   background-image: none !important;
 }
+/* A coluna e o slot do cartão ficam transparentes para o material nativo
+   aparecer. O inline da página não pode ganhar desta regra. */
+html.bt-vibrancy .bt-side-col,
+html.bt-vibrancy .bt-side-slot-left,
+html.bt-vibrancy .bt-side-slot {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
 html.bt-vibrancy .bt-sidebar,
 html.bt-vibrancy .bt-side-card {
-  background: rgb(var(--bt-bg-panel)) !important;
-  background-color: rgb(var(--bt-bg-panel)) !important;
+  /* O material nativo fica atrás desta área. Fundo opaco esconde o efeito. */
+  background: transparent !important;
+  background-color: transparent !important;
   background-image: none !important;
 }
 html.bt-vibrancy,
 html.bt-vibrancy body,
 html.bt-vibrancy #root {
-  background: rgb(19, 19, 19) !important;
-  background-color: rgb(19, 19, 19) !important;
+  /* Opaco aqui tampa o cartão inteiro. O vão fica na cor da janela nativa. */
+  background: transparent !important;
+  background-color: transparent !important;
 }
 html.bt-vibrancy .bt-sidebar {
   border-right-color: transparent;
@@ -108,6 +116,19 @@ html:not(.dark) {
   border: 1px solid rgb(var(--bt-border) / 0.9);
   background: rgb(var(--bt-bg-panel));
 }
+/* A caixa do terminal usa a mesma borda do cartão da sidebar. Sobe 1 px
+   para encostar na aba selecionada; o meio de cima fica reto, as pontas
+   continuam curvas, no mesmo desenho da aba. */
+.bt-term-frame {
+  margin-top: -1px;
+  border: 1px solid rgb(var(--bt-border) / 0.9);
+  border-radius: 8px 8px 12px 12px;
+  corner-shape: superellipse(1.6);
+}
+.bt-tab-active {
+  border: 1px solid rgb(var(--bt-border) / 0.9);
+  border-bottom: 0;
+}
 .bt-sidebar {
   transition: none;
 }
@@ -141,7 +162,7 @@ html:not(.dark) {
   height: 100%;
   max-height: none;
   margin-top: 0;
-  padding: 0 8px 8px 0;
+  padding: 0 8px 8px 8px;
   box-sizing: border-box;
   overflow: hidden;
   background: var(--bt-topbar);
@@ -175,9 +196,7 @@ html.bt-vibrancy .bt-sidebar::before {
   background-color: transparent !important;
 }
 html.bt-vibrancy .bt-mac-gutter,
-html.bt-vibrancy .bt-side-slot-left,
-html.bt-vibrancy .bt-side-slot-right,
-html.bt-vibrancy .bt-side-col {
+html.bt-vibrancy .bt-side-slot-right {
   background: rgb(19, 19, 19) !important;
   background-color: rgb(19, 19, 19) !important;
   background-image: none !important;
@@ -325,29 +344,63 @@ html.bt-vibrancy .bt-sidebar .text-text-2,
 html.bt-vibrancy .bt-sidebar .text-text-3 {
   color: rgb(var(--bt-text-1));
 }
-/* A página desenha busca, botões e a lista. O vidro nativo não cobre o
-   cartão, então esconder esses controles deixa a sidebar vazia. */
+/* A página desenha a lista. O cartão pode ser o material nativo; o vão
+   em volta continua a cor da topbar. */
+html.bt-vibrancy .bt-sidebar,
+html.bt-vibrancy .bt-sidebar > div,
+html.bt-vibrancy .bt-sidebar nav,
+html.bt-vibrancy .bt-sidebar ul,
+html.bt-vibrancy .bt-sidebar li,
+html.bt-vibrancy .bt-sidebar .border-b,
+html.bt-vibrancy .bt-sidebar .overflow-y-auto {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
 html.bt-vibrancy .bt-sidebar button.h-7,
-html.bt-vibrancy .bt-sidebar .bt-glass,
-html.bt-vibrancy .bt-sidebar .bt-chat {
+html.bt-vibrancy .bt-sidebar .bt-mode {
   color: rgb(var(--bt-text-1));
 }
+/* Só a busca e os botões de modo escondem o fundo: o texto deles é o
+   da placa nativa. Lista, cabeçalho e chip continuam opacos na página. */
 html.bt-vibrancy .bt-sidebar .bt-search,
-html.bt-vibrancy .bt-sidebar .bt-search input {
-  background: rgb(var(--bt-bg-card));
-  color: rgb(var(--bt-text-1));
+html.bt-vibrancy .bt-sidebar .bt-search input,
+html.bt-vibrancy .bt-sidebar .bt-mode,
+html.bt-vibrancy .bt-sidebar button.h-7 {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
 }
 html.bt-vibrancy .bt-sidebar .bt-search svg {
   color: rgb(var(--bt-text-2));
 }
-html.bt-vibrancy .bt-sidebar button.h-7 {
-  background: rgb(var(--bt-bg-hover));
+/* Cabeçalho de pasta: sem fundo. O chevron, o ícone e o nome ficam na página. */
+html.bt-vibrancy .bt-sidebar .bt-folder,
+html.bt-vibrancy .bt-sidebar .bt-folder:hover,
+html.bt-vibrancy .bt-sidebar .bt-folder.bt-glass-on {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: rgb(var(--bt-text-1));
 }
-html.bt-vibrancy .bt-sidebar .bt-chat {
-  background: rgb(var(--bt-bg-hover));
-}
+/* O chat não esconde o nome e não pinta fundo. O vidro nativo é só o
+   material, atrás; o rótulo continua na página, selecionado ou não. */
+html.bt-vibrancy .bt-sidebar .bt-chat,
+html.bt-vibrancy .bt-sidebar .bt-chat:hover,
 html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on,
-html.bt-vibrancy .bt-sidebar .bt-glass.bt-glass-on {
+html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on:hover {
+  background: transparent !important;
+  background-color: transparent !important;
+  opacity: 1;
+  color: rgb(var(--bt-text-1));
+}
+/* Chip sem placa: o vidro nativo cortava "Todos". O fundo é o mesmo
+   material, pintado na página, e o nome fica inteiro. */
+html.bt-vibrancy .bt-sidebar .bt-chip {
+  background: rgb(255 255 255 / 0.1);
+  color: rgb(var(--bt-text-1));
+  opacity: 1;
+}
+html.bt-vibrancy .bt-sidebar .bt-chip.bt-glass-on {
   background: rgb(var(--bt-accent));
   color: white;
 }
@@ -358,37 +411,44 @@ html.bt-vibrancy .bt-sidebar .bt-glass.bt-glass-on {
   background-color: transparent !important;
   box-shadow: none;
 }
-html.bt-vibrancy .bt-menu {
+html.bt-vibrancy.bt-native-menu .bt-menu {
   background: transparent !important;
   background-color: transparent !important;
   box-shadow: none !important;
   border-color: transparent;
   color: white;
 }
-html.bt-vibrancy .bt-menu,
-html.bt-vibrancy .bt-menu .text-text-1,
-html.bt-vibrancy .bt-menu .text-text-2,
-html.bt-vibrancy .bt-menu .text-text-3,
-html.bt-vibrancy .bt-menu button {
+html.bt-vibrancy.bt-native-menu .bt-menu,
+html.bt-vibrancy.bt-native-menu .bt-menu .text-text-1,
+html.bt-vibrancy.bt-native-menu .bt-menu .text-text-2,
+html.bt-vibrancy.bt-native-menu .bt-menu .text-text-3,
+html.bt-vibrancy.bt-native-menu .bt-menu button {
   color: white !important;
 }
-html.bt-vibrancy .bt-menu svg {
+html.bt-vibrancy.bt-native-menu .bt-menu svg {
   color: currentColor !important;
   stroke: currentColor !important;
 }
-html.bt-vibrancy .bt-menu .text-status-err,
-html.bt-vibrancy .bt-menu button.text-status-err {
+html.bt-vibrancy.bt-native-menu .bt-menu .text-status-err,
+html.bt-vibrancy.bt-native-menu .bt-menu button.text-status-err {
   color: #ff8a80 !important;
 }
 .bt-tip {
   z-index: 10000;
 }
 html.bt-vibrancy .bt-tab:not(.bt-tab-active) *,
-html.bt-vibrancy .bt-tab-tool * {
+html.bt-vibrancy .bt-tab-tool *,
+html.bt-vibrancy .bt-sidebar .bt-mode,
+html.bt-vibrancy .bt-sidebar .bt-mode *,
+html.bt-vibrancy .bt-sidebar button.h-7,
+html.bt-vibrancy .bt-sidebar button.h-7 *,
+html.bt-vibrancy .bt-sidebar .bt-search,
+html.bt-vibrancy .bt-sidebar .bt-search * {
   opacity: 0;
 }
 /* Sem vibrancy a lista é conteúdo, não vidro: cada chat tem fundo e o
-   selecionado se destaca. Com vibrancy o material nativo desenha isso. */
+   selecionado se destaca. Com vibrancy a página continua desenhando a
+   lista; só busca, modo e ícone viram placa nativa. */
 html:not(.bt-vibrancy) .bt-sidebar .bt-chat {
   background: rgb(var(--bt-bg-hover));
 }
@@ -405,9 +465,19 @@ html:not(.bt-vibrancy) .bt-sidebar .bt-chat.bt-glass-on .text-text-1,
 html:not(.bt-vibrancy) .bt-sidebar .bt-chat.bt-glass-on .text-text-3 {
   color: white;
 }
-html:not(.bt-vibrancy) .bt-sidebar .bt-glass.bt-glass-on {
+html:not(.bt-vibrancy) .bt-sidebar .bt-glass.bt-glass-on,
+html:not(.bt-vibrancy) .bt-sidebar .bt-chip.bt-glass-on,
+html:not(.bt-vibrancy) .bt-sidebar .bt-folder.bt-glass-on {
   background: rgb(var(--bt-accent));
   color: white;
+}
+html:not(.bt-vibrancy) .bt-sidebar .bt-folder,
+html:not(.bt-vibrancy) .bt-sidebar .bt-chip {
+  background: rgb(var(--bt-bg-hover));
+}
+html:not(.bt-vibrancy) .bt-sidebar .bt-folder:hover,
+html:not(.bt-vibrancy) .bt-sidebar .bt-chip:hover {
+  background: rgb(var(--bt-bg-card));
 }
 html:not(.bt-vibrancy) .bt-sidebar button.h-7 {
   background: rgb(var(--bt-bg-hover));

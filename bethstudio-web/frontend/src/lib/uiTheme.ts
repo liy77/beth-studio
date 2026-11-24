@@ -226,7 +226,7 @@ export function applyUI(c: UIColors) {
   document.getElementById("bt-boot")?.remove();
   // Com vibrancy o vão em volta do cartão é a cor da faixa de abas.
   // Transparente aqui deixa o material nativo aparecer.
-  document.body.style.background = root.classList.contains("bt-vibrancy") ? "rgb(19, 19, 19)" : c["bg-body"];
+  document.body.style.background = root.classList.contains("bt-vibrancy") ? "transparent" : c["bg-body"];
   root.style.colorScheme = c.dark ? "dark" : "light";
 }
 

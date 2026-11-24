@@ -35,13 +35,14 @@ import { UNTITLED_PATH } from "@/lib/folderBrowser";
 import { StartupOverlay } from "@/components/StartupOverlay";
 import { resolveLinkPath } from "@/lib/localFile";
 import { paneFolder } from "@/lib/worktree";
-import { toggleFolderPanel } from "@/lib/sidebarFrame";
+import { nativeGlassPlates, toggleFolderPanel } from "@/lib/sidebarFrame";
+import { shellVibrancyOn } from "@/lib/appearanceTune";
 import { installLinkGuard } from "@/lib/links";
 import { SshScreen, type ToolKind } from "@/components/SshScreen";
 import { TopResizeEdges } from "@/components/WindowControls";
 import { AppTitle } from "@/components/AppTitle";
 import { TooltipLayer } from "@/components/TooltipLayer";
-import { dragMacWindow, isMacTitlebar, useWindowState } from "@/lib/windowFrame";
+import { dragMacWindow, isMacTitlebar, useWindowState, zoomMacWindow } from "@/lib/windowFrame";
 import { isRemote, openRemoteTab } from "@/lib/remote";
 import { RemoteConnectedBadge } from "@/components/RemoteStudioSection";
 import { returnFocus, withTabFocus } from "@/lib/termFocus";
@@ -796,8 +797,14 @@ export function App() {
     if (layout) commit(L.setTabFilesOpen(layout, activeTab.id, open));
   };
   const sidebarPrefs: SidebarPrefs = sidebarLocal ?? snap.settings?.sidebar ?? { collapsed: false, width: 288 };
-  const vibrancySaved = typeof localStorage !== "undefined" && localStorage.getItem("bethstudio-vibrancy") === "1";
-  const vibrancy = isMacTitlebar() && (snap.settings?.ui_theme?.vibrancy === true || (snap.settings?.ui_theme?.vibrancy == null && vibrancySaved) || (snap.settings?.ui_theme?.vibrancy == null && !localStorage.getItem("bethstudio-vibrancy")));
+  // Depois que /api/settings chegou, campo ausente é desligado. O
+  // localStorage só cobre o instante anterior à resposta; senão um "1"
+  // antigo religa o material quando o JSON omite false.
+  const vibrancy = isMacTitlebar() && shellVibrancyOn(
+    snap.settings?.ui_theme,
+    snap.settings != null,
+    typeof localStorage !== "undefined" && localStorage.getItem("bethstudio-vibrancy") === "1",
+  );
   const [paneTools, setPaneTools] = useState<Record<number, string>>({});
   useEffect(() => {
     if (!layout) return;
@@ -826,7 +833,7 @@ export function App() {
     document.documentElement.style.setProperty("--bt-topbar-rgb", topbarRgb);
     document.documentElement.style.setProperty("--bt-topbar", `rgb(${topbarRgb})`);
     // O vão tem de ser opaco. Transparente deixa o material nativo aparecer.
-    document.body.style.background = vibrancy ? `rgb(${topbarRgb})` : "";
+    document.body.style.background = vibrancy ? "transparent" : "";
     w.webkit?.messageHandlers?.bethVibrancy?.postMessage(vibrancy ? "1" : "0");
     const power = (snap.settings?.ui_theme?.glass || 55) / 100;
     const alpha = (snap.settings?.ui_theme?.glass_alpha || 70) / 100;
@@ -891,14 +898,15 @@ export function App() {
       // Um diálogo aberto cobre a página. As placas nativas ficam na frente
       // do WebView, então somem enquanto o diálogo está aberto.
       const modal = !!document.querySelector(".bt-modal");
-      const nodes = modal
+      const found = modal
         ? [...document.querySelectorAll(".bt-glass-sample")]
-        : [...document.querySelectorAll(".bt-tab:not(.bt-tab-active), .bt-tab-tool")];
+        : [...document.querySelectorAll(".bt-tab:not(.bt-tab-active), .bt-tab-tool, .bt-sidebar .bt-glass, .bt-sidebar .bt-search, .bt-sidebar .bt-chat, .bt-sidebar .bt-chip")];
+      const nodes = nativeGlassPlates(true, found);
       void Promise.all(nodes.map((el) => iconPng(el))).then((pngs) => {
-        const rects: { x: number; y: number; w: number; h: number; r: number; p: string; t: string; sub: string; hov: number; f: number; on: number; ph: number; tip: number; side: string; ax: number }[] = [];
+        const rects: { x: number; y: number; w: number; h: number; r: number; p: string; t: string; sub: string; hov: number; f: number; on: number; ph: number; tip: number; side: string; ax: number; wrap: number; row: number }[] = [];
         nodes.forEach((el, i) => {
           const b = el.getBoundingClientRect();
-          if (b.width < 8 || b.height < 8 || b.height > 72 || b.width > 420) return;
+          if (b.width < 8 || b.height < 4 || b.height > 110 || b.width > 420) return;
           if (b.bottom < 0 || b.top > window.innerHeight) return;
           const rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 8;
           const field = el.classList.contains("bt-search");
@@ -925,8 +933,8 @@ export function App() {
             h: Math.round(b.height),
             r: field ? 16 : Math.round(rad),
             p: field ? "" : pngs[i] || "",
-            t: name.slice(0, 48),
-            sub: sub.slice(0, 48),
+            t: chat ? "" : name.slice(0, 48),
+            sub: chat ? "" : sub.slice(0, 48),
             hov: el.matches(":hover") ? 1 : 0,
             f: field ? 1 : 0,
             tip: tip ? 1 : 0,
@@ -934,6 +942,8 @@ export function App() {
             ax: tip ? Number(el.getAttribute("data-tip-arrow") || 0) : 0,
             on: el.classList.contains("bt-glass-on") ? 1 : 0,
             ph: field && !typed ? 1 : 0,
+            wrap: el.classList.contains("bt-mode") ? 1 : 0,
+            row: chat || (el.closest(".bt-sidebar") && !el.classList.contains("bt-mode") && !el.classList.contains("h-7") && !field) ? 1 : 0,
           });
         });
         rects.sort((a, b) => a.tip - b.tip);
@@ -1013,7 +1023,7 @@ export function App() {
   }, [pendingSpawn, layout, snap.panes, commit]);
 
   return (
-    <div className={cn("flex h-full flex-col text-text-1", vibrancy ? "" : "bg-bg-body")} style={vibrancy ? { background: "rgb(19, 19, 19)" } : undefined}>
+    <div className={cn("flex h-full flex-col text-text-1", vibrancy ? "" : "bg-bg-body")}>
       <TopResizeEdges state={winState} />
       <TooltipLayer />
       {/* Avisos */}
@@ -1040,13 +1050,23 @@ export function App() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <div className="bt-side-col relative h-full shrink-0 self-stretch" style={{ width: sidebarCollapsed ? 48 : sidebarWidth, background: "rgb(19, 19, 19)" }}>
-        <div className="bt-mac-gutter absolute inset-x-0 top-0 h-10" aria-hidden style={{ background: "rgb(19, 19, 19)" }} />
-        <div className="bt-side-slot bt-side-slot-left absolute inset-x-0" style={{ top: 48, bottom: 8, padding: "0 8px" }}>
+        <div className="bt-side-col relative h-full shrink-0 self-stretch" style={{ width: sidebarCollapsed ? 48 : sidebarWidth, background: vibrancy ? "transparent" : "rgb(19, 19, 19)" }}>
+        <div
+          className="bt-mac-gutter absolute inset-x-0 top-0 z-30 h-10"
+          style={{ background: "rgb(19, 19, 19)" }}
+          title="Arraste para mover a janela"
+          onMouseDown={(e) => {
+            if (!isMacTitlebar() || e.button !== 0 || e.detail > 1) return;
+            e.preventDefault();
+            dragMacWindow();
+          }}
+          onDoubleClick={() => isMacTitlebar() && zoomMacWindow()}
+        />
+        <div className="bt-side-slot bt-side-slot-left absolute inset-x-0" style={{ top: 48, bottom: 8, padding: "0 8px", background: vibrancy ? "transparent" : undefined }}>
         <aside
           className={cn(
             "bt-sidebar relative h-full overflow-hidden",
-            "bg-bg-panel",
+            vibrancy ? "bg-transparent" : "bg-bg-panel",
             "bt-side-card",
             sidebarCollapsed && "flex flex-col items-center gap-1 overflow-y-auto overflow-x-hidden pb-2 [scrollbar-width:none]",
           )}
@@ -1281,7 +1301,7 @@ export function App() {
             )}
           </div>
           {filesOpen && activeTab && (
-            <div className="bt-side-slot bt-side-slot-right relative h-full min-h-0 shrink-0 self-stretch" style={{ width: filesWidth + 8, background: "rgb(19, 19, 19)" }}>
+            <div className="bt-side-slot bt-side-slot-right relative h-full min-h-0 shrink-0 self-stretch" style={{ width: filesWidth + 16, background: "rgb(19, 19, 19)" }}>
               <div
                 className="absolute -left-1 top-2 z-20 h-[calc(100%-1rem)] w-2 cursor-col-resize hover:bg-accent/40"
                 title="Arraste para mudar a largura da pasta"

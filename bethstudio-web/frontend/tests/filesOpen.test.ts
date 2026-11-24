@@ -33,9 +33,12 @@ test("setTabFilesOpen abre só a guia pedida e fecha de novo", () => {
 });
 
 test("o vidro que cobre o vão não passa", () => {
-  const off = parseGlassLine("glass x 8 y 8 w 0 h 844 windowH 900");
+  const off = parseGlassLine("glass x -8 y -8 w 0 h 0 windowH 900");
   assert.ok(off);
   assert.equal(glassCoversGutter(off, 288), false);
+  const card = parseGlassLine("glass x 8 y 8 w 272 h 844 windowH 900");
+  assert.ok(card);
+  assert.equal(glassCoversGutter(card, 288), false);
   const edge = parseGlassLine("glass x 0 y 8 w 296 h 844 windowH 900");
   assert.ok(edge);
   assert.equal(glassCoversGutter(edge, 288), true);
