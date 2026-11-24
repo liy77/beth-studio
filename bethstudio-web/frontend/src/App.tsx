@@ -57,7 +57,8 @@ import { VoiceSettingsDialog } from "@/components/VoiceSettingsDialog";
 import { useAgentAlerts, useNotifyPrefs } from "@/lib/notify";
 import { aloneInHostTab } from "@/lib/hostFit";
 import { paneLabel } from "@/lib/panes";
-import { paneIdentity } from "@/lib/paneIdentity";
+import { displayName, isAgentTool, paneIdentity, toolInText } from "@/lib/paneIdentity";
+import { AGENT_COMMAND, agentFolder } from "@/lib/agents";
 import { cn } from "@/lib/utils";
 import { eventMatches, shortcutOf } from "@/lib/shortcut";
 import { useCatalog } from "@/lib/appearance";
@@ -456,6 +457,39 @@ export function App() {
       };
       tick();
     });
+  const agentFolderRequests = useRef(new Set<number>());
+  const openAgentFolder = (paneId: number, dest: string): boolean => {
+    const info = paneById.get(paneId);
+    if (!info) return false;
+    const tool = isAgentTool(info.tool) ? info.tool : toolInText(info.title);
+    if (!tool) return false;
+    if (agentFolderRequests.current.has(paneId)) return true;
+    const shells = snap.shells ?? [];
+    const localShell = shells.find((s) => ["login", "zsh", "bash", "sh"].includes(s.id))?.id;
+    const wsl = info.wsl || info.kind === "wsl";
+    const sameShell = sameShellId(wsl ? { kind: "wsl", distro: info.wsl_distro ?? info.distro } : info, shells);
+    const shell = info.kind === "ssh" || info.kind === "serial" ? null
+      : sameShell ?? (wsl ? null : localShell ?? shells.find((s) => ["pwsh", "powershell", "cmd"].includes(s.id))?.id);
+    const cwd = shell ? agentFolder(dest, info.cwd, shell) : "";
+    if (!shell || !cwd) {
+      setError("Não foi possível abrir o agente nessa pasta. Informe um caminho absoluto para um terminal local.");
+      return true;
+    }
+    agentFolderRequests.current.add(paneId);
+    void conn.spawn({ shell_id: shell, window_id: info.window_id, cwd })
+      .then(async ({ pane_id }) => {
+        await untilListed(pane_id);
+        const latest = getLayout();
+        if (!latest) throw new Error("a organização das abas não está disponível");
+        const next = L.addTab(latest, displayName(tool), pane_id);
+        commit(next);
+        focusPane(next.active, pane_id);
+        if (!conn.send(pane_id, AGENT_COMMAND[tool] + "\r")) throw new Error("sem conexão com o terminal novo");
+      })
+      .catch((e: Error) => setError(`Não foi possível abrir ${displayName(tool)} na nova pasta: ${e.message}`))
+      .finally(() => agentFolderRequests.current.delete(paneId));
+    return true;
+  };
   const newSplit = (target: number, zone: SplitZone, shellId: string, label: string) => {
     const info = paneById.get(target);
     if (!info) return;
@@ -838,6 +872,7 @@ export function App() {
     w.webkit?.messageHandlers?.bethVibrancy?.postMessage(vibrancy ? "1" : "0");
     const power = (snap.settings?.ui_theme?.glass || 55) / 100;
     const alpha = (snap.settings?.ui_theme?.glass_alpha || 70) / 100;
+    document.documentElement.style.setProperty("--bt-preview-vibrancy-opacity", String(0.34 + alpha * 0.32));
     (w.webkit?.messageHandlers as { bethGlassTune?: { postMessage: (v: string) => void } } | undefined)?.bethGlassTune?.postMessage(`${power},${alpha}`);
     const width = !vibrancy ? 0 : sidebarCollapsed ? 48 : sidebarWidth;
     w.webkit?.messageHandlers?.bethSidebar?.postMessage(String(width));
@@ -850,8 +885,9 @@ export function App() {
     probe.remove();
     (w.webkit?.messageHandlers as { bethGutter?: { postMessage: (v: string) => void } } | undefined)?.bethGutter?.postMessage(gutter);
   }, [vibrancy, sidebarCollapsed, sidebarWidth, snap.settings?.ui_theme?.glass, snap.settings?.ui_theme?.glass_alpha]);
+  const previewOpen = !!filePreviewPath;
   useEffect(() => {
-    if (!isMacTitlebar() || !vibrancy) {
+    if (!isMacTitlebar() || !vibrancy || previewOpen) {
       const off = window as unknown as { webkit?: { messageHandlers?: { bethGlass?: { postMessage: (v: string) => void } } } };
       off.webkit?.messageHandlers?.bethGlass?.postMessage("[]");
       return;
@@ -895,20 +931,23 @@ export function App() {
     };
     const w = window as unknown as { webkit?: { messageHandlers?: { bethGlass?: { postMessage: (v: string) => void } } } };
     let last = "";
+    let disposed = false;
+    let request = 0;
+    let delivered = 0;
     const send = () => {
-      // Um diálogo aberto cobre a página. As placas nativas ficam na frente
-      // do WebView, então somem enquanto o diálogo está aberto.
       const modal = !!document.querySelector(".bt-modal");
+      const sequence = ++request;
       const found = modal
         ? [...document.querySelectorAll(".bt-glass-sample")]
-        : [...document.querySelectorAll(".bt-tab:not(.bt-tab-active), .bt-tab-tool, .bt-sidebar .bt-glass, .bt-sidebar .bt-search, .bt-sidebar .bt-chat, .bt-sidebar .bt-chip, .bt-preview")];
+        : [...document.querySelectorAll(".bt-tab:not(.bt-tab-active), .bt-tab-tool, .bt-sidebar .bt-glass, .bt-sidebar .bt-search, .bt-sidebar .bt-chat, .bt-sidebar .bt-chip")];
       const nodes = nativeGlassPlates(true, found);
-      void Promise.all(nodes.map((el) => iconPng(el))).then((pngs) => {
-        const rects: { x: number; y: number; w: number; h: number; r: number; p: string; t: string; sub: string; hov: number; f: number; on: number; ph: number; tip: number; side: string; ax: number; wrap: number; row: number; preview: number }[] = [];
+      void Promise.all(nodes.map(iconPng)).then((pngs) => {
+        if (disposed || sequence < delivered) return;
+        delivered = sequence;
+        const rects: { x: number; y: number; w: number; h: number; r: number; p: string; t: string; sub: string; hov: number; f: number; on: number; ph: number; tip: number; side: string; ax: number; wrap: number; row: number }[] = [];
         nodes.forEach((el, i) => {
           const b = el.getBoundingClientRect();
-          const preview = el.classList.contains("bt-preview");
-          if (!preview && (b.width < 8 || b.height < 4 || b.height > 110 || b.width > 420)) return;
+          if (b.width < 8 || b.height < 4 || b.height > 110 || b.width > 420) return;
           if (b.bottom < 0 || b.top > window.innerHeight) return;
           const rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 8;
           const field = el.classList.contains("bt-search");
@@ -945,7 +984,6 @@ export function App() {
             on: el.classList.contains("bt-glass-on") ? 1 : 0,
             ph: field && !typed ? 1 : 0,
             wrap: el.classList.contains("bt-mode") ? 1 : 0,
-            preview: preview ? 1 : 0,
             row: chat || (el.closest(".bt-sidebar") && !el.classList.contains("bt-mode") && !el.classList.contains("h-7") && !field) ? 1 : 0,
           });
         });
@@ -965,7 +1003,7 @@ export function App() {
       });
     };
     kick();
-    const timer = window.setInterval(send, 120);
+    const timer = window.setInterval(kick, 120);
     window.addEventListener("resize", kick);
     document.addEventListener("mouseover", kick);
     document.addEventListener("mouseout", kick);
@@ -974,6 +1012,7 @@ export function App() {
     const watch = new MutationObserver(kick);
     watch.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
     return () => {
+      disposed = true;
       window.clearInterval(timer);
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", kick);
@@ -983,7 +1022,7 @@ export function App() {
       document.removeEventListener("transitionrun", kick);
       watch.disconnect();
     };
-  }, [vibrancy, sidebarCollapsed, sidebarWidth, snap.settings?.ui_theme?.glass, snap.settings?.ui_theme?.glass_alpha]);
+  }, [vibrancy, sidebarCollapsed, sidebarWidth, snap.settings?.ui_theme?.glass, snap.settings?.ui_theme?.glass_alpha, previewOpen]);
   const saveSidebar = (patch: Partial<SidebarPrefs>) => {
     const next = { ...sidebarPrefs, ...patch };
     setSidebarLocal(next);
@@ -1245,7 +1284,7 @@ export function App() {
                   conn
                     .spawn({ shell_id: shell.id })
                     .then((ev) => {
-                      commit(L.movePane(layout, ev.pane_id, tab, null));
+                      commit(L.movePaneToTab(layout, ev.pane_id, tab));
                       focusPane(tab, ev.pane_id);
                     })
                     .catch((e: Error) => setError(e.message));
@@ -1297,6 +1336,7 @@ export function App() {
                         setSplitMenu({ pane, x, y, zone });
                       }}
                       onOpenFile={setFilePreviewPath}
+                      onAgentFolder={readOnly ? undefined : (dest) => openAgentFolder(pane, dest)}
                     />
                   )
                 }

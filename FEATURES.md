@@ -13,7 +13,7 @@
 > When a user-facing feature is added, changed, or removed, update this
 > file in the same change (`.cursor/rules/features-catalog.mdc`).
 
-Last updated: 2026-11-23.
+Last updated: 2026-11-24.
 
 ---
 
@@ -369,12 +369,15 @@ ends the shell together with everything it started (patch 0203).
 - 🟢 Terminal menu: copy or save the full scrollback, and print the
   visible area (patch 0188). `http(s)` links, including an OSC 8 hyperlink
   whose visible text is only "here", open in the default browser. Local
-  `.md` / `.txt` / `.log` and images open in a preview panel. Any other
+  `.md` / `.txt` / `.log` and images open in a preview panel. On macOS, Vibrancy gives the
+  entire preview a translucent background that follows the opacity setting. Any other
   existing file (PDF, Office, archive, and the rest) opens in the Windows
   default program. Programs and scripts (`.exe`, `.bat`, `.ps1`, `.lnk`,
   `.js` and the like) are shown in Explorer and are not launched. While a
   fullscreen program has mouse tracking on, a plain click still goes to
   that program; the hover hint says **Ctrl+click** to open the link.
+  Changing folders from a local agent’s terminal header opens a new tab
+  for the same tool in the requested folder and keeps the original session.
   A folder path in the output (absolute, no extension: `/mnt/data/dir/`,
   `~/dir`, `C:\dir`) opens that folder in Explorer; in a WSL terminal it
   opens the WSL folder on Windows. The folder path in the terminal header

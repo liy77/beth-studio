@@ -23,8 +23,9 @@ export function GlassMenu({
   width?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useLayoutEffect(() => { closeRef.current = onClose; }, [onClose]);
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const [hover, setHover] = useState(-1);
   const mac = isMacTitlebar();
   const nativeMenu = pageMenuHidden(mac, typeof window !== "undefined" && !!window.webkit?.messageHandlers?.bethMenu);
 
@@ -42,10 +43,10 @@ export function GlassMenu({
 
   useEffect(() => {
     closeOtherMenus();
-    const onOther = () => onClose();
+    const onOther = () => closeRef.current();
     window.addEventListener("beth-menu-open", onOther);
     return () => window.removeEventListener("beth-menu-open", onOther);
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     let armed = false;
@@ -54,10 +55,10 @@ export function GlassMenu({
     }, 0);
     const close = (e: Event) => {
       if (!armed || ref.current?.contains(e.target as Node)) return;
-      onClose();
+      closeRef.current();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") closeRef.current();
     };
     window.addEventListener("pointerdown", close, true);
     window.addEventListener("keydown", onKey);
@@ -66,7 +67,7 @@ export function GlassMenu({
       window.removeEventListener("pointerdown", close, true);
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle("bt-native-menu", nativeMenu);
@@ -77,16 +78,22 @@ export function GlassMenu({
     if (!mac || !box) return;
     const w = window as unknown as { webkit?: { messageHandlers?: { bethMenu?: { postMessage: (v: string) => void } } } };
     const root = ref.current?.getBoundingClientRect();
+    const elements = Array.from(ref.current?.querySelectorAll(MENU_ROW_SELECTOR) ?? []);
     const nodes: MenuNode[] = root
-      ? Array.from(ref.current?.querySelectorAll(MENU_ROW_SELECTOR) ?? []).map((el) => {
+      ? elements.map((el) => {
           const r = el.getBoundingClientRect();
           const node = readMenuNode(el);
           return { ...node, y: Math.round(r.top - root.top), h: Math.round(r.height) };
         })
       : [];
-    const rows = menuRowsFromNodes(nodes).rows;
+    const rows = menuRowsFromNodes(nodes).rows.map((row, i) => ({ ...row, disabled: elements[i]?.matches(":disabled") }));
     w.webkit?.messageHandlers?.bethMenu?.postMessage(JSON.stringify({ ...box, rows, ax: Math.round(x - box.x + 8) }));
-  }, [mac, box, hover]);
+  }, [mac, box, x]);
+
+  useEffect(() => {
+    if (!nativeMenu) return;
+    return () => window.webkit?.messageHandlers?.bethMenu?.postMessage("[]");
+  }, [nativeMenu]);
 
   useEffect(() => {
     if (!mac) return;
@@ -102,12 +109,12 @@ export function GlassMenu({
       const el = root.querySelectorAll("button")[at] as HTMLButtonElement | undefined;
       el?.click();
     };
-    w.__bethMenuClosed = () => onClose();
+    w.__bethMenuClosed = () => closeRef.current();
     return () => {
       w.__bethMenuClick = undefined;
       w.__bethMenuClosed = undefined;
     };
-  }, [mac, onClose]);
+  }, [mac]);
 
   return createPortal(
     <div
@@ -121,8 +128,6 @@ export function GlassMenu({
         ...pageMenuStyle(mac, typeof window !== "undefined" && !!window.webkit?.messageHandlers?.bethMenu),
       }}
       onPointerDown={(e) => e.stopPropagation()}
-      onMouseMove={() => setHover((n) => n + 1)}
-      onMouseLeave={() => setHover(-1)}
       onContextMenu={(e) => e.preventDefault()}
     >
       {children}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent } from "react";
 import {
   AArrowDown,
   AArrowUp,
@@ -136,6 +136,8 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
   const [maximized, setMaximized] = useState(false);
   const [rect, setRect] = useState<Rect>(initialRect);
   const rectRef = useRef(rect);
+  const cancelGesture = useRef<(() => void) | null>(null);
+  useEffect(() => () => cancelGesture.current?.(), []);
   rectRef.current = rect;
   const [hasSel, setHasSel] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -316,7 +318,10 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
           mtime: headers.get("X-File-Mtime") ?? "",
         });
         // código abre já no editor; markdown continua na vista formatada
-        if (!markdown && !truncated) setDraft(raw);
+        if (!markdown && !truncated) {
+          setEol(detectEol(raw));
+          setDraft(editableText(raw));
+        }
       } catch (e) {
         if (alive) setDoc({ phase: "error", message: e instanceof Error ? e.message : String(e) });
       }
@@ -555,29 +560,78 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
   };
 
   // --- mover (arrastar o título) e redimensionar (qualquer borda ou canto) -----
-  const dragRect = (apply: (start: Rect, dx: number, dy: number) => Rect) => (e: RPointerEvent) => {
-    if (maximized || e.button !== 0) return;
+  const dragRect = (apply: (start: Rect, dx: number, dy: number) => Rect, translate = false) => (e: RPointerEvent) => {
+    const panel = rootRef.current;
+    if (!panel || maximized || e.button !== 0 || cancelGesture.current) return;
     e.preventDefault();
-    const sx = e.clientX;
-    const sy = e.clientY;
+    const { clientX: sx, clientY: sy, pointerId } = e;
     const start = rectRef.current;
-    const el = e.currentTarget as HTMLElement;
-    el.setPointerCapture(e.pointerId);
-    const move = (ev: PointerEvent) => setRect(apply(start, ev.clientX - sx, ev.clientY - sy));
-    const up = () => {
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", up);
-      el.removeEventListener("pointercancel", up);
-      savePref(PREF_RECT, rectRef.current);
+    const el = e.currentTarget;
+    let next = start;
+    let frame = 0;
+    let deltaX = 0;
+    let deltaY = 0;
+    el.setPointerCapture(pointerId);
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      deltaX = ev.clientX - sx;
+      deltaY = ev.clientY - sy;
+      if (!panel.classList.contains("bt-preview-interacting")) {
+        if (Math.abs(deltaX) + Math.abs(deltaY) < 3) return;
+        panel.classList.add("bt-preview-interacting");
+      }
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        next = apply(start, deltaX, deltaY);
+        if (translate) {
+          panel.style.transform = `translate3d(${next.x - start.x}px, ${next.y - start.y}px, 0)`;
+        } else {
+          Object.assign(panel.style, {
+            left: `${next.x}px`, top: `${next.y}px`, width: `${next.w}px`, height: `${next.h}px`,
+          });
+        }
+      });
     };
+    const cleanup = () => {
+      if (frame) cancelAnimationFrame(frame);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", finish);
+      el.removeEventListener("pointercancel", finish);
+      el.removeEventListener("lostpointercapture", finish);
+      panel.style.removeProperty("transform");
+      if (!translate) {
+        Object.assign(panel.style, {
+          left: `${start.x}px`, top: `${start.y}px`, width: `${start.w}px`, height: `${start.h}px`,
+        });
+      }
+      panel.classList.remove("bt-preview-interacting");
+      cancelGesture.current = null;
+    };
+    const finish = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      if (!panel.classList.contains("bt-preview-interacting")) {
+        cleanup();
+        return;
+      }
+      if (ev.type === "pointerup") next = apply(start, ev.clientX - sx, ev.clientY - sy);
+      else next = apply(start, deltaX, deltaY);
+      const finalRect = clampRect(next, window.innerWidth, window.innerHeight);
+      cleanup();
+      rectRef.current = finalRect;
+      setRect(finalRect);
+      savePref(PREF_RECT, finalRect);
+    };
+    cancelGesture.current = cleanup;
     el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
-    el.addEventListener("pointercancel", up);
+    el.addEventListener("pointerup", finish);
+    el.addEventListener("pointercancel", finish);
+    el.addEventListener("lostpointercapture", finish);
   };
   const startResize = (edge: Edge) => dragRect((start, dx, dy) => resizeRect(start, edge, dx, dy, window.innerWidth, window.innerHeight));
   const startMove = (e: RPointerEvent) => {
     if ((e.target as Element).closest("button")) return; // botões do título não arrastam
-    dragRect((start, dx, dy) => moveRect(start, dx, dy, window.innerWidth, window.innerHeight))(e);
+    dragRect((start, dx, dy) => moveRect(start, dx, dy, window.innerWidth, window.innerHeight), true)(e);
   };
   const dock = (side: "left" | "right") => {
     setMaximized(false);
@@ -609,7 +663,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
       >
         {/* título + janela */}
         <div
-          className={cn("flex h-9 shrink-0 select-none items-center gap-2 border-b border-border px-3", !maximized && "cursor-move")}
+          className={cn("bt-preview-title flex h-10 shrink-0 select-none items-center gap-2 border-b border-border px-3", !maximized && "cursor-grab touch-none active:cursor-grabbing")}
           onPointerDown={startMove}
           onDoubleClick={(e) => !(e.target as Element).closest("button") && setMaximized((m) => !m)}
           title={maximized ? undefined : "Arraste para mover · duplo clique maximiza"}
@@ -653,7 +707,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
 
         <div className="flex min-h-0 flex-1">
         {notesOpen && (
-          <div className="flex w-[190px] shrink-0 flex-col border-r border-border bg-bg-panel">
+          <div className="bt-preview-notes flex w-[190px] shrink-0 flex-col border-r border-border bg-bg-panel">
             <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border px-2">
               <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-text-1">Notas</span>
               <IconButton label="Nova nota em branco" onClick={() => void newNote()}>
@@ -705,7 +759,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* ações */}
-        <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border px-2 py-1">
+        <div className="bt-preview-tools flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2.5 py-1.5">
           {kind !== "image" && (
             <>
               <IconButton

@@ -357,21 +357,21 @@ html.bt-vibrancy .bt-sidebar .overflow-y-auto {
   background-color: transparent !important;
   background-image: none !important;
 }
-html.bt-vibrancy .bt-sidebar button.h-7,
-html.bt-vibrancy .bt-sidebar .bt-mode {
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode {
   color: rgb(var(--bt-text-1));
 }
 /* Só a busca e os botões de modo escondem o fundo: o texto deles é o
    da placa nativa. Lista, cabeçalho e chip continuam opacos na página. */
-html.bt-vibrancy .bt-sidebar .bt-search,
-html.bt-vibrancy .bt-sidebar .bt-search input,
-html.bt-vibrancy .bt-sidebar .bt-mode,
-html.bt-vibrancy .bt-sidebar button.h-7 {
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search input,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7 {
   background: transparent !important;
   background-color: transparent !important;
   box-shadow: none !important;
 }
-html.bt-vibrancy .bt-sidebar .bt-search svg {
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search svg {
   color: rgb(var(--bt-text-2));
 }
 /* Cabeçalho de pasta: sem fundo. O chevron, o ícone e o nome ficam na página. */
@@ -384,11 +384,11 @@ html.bt-vibrancy .bt-sidebar .bt-folder.bt-glass-on {
 }
 /* O chat não esconde o nome e não pinta fundo. O vidro nativo é só o
    material, atrás; o rótulo continua na página, selecionado ou não. */
-html.bt-vibrancy .bt-sidebar .bt-chat,
-html.bt-vibrancy .bt-sidebar .bt-chat:hover,
-html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on,
-html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on:hover,
-html.bt-vibrancy .bt-sidebar .bt-chat * {
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat:hover,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on:hover,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat * {
   background: transparent !important;
   background-color: transparent !important;
   opacity: 0;
@@ -436,14 +436,14 @@ html.bt-vibrancy.bt-native-menu .bt-menu button.text-status-err {
 .bt-tip {
   z-index: 10000;
 }
-html.bt-vibrancy .bt-tab:not(.bt-tab-active) *,
-html.bt-vibrancy .bt-tab-tool *,
-html.bt-vibrancy .bt-sidebar .bt-mode,
-html.bt-vibrancy .bt-sidebar .bt-mode *,
-html.bt-vibrancy .bt-sidebar button.h-7,
-html.bt-vibrancy .bt-sidebar button.h-7 *,
-html.bt-vibrancy .bt-sidebar .bt-search,
-html.bt-vibrancy .bt-sidebar .bt-search * {
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-tab:not(.bt-tab-active) *,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-tab-tool *,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode *,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7 *,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search * {
   opacity: 0;
 }
 /* Sem vibrancy a lista é conteúdo, não vidro: cada chat tem fundo e o
@@ -597,12 +597,53 @@ html:not(.bt-vibrancy) .bt-sidebar .bt-search svg {
   background: transparent;
 }
 
-/* Com vibrancy no macOS, só o fundo do preview vira liquid glass.
-   A página fica transparente para o material nativo aparecer; o texto
-   e as cores do código continuam por cima. */
+/* Uma superfície para o painel inteiro. Só ela amostra o fundo. */
+.bt-preview {
+  contain: layout;
+  isolation: isolate;
+}
+.bt-preview-code {
+  contain: paint;
+}
+.bt-preview-title,
+.bt-preview-tools {
+  border-color: rgb(var(--bt-border-strong) / 0.58);
+}
 html.bt-vibrancy .bt-preview {
-  background: transparent !important;
-  background-color: transparent !important;
+  --preview-glass-fill: var(--bt-preview-vibrancy-opacity, 0.56);
+  border-color: rgb(var(--bt-text-1) / 0.22);
+  background: rgb(var(--bt-bg-card) / var(--preview-glass-fill));
+  box-shadow: inset 0 1px rgb(255 255 255 / 0.12), 0 14px 36px rgb(0 0 0 / 0.32);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  backdrop-filter: blur(20px) saturate(130%);
+}
+html.bt-vibrancy .bt-preview-title,
+html.bt-vibrancy .bt-preview-tools,
+html.bt-vibrancy .bt-preview-notes {
+  background: rgb(var(--bt-bg-panel) / 0.12);
+}
+html.bt-vibrancy .bt-preview-code {
+  background: rgb(20 21 25 / 0.18);
+}
+html.bt-vibrancy:not(.dark) .bt-preview-code {
+  background: rgb(20 21 25 / 0.65);
+}
+html.bt-vibrancy .bt-preview-interacting {
+  --preview-glass-fill: 0.92;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  html.bt-vibrancy .bt-preview {
+    --preview-glass-fill: 1;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+.bt-preview-interacting {
+  transform: translateZ(0);
+  will-change: transform;
 }
 /* Preview de Markdown (FilePreviewPanel): estilo proprio, no tema do app
    (sem plugin de tipografia). Tamanhos em em: seguem a fonte do painel. */

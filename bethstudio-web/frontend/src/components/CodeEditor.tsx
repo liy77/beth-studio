@@ -55,7 +55,7 @@ export function CodeEditor({
   const text = { fontSize: fontPx, lineHeight: "1.55", tabSize: 2 } as const;
 
   return (
-    <div className="absolute inset-0 flex bg-[#1e1e1e]">
+    <div className="absolute inset-0 flex bt-preview-code bg-[#1e1e1e]">
       <div ref={gutterRef} className="w-fit shrink-0 overflow-hidden border-r border-white/10 py-3 pl-2 pr-2 text-right font-mono text-[#858585] select-none" style={text}>
         {Array.from({ length: lines }, (_, n) => (
           <div key={n}>{n + 1}</div>
@@ -108,7 +108,7 @@ export function CodeView({ value, lang, wrap, fontPx }: { value: string; lang: s
   const lines = Math.max(1, value.split("\n").length);
   const text = { fontSize: fontPx, lineHeight: "1.55", tabSize: 2 } as const;
   return (
-    <div className="flex min-h-full bg-[#1e1e1e]">
+    <div className="flex min-h-full bt-preview-code bg-[#1e1e1e]">
       <div className="w-fit shrink-0 border-r border-white/10 py-0 pr-2 text-right font-mono text-[#858585] select-none" style={text}>
         {Array.from({ length: lines }, (_, n) => (
           <div key={n}>{n + 1}</div>
