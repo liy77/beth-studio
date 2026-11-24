@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { framesMatch, glassCoversGutter, parseGlassLine, sideFrame, toggleFolderPanel } from "../src/lib/sidebarFrame.ts";
+import { framesMatch, glassCoversGutter, parseGlassLine, sideFrame, toggleFolderPanel, vibrancyCardRect } from "../src/lib/sidebarFrame.ts";
 import { setTabFilesOpen, type Layout } from "../src/lib/layout.ts";
 
 test("a faixa começa abaixo das abas e acaba 8 px acima do fundo", () => {
@@ -20,17 +20,22 @@ test("o aviso conta como parte da altura do terminal", () => {
 });
 
 test("o vidro no vão da coluna faz o teste falhar", () => {
-  const off = parseGlassLine("glass x 8 y 8 w 0 h 844 windowH 900 gutter color");
+  const off = parseGlassLine("glass x -8 y -8 w 0 h 0 windowH 900 gutter color");
   assert.ok(off);
   assert.equal(glassCoversGutter(off, 288), false);
-  assert.equal(off.x, 8);
   assert.equal(off.w, 0);
-  const card = parseGlassLine("glass x 8 y 8 w 272 h 844 windowH 900");
-  assert.ok(card);
-  assert.equal(glassCoversGutter(card, 288), true);
+  const card = vibrancyCardRect(true, 900, 288);
+  assert.equal(card.x, 8);
+  assert.equal(card.w, 272);
+  assert.equal(card.h, 844);
+  assert.equal(glassCoversGutter(card, 288), false);
+  const logged = parseGlassLine("glass x 8 y 8 w 272 h 844 windowH 900");
+  assert.ok(logged);
+  assert.equal(glassCoversGutter(logged, 288), false);
   const atEdge = parseGlassLine("glass x 0 y 8 w 296 h 844 windowH 900");
   assert.ok(atEdge);
   assert.equal(glassCoversGutter(atEdge, 288), true);
+  assert.equal(vibrancyCardRect(false, 900, 288).w, 0);
   assert.equal(parseGlassLine("measured top 48 bottomInset 8 height 844 width 288 gutter topbar on 0"), null);
   assert.equal(parseGlassLine("measured top 48 bottomInset 8 height 844 width 288 gutter topbar on 1"), null);
 });

@@ -1504,6 +1504,7 @@ Arraste para outra aba ou para a borda de outro terminal`
                 <MenuItem
                   key={z}
                   icon={ZONE_ICON[z]}
+                  symbol={z === "right" || z === "left" ? "panel-right" : "panel-bottom"}
                   label={`${ZONE_LABEL[z]}…`}
                   onClick={() => {
                     const m = menu;
@@ -1521,6 +1522,7 @@ Arraste para outra aba ou para a borda de outro terminal`
                 <MenuItem
                   key={a.action}
                   icon={a.action === "link" ? <ExternalLink size={14} /> : a.action === "file" || a.action === "default" ? <FileText size={14} /> : <FolderOpen size={14} />}
+                  symbol={a.action === "link" ? "link" : "folder-input"}
                   label={a.label}
                   onClick={() => {
                     const r = menuRoute;
@@ -1534,6 +1536,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           )}
           <MenuItem
             icon={<Copy size={14} />}
+            symbol="copy"
             label="Copiar"
             disabled={!hasSelection}
             onClick={() => {
@@ -1543,6 +1546,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           />
           <MenuItem
             icon={<ClipboardPaste size={14} />}
+            symbol="paste"
             label="Colar"
             disabled={readOnly || gone}
             onClick={() => {
@@ -1552,6 +1556,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           />
           <MenuItem
             icon={<TextSelect size={14} />}
+            symbol="text-select"
             label="Selecionar tudo"
             onClick={() => {
               setMenu(null);
@@ -1561,6 +1566,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           <MenuRule />
           <MenuItem
             icon={<ScrollText size={14} />}
+            symbol="copy"
             label="Copiar histórico"
             onClick={() => {
               setMenu(null);
@@ -1569,6 +1575,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           />
           <MenuItem
             icon={<Save size={14} />}
+            symbol="save"
             label="Salvar histórico…"
             onClick={() => {
               setMenu(null);
@@ -1577,6 +1584,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           />
           <MenuItem
             icon={<Camera size={14} />}
+            symbol="copy"
             label="Copiar print do terminal"
             onClick={() => {
               setMenu(null);
@@ -1585,6 +1593,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           />
           <MenuItem
             icon={<Camera size={14} />}
+            symbol="save"
             label="Salvar print…"
             onClick={() => {
               setMenu(null);
@@ -1594,6 +1603,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           {onAskSeparate && !aloneInHost && (
             <MenuItem
               icon={<Maximize2 size={14} />}
+              symbol="app-window"
               label="Separar no Beth Studio para ajustar à janela…"
               onClick={() => {
                 setMenu(null);
@@ -1604,21 +1614,22 @@ Arraste para outra aba ou para a borda de outro terminal`
           {onAskKill && (
             <>
               <MenuRule />
-              <button
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-status-err hover:bg-status-err/10"
+              <MenuItem
+                icon={<Power size={14} />}
+                symbol="power"
+                label="Encerrar terminal…"
+                danger
                 onClick={() => {
                   setMenu(null);
                   onAskKill();
                 }}
-              >
-                <Power size={14} />
-                Encerrar terminal…
-              </button>
+              />
             </>
           )}
           {onOrganize && (
             <MenuItem
               icon={<LayoutGrid size={14} />}
+              symbol="layout-grid"
               label="Organizar este terminal…"
               onClick={() => {
                 const m = menu;

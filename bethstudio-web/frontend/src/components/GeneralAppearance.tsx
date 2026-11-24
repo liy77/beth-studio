@@ -8,6 +8,7 @@ import { paneLabel } from "@/lib/panes";
 import { cn } from "@/lib/utils";
 import { isDefaultZoom, resetPageZoom, usePageZoom, zoomLabel } from "@/lib/pageZoom";
 import { isMacTitlebar } from "@/lib/windowFrame";
+import { applyGlassPatch, glassSlidersVisible, vibrancyClick, vibrancyShownAfterSave } from "@/lib/appearanceTune";
 import type { NotifyPrefs } from "@/lib/notify";
 import { FontPicker, Swatch, ThemePicker } from "./Pickers";
 
@@ -52,6 +53,12 @@ export function GeneralAppearance({
   const show = (k: "ui" | "voice" | "notify" | "terminals") => !sections || sections.includes(k);
   const ui = { mode: normalizeUIMode(settings?.ui_theme?.mode), theme_id: settings?.ui_theme?.theme_id };
   const [pickUI, setPickUI] = useState(ui.mode === "theme");
+  const [pendingVibrancy, setPendingVibrancy] = useState<boolean | null>(null);
+  // Enquanto o clique não volta, mostra o valor postado. Depois, o campo
+  // ausente (false omitido) fica desligado mesmo com localStorage "1".
+  const vibrancyOn = pendingVibrancy !== null
+    ? pendingVibrancy
+    : vibrancyShownAfterSave(settings?.ui_theme, false);
   const [pickTermTheme, setPickTermTheme] = useState(false);
   const [pickFont, setPickFont] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -147,27 +154,32 @@ export function GeneralAppearance({
               <button
                 className={cn(
                   "mt-3 flex w-full items-center gap-3 rounded-lg p-2 text-left",
-                  settings?.ui_theme?.vibrancy ? "bg-accent-soft" : "bg-bg-card hover:bg-bg-hover",
+                  vibrancyOn ? "bg-accent-soft" : "bg-bg-card hover:bg-bg-hover",
                 )}
+                aria-pressed={vibrancyOn}
                 onClick={() => {
-                  const on = !settings?.ui_theme?.vibrancy;
+                  const on = vibrancyClick(vibrancyOn).next;
+                  setPendingVibrancy(on);
                   localStorage.setItem("bethstudio-vibrancy", on ? "1" : "0");
                   document.documentElement.classList.toggle("bt-vibrancy", on);
                   const w = window as unknown as {
                     webkit?: { messageHandlers?: { bethVibrancy?: { postMessage: (v: string) => void } } };
                   };
                   w.webkit?.messageHandlers?.bethVibrancy?.postMessage(on ? "1" : "0");
-                  conn.api<SettingsEvent>("/api/settings/ui", { vibrancy: on }).then((s) => conn.setSettings(s)).catch(() => undefined);
+                  conn.api<SettingsEvent>("/api/settings/ui", { vibrancy: on }).then((s) => {
+                    setPendingVibrancy(null);
+                    conn.setSettings(s);
+                  }).catch(() => undefined);
                 }}
               >
-                <VibrancySample on={!!settings?.ui_theme?.vibrancy} />
+                <VibrancySample on={vibrancyOn} />
                 <span className="min-w-0">
                   <span className="block text-[13px] text-text-1">Vibrancy na barra lateral</span>
                   <span className="block text-[12px] text-text-3">o material do macOS aparece atrás da barra</span>
                 </span>
               </button>
             )}
-            {isMacTitlebar() && settings?.ui_theme?.vibrancy && (
+            {isMacTitlebar() && glassSlidersVisible(vibrancyOn) && (
               <GlassTune settings={settings} conn={conn} />
             )}
           </section>
@@ -367,10 +379,16 @@ function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; labe
 }
 
 function GlassTune({ settings, conn }: { settings: SettingsEvent; conn: Connection }) {
-  const power = settings.ui_theme?.glass || 55;
-  const alpha = settings.ui_theme?.glass_alpha || 70;
+  const current = applyGlassPatch(
+    { glass: settings.ui_theme?.glass || 55, glass_alpha: settings.ui_theme?.glass_alpha || 70 },
+    {},
+  );
+  const power = current.glass;
+  const alpha = current.glass_alpha;
   const save = (patch: { glass?: number; glass_alpha?: number }) => {
-    conn.api<SettingsEvent>("/api/settings/ui", patch).then((s) => conn.setSettings(s)).catch(() => {});
+    const next = applyGlassPatch(current, patch);
+    const body = patch.glass !== undefined ? { glass: next.glass } : { glass_alpha: next.glass_alpha };
+    conn.api<SettingsEvent>("/api/settings/ui", body).then((s) => conn.setSettings(s)).catch(() => {});
   };
   return (
     <div className="mt-2 flex items-center gap-3 rounded-lg bg-bg-card p-2">

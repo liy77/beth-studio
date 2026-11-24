@@ -156,13 +156,13 @@ function ModeButton({ active, onClick, icon, children }: { active: boolean; onCl
   return (
     <button
       className={cn(
-        "bt-mode bt-glass flex flex-1 items-center justify-center gap-1 rounded-lg px-1.5 py-1 text-[11px] leading-tight",
+        "bt-mode bt-glass flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[11px] leading-tight",
         active ? "bt-glass-on bg-accent text-white" : "bg-bg-hover text-text-2 hover:text-text-1",
       )}
       onClick={onClick}
     >
       {icon}
-      {children}
+      <span className="min-w-0 whitespace-normal text-center leading-tight">{children}</span>
     </button>
   );
 }
@@ -490,8 +490,8 @@ function KindChips({ panes, selected, onChange, order }: { panes: PaneInfo[]; se
     <button
       key={key}
       className={cn(
-        "flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px]",
-        selected.includes(key) ? "bg-accent text-white" : "bg-bg-hover text-text-2 hover:text-text-1",
+        "bt-chip flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px]",
+        selected.includes(key) ? "bt-glass-on text-white" : "text-text-2 hover:text-text-1",
       )}
       onClick={() => toggle(key)}
       title={title}
@@ -504,7 +504,7 @@ function KindChips({ panes, selected, onChange, order }: { panes: PaneInfo[]; se
   return (
     <div className="flex flex-wrap gap-1">
       <button
-        className={cn("rounded-lg px-2 py-0.5 text-[11px]", selected.length === 0 ? "bg-accent text-white" : "bg-bg-hover text-text-2 hover:text-text-1")}
+        className={cn("bt-chip rounded-lg px-2 py-0.5 text-[11px]", selected.length === 0 ? "bt-glass-on text-white" : "text-text-2 hover:text-text-1")}
         onClick={() => onChange([])}
         title="Mostrar todos os tipos"
       >
@@ -545,7 +545,7 @@ function FolderTreeView(p: Props & { panes: PaneInfo[] }) {
       {groups.map((g) => (
         <div key={g.key}>
           <button
-            className="flex w-full min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[13px] font-semibold text-text-1 hover:bg-bg-hover"
+            className="bt-folder flex w-full min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[13px] font-semibold text-text-1 hover:bg-bg-hover"
             onClick={() => toggle(g.key)}
             title={`${g.path || "Terminais sem pasta conhecida"}\n${closed[g.key] ? "Mostrar o grupo" : "Recolher o grupo"}`}
           >
@@ -599,7 +599,7 @@ function KindSections({ panes, order, render, compact }: { panes: PaneInfo[]; or
         <div key={s.key}>
           <button
             className={cn(
-              "flex w-full items-center gap-1.5 rounded px-1.5 text-left font-semibold text-text-2 hover:text-text-1",
+              "bt-folder flex w-full items-center gap-1.5 rounded-lg px-1.5 text-left font-semibold text-text-2 hover:text-text-1",
               compact ? "py-0.5 pl-3 text-[10px] uppercase tracking-wide" : "py-1 text-[11px] uppercase tracking-wide",
             )}
             onClick={() => toggle(s.key)}
