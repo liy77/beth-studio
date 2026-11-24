@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-24
+
+Studio update only (the host is unchanged; no need to restart it).
+
+### Fixed
+- **Processos dos agentes**: **Encerrar** now ends the whole tree of the agent's command. In a pipeline such as `bash -c 'find / | head -3'` it used to end only one stage and leave the others (and the waiting shells) alive. The other items of the same tree leave the list at once.
+
 ## [0.4.0] - 2026-11-21
 
 This release changes the host (patches 0202–0205). Running terminals keep the old host until it restarts: the new one is applied the next time the host starts (tray **Encerrar tudo**, then open Beth Studio again). Before that, leave each Claude with `/exit` so **Retomar** can bring the sessions back.
