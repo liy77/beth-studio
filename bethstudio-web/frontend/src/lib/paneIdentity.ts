@@ -46,6 +46,8 @@ export interface PaneIdentityInput {
   screen?: string;
   /** Ferramenta gravada na aba, para o ícone continuar com a aba fechada. */
   stored?: string;
+  /** Agente pelo processo (pane_agents / agent_name): vence título tipo "Commit And Push". */
+  agent?: string;
 }
 
 export interface PaneIdentity {
@@ -53,17 +55,30 @@ export interface PaneIdentity {
   tool?: AgentTool;
 }
 
+/** Título de shell/usuário sem nome de chat — aí a aba mostra o agente. */
+function isGenericTitle(title: string): boolean {
+  const t = title.trim();
+  if (!t) return true;
+  if (/^(zsh|bash|sh|fish|pwsh|powershell|cmd|login)$/i.test(t)) return true;
+  if (/^(cursor(?: agent)?|grok|codex|claude(?: code)?|gemini)(?:\s+\d+)?$/i.test(t)) return true;
+  // "brian", "user" — um token curto, sem pasta; não é "Commit And Push".
+  if (!/\s/.test(t) && t.length <= 24 && /^[\w.-]+$/i.test(t)) return true;
+  return false;
+}
+
 /**
  * Nome e ícone de um terminal. A aba e a lista da barra lateral usam esta
- * função, então os dois lugares mostram a mesma coisa. Uma ferramenta
- * reconhecida vence o título do shell: um Codex cujo título é "brian"
- * aparece como "Codex".
+ * função, então os dois lugares mostram a mesma coisa. O ícone vem do
+ * agente (processo / tela); o nome do chat no título permanece — só some
+ * quando o título é genérico ("brian", "zsh") ou só o nome do agente.
  */
 export function paneIdentity(p: PaneIdentityInput, fallback: string): PaneIdentity {
+  const title = p.title?.trim() ?? "";
   const titleTool = toolInText(p.title);
-  const explicitTitle = titleTool && /^(cursor(?: agent)?|grok|codex|claude(?: code)?|gemini)(?:\s|$)/i.test(p.title?.trim() ?? "")
+  const explicitTitle = titleTool && /^(cursor(?: agent)?|grok|codex|claude(?: code)?|gemini)(?:\s|$)/i.test(title)
     ? titleTool : undefined;
   const tool =
+    (isAgentTool(p.agent) ? p.agent : undefined) ??
     explicitTitle ??
     (isAgentTool(p.tool) ? p.tool : undefined) ??
     (/^\s*Cursor Agent\b/im.test(p.screen ?? "") ? "cursor" : undefined) ??
@@ -71,8 +86,10 @@ export function paneIdentity(p: PaneIdentityInput, fallback: string): PaneIdenti
     toolInText(p.screen) ??
     titleTool ??
     toolInText(p.kind_label);
-  if (tool) return { name: displayName(tool), tool };
-  const title = p.title?.trim();
+  if (tool) {
+    if (title && !isGenericTitle(title)) return { name: title, tool };
+    return { name: displayName(tool), tool };
+  }
   if (title) return { name: title };
   return { name: fallback };
 }

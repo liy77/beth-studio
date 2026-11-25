@@ -94,12 +94,13 @@ export class Pending<T> {
   }
 }
 
-export type ShellKind = "powershell" | "cmd" | "wsl" | "gitbash" | "ssh" | "log" | "other";
+export type ShellKind = "powershell" | "cmd" | "wsl" | "container" | "gitbash" | "ssh" | "log" | "other";
 
 export function shellKind(id: string): ShellKind {
   if (id === "powershell" || id === "pwsh" || id.startsWith("powershell") || id.startsWith("pwsh")) return "powershell";
   if (id === "cmd") return "cmd";
   if (id.startsWith("wsl")) return "wsl";
+  if (id.startsWith("container")) return "container";
   if (id.startsWith("gitbash") || id.startsWith("git")) return "gitbash";
   if (id.startsWith("mobaxterm") || id.startsWith("ssh")) return "ssh";
   if (/(^|\.)(log|debug)(\.|$)/.test(id)) return "log"; // ex. "app.debug"
@@ -130,6 +131,9 @@ export function spawnCwd(cwdUri: string, shellId: string): string {
   const mnt = /^\/mnt\/([a-z])(\/.*)?$/.exec(path); // /mnt/c/x
   if (kind === "wsl") {
     if (winDrive) return `/mnt/${winDrive[1].toLowerCase()}${winDrive[2] ?? ""}`;
+    return path.startsWith("/") ? path : "";
+  }
+  if (kind === "container") {
     return path.startsWith("/") ? path : "";
   }
   if (kind === "log" || kind === "ssh" || kind === "other") return "";

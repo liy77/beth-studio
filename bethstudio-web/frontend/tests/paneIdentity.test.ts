@@ -30,3 +30,15 @@ test("Cursor ativo corrige um rótulo Grok guardado na aba", () => {
   assert.equal(paneIdentity({ title: "Cursor", stored: "grok", tool: "grok" }, "").tool, "cursor");
   assert.equal(paneIdentity({ title: "brian", stored: "grok", screen: "Cursor Agent\nGrok" }, "").tool, "cursor");
 });
+
+test("processo do agente define o ícone e mantém o nome do chat", () => {
+  const id = paneIdentity({ title: "Commit And Push 1", agent: "cursor" }, "Terminal 5");
+  assert.equal(id.name, "Commit And Push 1");
+  assert.equal(id.tool, "cursor");
+});
+
+test("título genérico com agente no processo vira o nome do agente", () => {
+  const id = paneIdentity({ title: "brian", agent: "cursor" }, "Terminal 5");
+  assert.equal(id.name, "Cursor");
+  assert.equal(id.tool, "cursor");
+});

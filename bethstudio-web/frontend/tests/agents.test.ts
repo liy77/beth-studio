@@ -44,6 +44,7 @@ test("tipo de shell pelo id", () => {
   assert.equal(shellKind("pwsh"), "powershell");
   assert.equal(shellKind("cmd"), "cmd");
   assert.equal(shellKind("wsl.ubuntu"), "wsl");
+  assert.equal(shellKind("container.exec.web"), "container");
   assert.equal(shellKind("gitbash"), "gitbash");
   assert.equal(shellKind("mobaxterm.local"), "ssh");
   assert.equal(shellKind("app.debug"), "log");
