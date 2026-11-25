@@ -324,8 +324,11 @@ export function routeTermLink(target: string, ctx: PaneLinkCtx): LinkRoute | nul
   // Pasta (barra no fim ou sem extensao): abre no Explorer. Num pane WSL o
   // caminho ja' vem como UNC do WSL (wsl.localhost, a distro e a pasta).
   if (/[\\/]$/.test(path) || !fileExtOf(path)) return { kind: "folder", path: path.length > 3 ? path.replace(/[\\/]+$/, "") : path };
-  if (localFileKind(path)) return { kind: "file", path };
+  // Script/programa antes do preview: .ps1/.js estão em TEXT_FILE_EXT (painel
+  // de arquivos edita), mas no terminal o clique só mostra na pasta — nunca
+  // abre/executa (FEATURES + DANGEROUS_EXT).
   if (isDangerousFilePath(path)) return { kind: "reveal", path };
+  if (localFileKind(path)) return { kind: "file", path };
   return { kind: "open", path };
 }
 
