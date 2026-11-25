@@ -13,7 +13,7 @@
 > When a user-facing feature is added, changed, or removed, update this
 > file in the same change (`.cursor/rules/features-catalog.mdc`).
 
-Last updated: 2026-11-24.
+Atualizado: 2026-11-25.
 
 ---
 
@@ -137,17 +137,19 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   recorded by folder and goes to the only terminal of that side in that
   folder (none if there are two). Only on the PC. Each resume goes to
   `host-life.log`.
-- 🟢 **Qual agente roda em cada terminal** (2026-11-21). A colored chip —
+- 🟢 **Qual agente roda em cada terminal** (Atualizado 2026-11-24). A colored chip —
   **Claude**, **Codex**, **OpenCode**, **Cursor**, **Grok**, **Gemini** — on
-  the terminal grid, the sidebar, the phone list and the phone grid, so a
+  the terminal grid, the sidebar, the tab bar, the phone list and the phone grid, so a
   free terminal is easy to spot. It comes from the processes, not the screen
-  (a screen that still shows `claude --resume …` is not counted, nor an agent
-  left running as a background server, like `codex app-server`): every 15 s
-  the Studio reads the Windows processes and, in each WSL distro that is
-  already running, `ps`; the terminal is the process's `WEZTERM_PANE` (in
-  WSL since patch 0205). A WSL terminal opened by an older host is matched
-  by folder, only for agents attached to a terminal, and only when the
-  number of such agents and terminals in that folder is the same. The
+  or the chat title (a tab named "Commit And Push" still shows **Cursor** when
+  `cursor-agent` is running there; a screen that still shows `claude --resume …`
+  is not counted, nor an agent left running as a background server, like
+  `codex app-server`): every 15 s the Studio reads processes on Windows (and
+  each WSL distro that is already running) and on macOS (`ps` +
+  `WEZTERM_PANE` from the process environment). The terminal is the process's
+  `WEZTERM_PANE` (in WSL since patch 0205). A WSL terminal opened by an older
+  host is matched by folder, only for agents attached to a terminal, and only
+  when the number of such agents and terminals in that folder is the same. The
   **Agentes** filter counts them and the search finds "codex", "grok"…; the
   phone **Modelo** key uses it too.
 - 🟢 **Processos deixados pelos agentes** (Atualizado 2026-11-22). Once a minute the
@@ -726,7 +728,18 @@ xterm screen. Remote access from the phone is not wired on the PC yet.
 - 🟢 **macOS** (Apple Silicon): the Studio opens in a native window, starts
   `bethstudio-host`, and keeps terminals after the window is closed
   (patch 0205). Serial ports, the Windows task manager, and the WSL gate
-  stay Windows-only.
+  stay Windows-only. On macOS the UI hides every WSL control (settings,
+  filters, task manager card, agent bridge, CPU-limit WSL option).
+- 🟢 **Apple Container no macOS** (2026-11-24, patch 0207). Where Windows
+  offers WSL, macOS offers [Apple Container](https://github.com/apple/container)
+  in **Novo terminal**: running containers (`container exec -it`) or images
+  (`container run --rm -it`). The sidebar groups them as **Container**. If the
+  CLI is installed but the service is down, a helper entry explains
+  `container system start`.
+- 🟢 **Instalador .dmg no macOS** (2026-11-24). `./pack-bethstudio-macos.sh`
+  builds the Studio (React + Go/WKWebView), packs `Beth Studio.app` with
+  host and CLI, writes `dist/macos/BethStudio-macOS.dmg`, and with
+  `--install` copies the app into `/Applications`.
 - ⚪ Linux builds of the Studio window.
 
 ---
