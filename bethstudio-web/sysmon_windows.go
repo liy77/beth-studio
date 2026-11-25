@@ -549,18 +549,6 @@ func (s *slowState) maybeWSL(vmRunning bool) {
 	}()
 }
 
-func safeDistroName(n string) bool {
-	if n == "" || len(n) > 64 || strings.HasPrefix(n, "-") {
-		return false
-	}
-	for _, r := range n {
-		if !(r == '-' || r == '_' || r == '.' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
-			return false
-		}
-	}
-	return true
-}
-
 func fileExists(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && !st.IsDir()

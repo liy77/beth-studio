@@ -4,8 +4,6 @@ package main
 
 import "fmt"
 
-var dbStandalone bool
-
 func openDBWindow() error {
 	return fmt.Errorf("a janela do banco só existe no Windows")
 }

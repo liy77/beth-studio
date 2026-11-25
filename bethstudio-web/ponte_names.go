@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // ponte_names.go — nomes dos agentes na ponte.

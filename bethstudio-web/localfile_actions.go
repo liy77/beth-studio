@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // localfile_actions.go — acoes do painel de preview de arquivo local (ver

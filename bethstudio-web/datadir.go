@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -15,6 +16,11 @@ func dataDir() string {
 		return v
 	}
 	base := os.Getenv("APPDATA")
+	if runtime.GOOS == "darwin" {
+		if home, err := os.UserHomeDir(); err == nil {
+			base = filepath.Join(home, "Library", "Application Support")
+		}
+	}
 	if base == "" {
 		if up := os.Getenv("USERPROFILE"); up != "" {
 			base = filepath.Join(up, "AppData", "Roaming")

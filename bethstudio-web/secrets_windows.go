@@ -143,14 +143,3 @@ func (s *secretStore) get(provider string, env []string) (key, source string) {
 	}
 	return "", ""
 }
-
-// maskKey: "••••1234" (nunca a chave inteira).
-func maskKey(k string) string {
-	if k == "" {
-		return ""
-	}
-	if len(k) <= 4 {
-		return "••••"
-	}
-	return "••••" + k[len(k)-4:]
-}

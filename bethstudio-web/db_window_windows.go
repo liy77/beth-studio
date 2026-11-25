@@ -23,14 +23,12 @@ import (
 )
 
 const (
-	dbWindowTitle = "Banco de dados"
 	dbWindowClass = "BethStudioWeb"
 	dbWindowMutex = "Local\\BethStudioDbWindow"
 	dbAppUserID   = "BethStudio.Database"
 )
 
 // dbStandalone: este processo é a janela do banco, não o Studio.
-var dbStandalone bool
 
 var (
 	procFindWindowW = user32.NewProc("FindWindowW")

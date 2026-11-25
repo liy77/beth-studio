@@ -81,3 +81,12 @@ func (s *server) serveSerial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "não encontrado", http.StatusNotFound)
 	}
 }
+
+type SerialPortInfo struct {
+	Port         string `json:"port"`
+	FriendlyName string `json:"friendly_name,omitempty"`
+	Manufacturer string `json:"manufacturer,omitempty"`
+	VID          string `json:"vid,omitempty"`
+	PID          string `json:"pid,omitempty"`
+	Serial       string `json:"serial_number,omitempty"`
+}
