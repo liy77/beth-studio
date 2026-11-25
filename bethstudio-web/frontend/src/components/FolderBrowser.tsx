@@ -175,7 +175,7 @@ export function FolderBrowser({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-start justify-center bg-black/40 pt-[6vh]"
+      className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[6vh] backdrop-blur-xl"
       onMouseDown={(e) => {
         // pode estar dentro de outro diálogo (Nova aba): o clique fora fecha só este
         e.stopPropagation();

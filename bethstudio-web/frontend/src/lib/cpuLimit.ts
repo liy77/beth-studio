@@ -50,14 +50,25 @@ export function percentHint(percent: number, total: number): string {
   return `${percent}% da CPU ≈ ${n} de ${total} núcleos`;
 }
 
-/** Descrição do estado atual para o popover. */
-export function statusText(l: CpuLimit): string {
+/** Descrição do estado atual para o popover. `host` força o rótulo (testes). */
+export function statusText(l: CpuLimit, host?: "mac" | "windows"): string {
   if (!l.percent) return l.restore ? "Voltando ao normal…" : "Sem limite: os terminais usam a CPU toda.";
   const when = l.until ? `até ${hhmm(l.until)}` : "até você remover";
   const parts = [`No máximo ${l.percent}% da CPU, ${when}.`];
-  const where = [`${l.applied_win} ${l.applied_win === 1 ? "processo" : "processos"} no Windows`];
-  if (l.wsl) where.push(`${l.applied_wsl} no WSL (${l.wsl_cores} núcleos)`);
-  parts.push(where.join(", ") + ".");
+  const n = l.applied_win;
+  const proc = `${n} ${n === 1 ? "processo" : "processos"}`;
+  const mac =
+    host === "mac" ||
+    (host !== "windows" &&
+      typeof navigator !== "undefined" &&
+      (/Mac|iPhone|iPad/.test(navigator.platform || "") || /Mac OS X/.test(navigator.userAgent || "")));
+  if (mac) {
+    parts.push(`${proc} no Mac.`);
+  } else {
+    const where = [`${proc} no Windows`];
+    if (l.wsl) where.push(`${l.applied_wsl} no WSL (${l.wsl_cores} núcleos)`);
+    parts.push(where.join(", ") + ".");
+  }
   return parts.join(" ");
 }
 

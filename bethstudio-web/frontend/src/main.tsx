@@ -45,6 +45,14 @@ if (mode === "sftp") {
       </React.StrictMode>,
     );
   });
+} else if (mode === "tasks") {
+  void import("./components/TaskWindowApp").then(({ TaskWindowApp }) => {
+    root.render(
+      <React.StrictMode>
+        <TaskWindowApp />
+      </React.StrictMode>,
+    );
+  });
 } else {
   boot("import app");
   void import("./App").then(({ App }) => {

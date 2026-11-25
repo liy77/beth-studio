@@ -2,6 +2,14 @@ import { useState } from "react";
 import type { Connection } from "@/lib/connection";
 import { isRemote } from "@/lib/remote";
 import { safeReleaseURL, updateButtons, type UpdateCheck } from "@/lib/updateOffer";
+import {
+  SettingsBtn,
+  SettingsGroup,
+  SettingsHint,
+  SettingsPanel,
+  SettingsRow,
+  SettingsSectionLabel,
+} from "./settings/SettingsUI";
 
 interface Prepared {
   path: string;
@@ -78,26 +86,23 @@ export function UpdateSection({ conn, readOnly }: { conn: Connection; readOnly: 
   }
 
   return (
-    <section className="space-y-2">
-      <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-text-2">Atualização</div>
-      <p className="text-[12px] text-text-2">
-        Consulta o último release publicado. Nada é instalado sem você escolher.
-      </p>
-      <button
-        type="button"
-        className="rounded bg-bg-hover px-3 py-1 text-[12px] text-text-1 hover:bg-border disabled:opacity-50"
-        disabled={busy !== null}
-        onClick={() => void check()}
-      >
-        {busy === "check" ? "Verificando…" : "Verificar atualização"}
-      </button>
+    <div>
+      <SettingsSectionLabel>Atualização</SettingsSectionLabel>
+      <SettingsHint className="mb-2">Consulta o último release publicado. Nada é instalado sem você escolher.</SettingsHint>
+      <SettingsGroup>
+        <SettingsRow label="Verificar">
+          <SettingsBtn disabled={busy !== null} onClick={() => void check()}>
+            {busy === "check" ? "Verificando…" : "Verificar atualização"}
+          </SettingsBtn>
+        </SettingsRow>
+      </SettingsGroup>
       {error && (
-        <p className="text-[12px] text-status-err" role="alert">
+        <p className="mt-2 text-[12px] text-status-err" role="alert">
           {error}
         </p>
       )}
       {result && (
-        <div className="space-y-2 rounded bg-bg-panel px-3 py-2">
+        <SettingsPanel className="mt-3 space-y-2">
           <p className="text-[12px] text-text-1" role="status">
             {result.message}
           </p>
@@ -112,14 +117,9 @@ export function UpdateSection({ conn, readOnly }: { conn: Connection; readOnly: 
           {buttons?.showUI && (
             <div className="space-y-1">
               <p className="text-[12px] text-text-2">A interface é trocada sem reiniciar o Studio nem o host.</p>
-              <button
-                type="button"
-                className="rounded bg-accent px-3 py-1 text-[12px] text-white hover:bg-accent-hover disabled:opacity-50"
-                disabled={busy !== null}
-                onClick={() => void applyUI()}
-              >
+              <SettingsBtn tone="accent" disabled={busy !== null} onClick={() => void applyUI()}>
                 {busy === "ui" ? "Instalando a interface…" : "Instalar só a interface"}
-              </button>
+              </SettingsBtn>
             </div>
           )}
           {installed && (
@@ -127,13 +127,9 @@ export function UpdateSection({ conn, readOnly }: { conn: Connection; readOnly: 
               <p className="text-[12px] text-text-1" role="status">
                 {installed}
               </p>
-              <button
-                type="button"
-                className="rounded bg-accent px-3 py-1 text-[12px] text-white hover:bg-accent-hover"
-                onClick={() => window.location.reload()}
-              >
+              <SettingsBtn tone="accent" onClick={() => window.location.reload()}>
                 Recarregar interface
-              </button>
+              </SettingsBtn>
             </div>
           )}
           {buttons?.showSetup && (
@@ -141,14 +137,9 @@ export function UpdateSection({ conn, readOnly }: { conn: Connection; readOnly: 
               <p className="text-[12px] text-text-2">
                 Atualizar o Studio e o host baixa o instalador. Abrir o instalador não encerra nada sozinho. A opção Encerrar tudo vem desmarcada. Se você marcá-la, o host encerra e os terminais abertos serão perdidos.
               </p>
-              <button
-                type="button"
-                className="rounded bg-bg-hover px-3 py-1 text-[12px] text-text-1 hover:bg-border disabled:opacity-50"
-                disabled={busy !== null}
-                onClick={() => void prepare()}
-              >
+              <SettingsBtn disabled={busy !== null} onClick={() => void prepare()}>
                 {busy === "setup" ? "Baixando o instalador…" : "Baixar o instalador (Studio e host)"}
-              </button>
+              </SettingsBtn>
             </div>
           )}
           {prepared && (
@@ -158,22 +149,12 @@ export function UpdateSection({ conn, readOnly }: { conn: Connection; readOnly: 
               </p>
               <p className="break-all font-mono text-[11px] text-text-2">{prepared.path}</p>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="rounded bg-bg-hover px-3 py-1 text-[12px] text-text-1 hover:bg-border disabled:opacity-50"
-                  disabled={busy !== null}
-                  onClick={() => void openSetup("reveal")}
-                >
+                <SettingsBtn disabled={busy !== null} onClick={() => void openSetup("reveal")}>
                   Mostrar na pasta
-                </button>
-                <button
-                  type="button"
-                  className="rounded bg-accent px-3 py-1 text-[12px] text-white hover:bg-accent-hover disabled:opacity-50"
-                  disabled={busy !== null}
-                  onClick={() => setConfirmLaunch(true)}
-                >
+                </SettingsBtn>
+                <SettingsBtn tone="accent" disabled={busy !== null} onClick={() => setConfirmLaunch(true)}>
                   Abrir o instalador
-                </button>
+                </SettingsBtn>
               </div>
               {confirmLaunch && (
                 <div className="space-y-2 bt-field bg-bg-card p-2">
@@ -181,28 +162,17 @@ export function UpdateSection({ conn, readOnly }: { conn: Connection; readOnly: 
                     Abrir o instalador agora? O Beth Studio não marca Encerrar tudo. Se você marcar essa opção no instalador, o host encerra e os terminais abertos serão perdidos.
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="rounded bg-accent px-3 py-1 text-[12px] text-white hover:bg-accent-hover disabled:opacity-50"
-                      disabled={busy !== null}
-                      onClick={() => void openSetup("launch")}
-                    >
+                    <SettingsBtn tone="accent" disabled={busy !== null} onClick={() => void openSetup("launch")}>
                       {busy === "open" ? "Abrindo…" : "Abrir o instalador"}
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded bg-bg-hover px-3 py-1 text-[12px] text-text-1 hover:bg-border"
-                      onClick={() => setConfirmLaunch(false)}
-                    >
-                      Agora não
-                    </button>
+                    </SettingsBtn>
+                    <SettingsBtn onClick={() => setConfirmLaunch(false)}>Agora não</SettingsBtn>
                   </div>
                 </div>
               )}
             </div>
           )}
-        </div>
+        </SettingsPanel>
       )}
-    </section>
+    </div>
   );
 }

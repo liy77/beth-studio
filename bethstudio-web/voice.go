@@ -7,7 +7,7 @@ package main
 // Padrao: DeepInfra (API compativel com OpenAI e rota nativa de
 // transcricao). Uma chave por provedor; as variaveis de ambiente de cada
 // provedor (DEEPINFRA_API_KEY, OPENAI_API_KEY...) servem de alternativa.
-// As chaves digitadas ficam cifradas com DPAPI (secrets_windows.go).
+// As chaves digitadas ficam em secrets.dat (no Windows, cifradas com DPAPI).
 //
 // Adaptadores: "openai" (compativel: /audio/transcriptions,
 // /chat/completions, /models), "azure" (deployments + api-version),
@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -197,7 +198,12 @@ const defaultCorrectionPrompt = "Você corrige textos ditados por voz e transcri
 
 const defaultVoicePrefix = "[Mensagem ditada por voz e transcrita automaticamente — pode conter erros de reconhecimento. Se algo parecer estranho ou ambíguo, pergunte antes de agir.]"
 
-const defaultVocabulary = "BethStudio\nWezTerm\nWSL\nPowerShell\nClaude Code"
+func defaultVocabulary() string {
+	if runtime.GOOS == "darwin" {
+		return "BethStudio\nzsh\nbash\nClaude Code"
+	}
+	return "BethStudio\nWezTerm\nWSL\nPowerShell\nClaude Code"
+}
 
 func (v VoiceSettings) withDefaults() VoiceSettings {
 	if v.STTProvider == "" {
@@ -823,7 +829,7 @@ func voiceSnapshot() map[string]any {
 			Configured: key != "" || !d.NeedsKey, Masked: maskKey(key), KeySource: src})
 	}
 	return map[string]any{"settings": v, "providers": provs, "default_prompt": defaultCorrectionPrompt,
-		"default_prefix": defaultVoicePrefix, "default_vocabulary": defaultVocabulary}
+		"default_prefix": defaultVoicePrefix, "default_vocabulary": defaultVocabulary()}
 }
 
 func (s *server) serveVoice(w http.ResponseWriter, r *http.Request) {

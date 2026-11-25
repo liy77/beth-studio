@@ -1,7 +1,34 @@
 import { AGENT_COMMAND, agentFolder } from "../src/lib/agents.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyAgent, cwdFromPickedFolder, explorerStart, Pending, requestIdFromError, shellKind, spawnCwd, waitingList, type AgentState } from "../src/lib/agents.ts";
+import {
+  agentChatPhase,
+  applyAgent,
+  cwdFromPickedFolder,
+  explorerStart,
+  Pending,
+  requestIdFromError,
+  shellKind,
+  spawnCwd,
+  titleLooksWorking,
+  waitingList,
+  type AgentState,
+} from "../src/lib/agents.ts";
+
+test("fase do chat: rodando / aguardando / pronto", () => {
+  assert.equal(titleLooksWorking("◐ Claude"), true);
+  assert.equal(titleLooksWorking("⠋ thinking"), true);
+  assert.equal(titleLooksWorking("Image Preview Chat"), false);
+  assert.equal(titleLooksWorking("Image Preview - ⏳ Working…"), true);
+  assert.equal(titleLooksWorking("Chat - ⌨️ Running shell command"), true);
+  assert.equal(agentChatPhase({ title: "◐ x", agentName: "Cursor" }), "running");
+  assert.equal(agentChatPhase({ title: "◐ x", agentName: "Cursor", waiting: true }), "waiting");
+  assert.equal(agentChatPhase({ title: "Apple Page", agentName: "Cursor" }), "ready");
+  assert.equal(agentChatPhase({ title: "Chat - ❓ Waiting for you", agentName: "Cursor" }), "waiting");
+  assert.equal(agentChatPhase({ title: "Image Preview", agentName: "Cursor", screen: "…\nctrl+c to stop\n" }), "running");
+  assert.equal(agentChatPhase({ title: "Image Preview", agentName: "Cursor", screen: "Add a follow-up" }), "ready");
+  assert.equal(agentChatPhase({ title: "◐ x" }), "none");
+});
 
 test("agente aguardando: marcar, contar, manter o 'desde', limpar", () => {
   let s: AgentState = {};

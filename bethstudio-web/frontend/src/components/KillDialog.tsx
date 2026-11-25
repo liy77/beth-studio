@@ -6,6 +6,7 @@ import type { AgentInfo } from "@/lib/agents";
 import { killConfirmed } from "@/lib/killFlow";
 import { paneLabel, shortCwd } from "@/lib/panes";
 import { KindIcon } from "./KindIcon";
+import { AppSheet, SettingsBtn, SettingsGroup, SettingsHint, SettingsPanel } from "./settings/SettingsUI";
 
 /**
  * "Encerrar / Matar / Reiniciar este terminal?" — Cancelar tem o foco; so' o
@@ -17,12 +18,18 @@ const TEXT: Record<KillMode, { title: string; button: string; body: string }> = 
   encerrar: {
     title: "Encerrar este terminal?",
     button: "Encerrar",
-    body: "O terminal e tudo o que ele abriu (agentes, servidores MCP, WSL) são encerrados no Beth Studio. Fechar a aba ou a visualização não faz isso — os terminais continuam rodando.",
+    body:
+      typeof navigator !== "undefined" && /Mac/.test(navigator.platform)
+        ? "O terminal e tudo o que ele abriu (agentes, servidores MCP) são encerrados no Beth Studio. Fechar a aba ou a visualização não faz isso — os terminais continuam rodando."
+        : "O terminal e tudo o que ele abriu (agentes, servidores MCP, WSL) são encerrados no Beth Studio. Fechar a aba ou a visualização não faz isso — os terminais continuam rodando.",
   },
   matar: {
     title: "Matar este terminal?",
     button: "Matar",
-    body: "O terminal e tudo o que ele abriu (agentes, servidores MCP, WSL) são encerrados no Beth Studio, e ele sai da aba. Se for o único da aba, a aba fecha.",
+    body:
+      typeof navigator !== "undefined" && /Mac/.test(navigator.platform)
+        ? "O terminal e tudo o que ele abriu (agentes, servidores MCP) são encerrados no Beth Studio, e ele sai da aba. Se for o único da aba, a aba fecha."
+        : "O terminal e tudo o que ele abriu (agentes, servidores MCP, WSL) são encerrados no Beth Studio, e ele sai da aba. Se for o único da aba, a aba fecha.",
   },
   reiniciar: {
     title: "Reiniciar este terminal?",
@@ -46,9 +53,7 @@ export function KillDialog({
   info: PaneInfo | undefined;
   agent: AgentInfo | undefined;
   mode?: KillMode;
-  /** "matar": depois do kill (tira da aba) */
   onKilled?: () => void;
-  /** "reiniciar": abre o novo e chama `end` para encerrar o antigo */
   onRestart?: (end: (pane: number) => boolean) => void;
   onClose: () => void;
 }) {
@@ -57,41 +62,25 @@ export function KillDialog({
   const isAgent = !!info?.agent || !!agent;
   const t = TEXT[mode];
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/50 pt-[14vh]" onMouseDown={onClose}>
-      <div
-        className="bt-dialog w-[min(480px,92vw)] border-status-err/50 p-4"
-        onMouseDown={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.key === "Escape" && onClose()}
-        role="alertdialog"
-        aria-modal="true"
-      >
-        <div className="mb-2 flex items-center gap-2 text-[15px] font-semibold text-text-1">
-          {mode === "reiniciar" ? <RotateCw size={16} className="text-status-err" /> : <Power size={16} className="text-status-err" />} {t.title}
-        </div>
-        <div className="mb-3 rounded bg-bg-panel p-2">
-          <div className="flex items-center gap-1.5 text-text-1">
-            {info && <KindIcon pane={info} />}
-            <span className="truncate">{info ? paneLabel(info) : `Terminal ${pane}`}</span>
-          </div>
-          {info?.cwd && <div className="truncate font-mono text-[11px] text-text-2">{shortCwd(info.cwd, 6)}</div>}
-          {info?.kind_label && <div className="text-[11px] text-text-3">{info.kind_label}</div>}
-        </div>
-        <p className="mb-2 text-[12px] text-text-2">{t.body}</p>
-        {(isAgent || agent) && (
-          <div className="mb-3 flex items-start gap-2 rounded border border-status-warn/50 bg-status-warn/10 p-2 text-[12px] text-text-1">
-            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-status-warn" />
-            <span>
-              {agent ? "Um agente neste terminal está aguardando sua resposta." : "Este terminal parece ter um agente de IA rodando."} O
-              trabalho em andamento será interrompido.
-            </span>
-          </div>
-        )}
-        <div className="flex justify-end gap-2">
-          <button ref={cancelRef} className="rounded bg-bg-hover px-4 py-1.5 text-text-1 hover:bg-border" onClick={onClose}>
+    <AppSheet
+      title={t.title}
+      icon={mode === "reiniciar" ? <RotateCw size={15} className="text-status-err" /> : <Power size={15} className="text-status-err" />}
+      onClose={onClose}
+      width="sm"
+      className="border-status-err/40"
+      footer={
+        <>
+          <div className="flex-1" />
+          <button
+            ref={cancelRef}
+            type="button"
+            className="bt-settings-btn"
+            onClick={onClose}
+          >
             Cancelar
           </button>
-          <button
-            className="rounded bg-[#DC2626] px-4 py-1.5 font-semibold text-white hover:bg-[#B91C1C]"
+          <SettingsBtn
+            tone="danger"
             onClick={() => {
               if (mode === "reiniciar") onRestart?.((p) => killConfirmed(conn, p));
               else {
@@ -102,9 +91,32 @@ export function KillDialog({
             }}
           >
             {t.button}
-          </button>
-        </div>
+          </SettingsBtn>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <SettingsGroup>
+          <div className="flex items-center gap-2 px-3.5 py-3">
+            {info && <KindIcon pane={info} />}
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] text-text-1">{info ? paneLabel(info) : `Terminal ${pane}`}</div>
+              {info?.cwd && <div className="truncate font-mono text-[11px] text-text-2">{shortCwd(info.cwd, 6)}</div>}
+              {info?.kind_label && <div className="text-[11px] text-text-3">{info.kind_label}</div>}
+            </div>
+          </div>
+        </SettingsGroup>
+        <SettingsHint>{t.body}</SettingsHint>
+        {(isAgent || agent) && (
+          <SettingsPanel className="flex items-start gap-2 border-status-warn/40 bg-status-warn/10">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-status-warn" />
+            <span className="text-[12px] text-text-1">
+              {agent ? "Um agente neste terminal está aguardando sua resposta." : "Este terminal parece ter um agente de IA rodando."} O
+              trabalho em andamento será interrompido.
+            </span>
+          </SettingsPanel>
+        )}
       </div>
-    </div>
+    </AppSheet>
   );
 }

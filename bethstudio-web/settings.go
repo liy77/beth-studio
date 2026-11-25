@@ -97,6 +97,8 @@ type webSettings struct {
 	SearchShortcut string `json:"search_shortcut,omitempty"`
 	// Atalhos da página, por id (search, new_tab, …). Vazio = o padrão.
 	Shortcuts map[string]string `json:"shortcuts,omitempty"`
+	// Pré-visualizar imagem antes de colar no terminal (nil = ligado).
+	PasteImagePreview *bool `json:"paste_image_preview,omitempty"`
 }
 
 type SidebarPrefs struct {
@@ -125,12 +127,14 @@ type SpawnedPane struct {
 type UITheme struct {
 	Mode    string `json:"mode"`
 	ThemeID string `json:"theme_id,omitempty"`
-	// Vibrancy: no macOS, a barra lateral deixa ver o material da janela
-	// (NSVisualEffectView). O Windows ignora.
+	// Vibrancy: material da barra lateral. No macOS é NSVisualEffectView
+	// (liquid glass nos controles). No Windows é Acrylic do DWM só atrás da
+	// sidebar — sem liquid glass; os botões ficam só meio translúcidos na página.
 	// Sem omitempty: false tem de ir na resposta. Omitido, o cliente trata
 	// como “ainda não carregou” e o localStorage religa o material.
 	Vibrancy bool `json:"vibrancy"`
 	// Glass é a potência do véu do liquid glass no macOS, de 15 a 100. 0 vale 55.
+	// No Windows (Acrylic) os sliders não aparecem.
 	Glass int `json:"glass,omitempty"`
 	// GlassAlpha é a transparência do liquid glass, de 15 a 100. 0 vale 70.
 	GlassAlpha int `json:"glass_alpha,omitempty"`
@@ -156,6 +160,8 @@ type SettingsSnapshot struct {
 	// Atalho da busca. Vazio = padrão do sistema.
 	SearchShortcut string `json:"search_shortcut,omitempty"`
 	Shortcuts      map[string]string `json:"shortcuts,omitempty"`
+	// Pré-visualizar imagem antes de colar. Ausente no JSON antigo = ligado.
+	PasteImagePreview bool `json:"paste_image_preview"`
 }
 
 type paneMeta struct{ title, cwd string }
@@ -443,7 +449,17 @@ func (st *settingsStore) snapshotLocked() SettingsSnapshot {
 	if snap.ThemeFavorites == nil {
 		snap.ThemeFavorites = []string{}
 	}
+	// Ausente ou true = ligado (padrão); só false desliga.
+	snap.PasteImagePreview = st.s.PasteImagePreview == nil || *st.s.PasteImagePreview
 	return snap
+}
+
+// setPasteImagePreview liga/desliga a pré-visualização ao colar imagem.
+func (st *settingsStore) setPasteImagePreview(on bool) (SettingsSnapshot, error) {
+	return st.mutate(func() error {
+		st.s.PasteImagePreview = &on
+		return st.saveLocked()
+	})
 }
 
 // paneValidLocked: same host => trust the id; other host => title or cwd
@@ -794,7 +810,8 @@ func (st *settingsStore) setShortcut(id, s string) (SettingsSnapshot, error) {
 	})
 }
 
-// setVibrancy liga o material da barra lateral no macOS. Não mexe no tema.
+// setVibrancy liga o material da barra lateral (Vibrancy no macOS, Acrylic
+// no Windows). Não mexe no tema.
 func (st *settingsStore) setVibrancy(on bool) (SettingsSnapshot, error) {
 	return st.mutate(func() error {
 		u := UITheme{Mode: "dark"}

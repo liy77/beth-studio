@@ -10,14 +10,22 @@ import { KIND_LABEL, SHELL_ICON } from "./NewTerminalDialog";
 import { cn } from "@/lib/utils";
 import type { ToolKind } from "./SshScreen";
 
-const COLUMNS: { kind: ShellKind; title: string }[] = [
+const COLUMNS_ALL: { kind: ShellKind; title: string }[] = [
   { kind: "other", title: "Shell" },
+  { kind: "container", title: "Container" },
   { kind: "wsl", title: "Linux" },
   { kind: "powershell", title: "PowerShell" },
   { kind: "cmd", title: "Prompt" },
   { kind: "gitbash", title: "Git" },
   { kind: "ssh", title: "Remoto" },
 ];
+
+const MAC_HIDE: ShellKind[] = ["wsl", "powershell", "cmd", "gitbash"];
+
+function boardColumns(): { kind: ShellKind; title: string }[] {
+  const mac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+  return mac ? COLUMNS_ALL.filter((c) => !MAC_HIDE.includes(c.kind)) : COLUMNS_ALL.filter((c) => c.kind !== "container");
+}
 
 interface Props {
   conn: Connection;
@@ -44,7 +52,7 @@ export function EmptyTabBoard({ conn, shells, panes, readOnly, dragging, onDrop,
     const k = shellKind(s.id);
     grouped.set(k, [...(grouped.get(k) ?? []), s]);
   }
-  const columns = COLUMNS.filter((c) => (grouped.get(c.kind) ?? []).length > 0);
+  const columns = boardColumns().filter((c) => (grouped.get(c.kind) ?? []).length > 0);
   if (columns.length === 0 && !readOnly) columns.push({ kind: "other", title: "Shell" });
 
   const open = (s: ShellInfo) => {
@@ -70,8 +78,8 @@ export function EmptyTabBoard({ conn, shells, panes, readOnly, dragging, onDrop,
       }}
     >
       <div>
-        <div className="text-[15px] font-semibold text-text-1">O que abrir nesta aba</div>
-        <div className="text-[12px] text-text-3">As mesmas opções do botão de nova aba. Ou arraste um terminal para cá.</div>
+        <div className="bt-settings-page__title text-[22px]">O que abrir nesta aba</div>
+        <div className="bt-settings-page__sub">As mesmas opções do botão de nova aba. Ou arraste um terminal para cá.</div>
       </div>
       <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
         {columns.map((c) => (
@@ -81,25 +89,32 @@ export function EmptyTabBoard({ conn, shells, panes, readOnly, dragging, onDrop,
               return (
                 <button
                   key={s.id}
-                  className="flex items-center gap-2 rounded-lg bg-bg-card px-2.5 py-2 text-left hover:bg-bg-hover disabled:opacity-50"
+                  type="button"
+                  className="bt-settings-choice w-full disabled:opacity-50"
                   disabled={readOnly || busy !== null}
                   onClick={() => open(s)}
                 >
-                  {busy === s.id ? <Loader2 size={15} className="shrink-0 animate-spin text-accent-text" /> : <Icon size={15} className="shrink-0 text-accent-text" />}
-                  <span className="min-w-0 truncate text-[13px] text-text-1">{s.label}</span>
+                  <span className="bt-settings-choice__icon flex items-center gap-2">
+                    {busy === s.id ? <Loader2 size={15} className="animate-spin" /> : <Icon size={15} />}
+                    <span className="bt-settings-choice__title truncate">{s.label}</span>
+                  </span>
                 </button>
               );
             })}
           </Column>
         ))}
         <Column title="Conectar" count={2}>
-          <button className="flex items-center gap-2 rounded-lg bg-bg-card px-2.5 py-2 text-left hover:bg-bg-hover" onClick={() => onOpenTools("ssh")}>
-            <Server size={15} className="shrink-0 text-accent-text" />
-            <span className="text-[13px] text-text-1">SSH…</span>
+          <button type="button" className="bt-settings-choice w-full" onClick={() => onOpenTools("ssh")}>
+            <span className="bt-settings-choice__icon flex items-center gap-2">
+              <Server size={15} />
+              <span className="bt-settings-choice__title">SSH…</span>
+            </span>
           </button>
-          <button className="flex items-center gap-2 rounded-lg bg-bg-card px-2.5 py-2 text-left hover:bg-bg-hover" onClick={() => onOpenTools("serial")}>
-            <Cable size={15} className="shrink-0 text-accent-text" />
-            <span className="text-[13px] text-text-1">Serial…</span>
+          <button type="button" className="bt-settings-choice w-full" onClick={() => onOpenTools("serial")}>
+            <span className="bt-settings-choice__icon flex items-center gap-2">
+              <Cable size={15} />
+              <span className="bt-settings-choice__title">Serial…</span>
+            </span>
           </button>
         </Column>
         {(panes ?? []).length > 0 && (
@@ -107,15 +122,13 @@ export function EmptyTabBoard({ conn, shells, panes, readOnly, dragging, onDrop,
             {(panes ?? []).map((p) => {
               const tool = isAgentTool(p.tool) ? p.tool : toolInText(paneLabel(p));
               return (
-                <button
-                  key={p.pane_id}
-                  className="flex items-center gap-2 rounded-lg bg-bg-card px-2.5 py-2 text-left hover:bg-bg-hover"
-                  onClick={() => onOpen(p.pane_id)}
-                >
-                  {isAgentTool(tool) ? <ToolIcon tool={tool} size={15} /> : <TerminalSquare size={15} className="shrink-0 text-text-3" />}
-                  <span className="min-w-0">
-                    <span className="block truncate text-[13px] text-text-1">{paneLabel(p)}</span>
-                    <span className="block truncate text-[10px] text-text-3">{p.kind_label || "terminal"}</span>
+                <button key={p.pane_id} type="button" className="bt-settings-choice w-full" onClick={() => onOpen(p.pane_id)}>
+                  <span className="bt-settings-choice__icon flex items-center gap-2">
+                    {isAgentTool(tool) ? <ToolIcon tool={tool} size={15} /> : <TerminalSquare size={15} />}
+                    <span className="min-w-0">
+                      <span className="bt-settings-choice__title block truncate">{paneLabel(p)}</span>
+                      <span className="bt-settings-choice__sub block truncate">{p.kind_label || "terminal"}</span>
+                    </span>
                   </span>
                 </button>
               );
@@ -130,10 +143,10 @@ export function EmptyTabBoard({ conn, shells, panes, readOnly, dragging, onDrop,
 
 function Column({ title, count, children }: { title: string; count: number; children: ReactNode }) {
   return (
-    <section className="flex w-56 shrink-0 flex-col gap-1.5 rounded-lg bg-bg-panel/70 p-2">
-      <div className="flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-text-3">
+    <section className="bt-settings-panel flex w-56 shrink-0 flex-col gap-1.5 !p-2">
+      <div className="bt-settings-label flex items-center gap-1.5 !mx-1 !mb-0">
         {title}
-        <span className="ml-auto font-normal">{count}</span>
+        <span className="ml-auto font-normal normal-case tracking-normal">{count}</span>
       </div>
       {children}
     </section>

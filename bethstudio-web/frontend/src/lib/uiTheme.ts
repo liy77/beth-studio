@@ -57,7 +57,8 @@ export const LIGHT: UIColors = {
   "bg-body": "#F7F7F4",
   "bg-panel": "#FFFFFF",
   "bg-card": "#FFFFFF",
-  "bg-hover": "#F1F2EE",
+  // Antes #F1F2EE — quase branco, hover dos botões sumia.
+  "bg-hover": "#E2E5DE",
   "bg-term": "#FFFFFF",
   "text-1": "#0F1729",
   "text-2": "#5B6478",

@@ -72,7 +72,7 @@ export function AgentProcsBell({
   return (
     <div ref={box} className="relative shrink-0 self-center" data-no-drag>
       <button
-        className="relative flex h-6 w-8 items-center justify-center rounded text-status-warn hover:bg-bg-hover"
+        className="bt-tab-tool relative text-status-warn"
         title={`${items.length} ${items.length === 1 ? "processo deixado" : "processos deixados"} pelos agentes rodando há muito tempo`}
         aria-label="Processos deixados pelos agentes"
         aria-expanded={open}
@@ -87,7 +87,7 @@ export function AgentProcsBell({
           setOpen((v) => !v);
         }}
       >
-        <Bell size={15} />
+        <Bell size={15} strokeWidth={2} />
         <span className="absolute -right-0.5 -top-0.5 min-w-[15px] rounded-full bg-status-warn px-1 text-center text-[10px] font-bold leading-[15px] text-black">
           {items.length}
         </span>

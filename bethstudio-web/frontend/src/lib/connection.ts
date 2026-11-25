@@ -8,6 +8,7 @@ import type { RestoreEvent } from "./restoreBanner";
 import type { ResumeOffer } from "./agentResume";
 import type { AgentProc } from "./agentProcs";
 import type { CpuLimit } from "./cpuLimit";
+import type { RamLimit } from "./ramLimit";
 import { withAgentNames } from "./agentNames";
 
 // Conexao WebSocket com o backend Go. Um unico socket por pagina; as telas
@@ -40,6 +41,8 @@ export interface ConnectionSnapshot {
   agentProcs: AgentProc[];
   /** limite de CPU dos terminais (cpu_limit.go; null = ainda sem informação) */
   cpuLimit: CpuLimit | null;
+  /** limite de RAM dos terminais (ram_limit.go; null = ainda sem informação) */
+  ramLimit: RamLimit | null;
 }
 
 function readParams() {
@@ -89,6 +92,7 @@ export class Connection {
     resumeOffers: [],
     agentProcs: [],
     cpuLimit: null,
+    ramLimit: null,
   };
   private spawns = new Pending<SpawnedEvent>();
   private watchPaused = false;
@@ -305,6 +309,9 @@ export class Connection {
           break;
         case "cpu_limit":
           this.patch({ cpuLimit: ev.limit });
+          break;
+        case "ram_limit":
+          this.patch({ ramLimit: ev.limit });
           break;
         case "ui_open":
           if (ev.what === "reload") {

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, Folder, FolderGit2, GitBranch, GitCompareArrows, Loader2, PanelRightClose, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronRight, Folder, FolderGit2, GitBranch, GitCompareArrows, Loader2, PanelRightClose, RefreshCw, Search, X } from "lucide-react";
 import { FileKindIcon } from "./FileKindIcon";
 import type { Connection } from "@/lib/connection";
-import { changeAbsPath, changeCounts, joinFolder, splitRel, type WorktreeChange } from "@/lib/worktree";
+import { changeAbsPath, changeCounts, joinFolder, splitRel, statusLabel, statusMark, type WorktreeChange } from "@/lib/worktree";
 import { cn } from "@/lib/utils";
 
 // Sidebar da direita de UMA guia. A pasta é a do terminal em foco nessa
@@ -21,12 +21,35 @@ const STATUS_COLOR: Record<string, string> = {
   renomeado: "text-accent-text",
 };
 
+function nameMatches(name: string, q: string) {
+  return !q || name.toLowerCase().includes(q);
+}
+
+/** Ícone/letra do status git (M, U, A…); o title traz o nome em português. */
+function StatusBadge({ status, className }: { status: string; className?: string }) {
+  const label = statusLabel(status);
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[11px] font-semibold leading-none",
+        STATUS_COLOR[status] ?? "text-text-3",
+        className,
+      )}
+      title={label}
+      aria-label={label}
+    >
+      {statusMark(status)}
+    </span>
+  );
+}
+
 export function WorktreePanel({
   conn,
   folder,
   folderLabel,
   onClose,
   onOpenFile,
+  onOpenDiff,
 }: {
   conn: Connection;
   /** pasta do terminal em foco, caminho que o Go abre; "" = a guia não tem pasta */
@@ -34,12 +57,15 @@ export function WorktreePanel({
   folderLabel: string;
   onClose: () => void;
   onOpenFile: (path: string) => void;
+  /** clique em Mudanças: abre o diff vs HEAD */
+  onOpenDiff?: (path: string, status: string) => void;
 }) {
   const [list, setList] = useState<Listing | null>(null);
   const [open, setOpen] = useState<Record<string, Entry[] | "loading" | "err">>({});
   const [git, setGit] = useState<GitInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"arquivos" | "git">("arquivos");
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     if (!folder) {
@@ -68,6 +94,7 @@ export function WorktreePanel({
     setOpen({});
     setList(null);
     setGit(null);
+    setQuery("");
     void load();
   }, [load]);
 
@@ -96,41 +123,96 @@ export function WorktreePanel({
     }
   };
 
+  const q = query.trim().toLowerCase();
   const counts = changeCounts(git?.changes ?? []);
   const name = folderLabel || folder;
-
   const shortName = name.split(/[\\/]/).filter(Boolean).pop() || name;
+
+  const fileEntries = useMemo(() => {
+    if (!list) return [];
+    if (!q) return list.entries;
+    return list.entries.filter((e) => nameMatches(e.name, q));
+  }, [list, q]);
+
+  const gitChanges = useMemo(() => {
+    if (!git) return [];
+    if (!q) return git.changes;
+    return git.changes.filter((c) => {
+      const { name: base } = splitRel(c.path);
+      return nameMatches(base, q) || nameMatches(c.path, q);
+    });
+  }, [git, q]);
 
   return (
     <aside className="bt-worktree flex h-full w-full flex-col rounded-xl border border-border bg-bg-panel text-[12.5px] text-text-1">
-      <div className="flex h-11 shrink-0 items-center gap-2 px-3">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-bg-card text-text-2">
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-2">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-bg-hover text-text-2">
           <FolderGit2 size={14} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium leading-4" title={folder || "Esta guia não tem pasta"}>
+          <span className="block truncate text-[13px] font-medium leading-4 text-text-1" title={folder || "Esta guia não tem pasta"}>
             {shortName || "Sem pasta"}
           </span>
           {folder && name !== shortName && <span className="block truncate text-[10px] leading-3 text-text-3">{name}</span>}
         </span>
-        <button className="rounded-md p-1.5 text-text-2 hover:bg-bg-hover hover:text-text-1" title="Atualizar" onClick={() => void load()}>
+        <button
+          type="button"
+          className="bt-worktree-btn flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg text-text-2 hover:bg-bg-hover hover:text-text-1"
+          title="Atualizar"
+          onClick={() => void load()}
+        >
           <RefreshCw size={13} />
         </button>
-        <button className="rounded-md p-1.5 text-text-2 hover:bg-bg-hover hover:text-text-1" title="Fechar a pasta desta guia" onClick={onClose}>
+        <button
+          type="button"
+          className="bt-worktree-btn flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg text-text-2 hover:bg-bg-hover hover:text-text-1"
+          title="Fechar a pasta desta guia"
+          onClick={onClose}
+        >
           <PanelRightClose size={14} />
         </button>
       </div>
-      <div className="mx-3 mb-1 flex shrink-0 gap-1 rounded-lg bg-bg-card p-0.5">
+      {/* Busca: mesmas proporções da esquerda, cores do tema (claro/escuro). */}
+      {folder && (
+        <div className="border-b border-border px-2 py-2">
+          <div className="bt-search flex items-center gap-1.5 rounded-2xl border border-border bg-bg-hover px-3 focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/35">
+            <Search size={14} className="shrink-0 text-text-2" aria-hidden />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+              placeholder={tab === "arquivos" ? "Buscar arquivo ou pasta" : "Buscar mudança"}
+              className="h-8 min-w-0 flex-1 bg-transparent text-[13px] text-text-1 outline-none placeholder:text-text-3"
+              aria-label={tab === "arquivos" ? "Buscar arquivo ou pasta" : "Buscar mudança"}
+            />
+            {query && (
+              <button
+                type="button"
+                className="shrink-0 rounded-full p-0.5 text-text-3 hover:bg-bg-card hover:text-text-1"
+                title="Limpar busca"
+                onClick={() => setQuery("")}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      <div className="mx-2 mt-2 mb-1 flex shrink-0 gap-0.5 rounded-lg bg-bg-hover p-0.5">
         {(["arquivos", "git"] as const).map((id) => (
           <button
             key={id}
+            type="button"
             className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-[12px] text-text-2 transition-colors hover:text-text-1",
-              tab === id && "bg-bg-hover text-text-1 shadow-sm",
+              "flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors",
+              tab === id
+                ? "bg-bg-card font-semibold text-text-1 shadow-sm ring-1 ring-border"
+                : "text-text-2 hover:text-text-1",
             )}
             onClick={() => setTab(id)}
           >
-            {id === "arquivos" ? <Folder size={13} className="shrink-0" aria-hidden /> : <GitCompareArrows size={13} className="shrink-0" aria-hidden />}
+            {id === "arquivos" ? <Folder size={12} className="shrink-0" aria-hidden /> : <GitCompareArrows size={12} className="shrink-0" aria-hidden />}
             {id === "arquivos" ? "Arquivos" : `Mudanças${git?.changes.length ? ` · ${git.changes.length}` : ""}`}
           </button>
         ))}
@@ -143,14 +225,17 @@ export function WorktreePanel({
         <div className="min-h-0 flex-1 overflow-auto py-1">
           {!list ? (
             <Loader2 size={14} className="m-3 animate-spin text-text-3" />
+          ) : fileEntries.length === 0 ? (
+            <p className="px-3 py-4 text-text-3">{q ? "Nenhum arquivo com esse nome." : "Pasta vazia."}</p>
           ) : (
-            list.entries.map((e) => (
+            fileEntries.map((e) => (
               <TreeRow
                 key={e.name}
                 entry={e}
                 path={joinFolder(list.path, e.name)}
                 depth={0}
                 open={open}
+                query={q}
                 onToggle={toggle}
                 onOpenFile={onOpenFile}
               />
@@ -167,31 +252,44 @@ export function WorktreePanel({
             <>
               <div className="mx-2 mb-1 flex items-center gap-1.5 rounded-md bg-bg-card px-2 py-1.5 text-[11px] text-text-2">
                 <GitBranch size={12} className="shrink-0" />
-                <span className="truncate font-medium text-text-1" title={git.root}>{git.branch || "git"}</span>
+                <span className="min-w-0 truncate font-medium text-text-1" title={git.root}>{git.branch || "git"}</span>
                 {counts.map((c) => (
-                  <span key={c.status} className={STATUS_COLOR[c.status] ?? "text-text-2"}>
-                    {c.n} {c.status}{c.n > 1 ? "s" : ""}
+                  <span
+                    key={c.status}
+                    className={cn("inline-flex shrink-0 items-center gap-0.5 tabular-nums", STATUS_COLOR[c.status] ?? "text-text-2")}
+                    title={`${c.n} ${statusLabel(c.status).toLowerCase()}${c.n > 1 ? "s" : ""}`}
+                  >
+                    <StatusBadge status={c.status} className="h-4 w-4 text-[10px]" />
+                    {c.n}
                   </span>
                 ))}
               </div>
               {git.changes.length === 0 ? (
                 <p className="px-3 py-2 text-text-3">Nenhuma mudança nesta pasta.</p>
+              ) : gitChanges.length === 0 ? (
+                <p className="px-3 py-2 text-text-3">Nenhuma mudança com esse nome.</p>
               ) : (
-                git.changes.map((c) => {
-                  const { dir, name } = splitRel(c.path);
+                gitChanges.map((c) => {
+                  const { dir, name: base } = splitRel(c.path);
                   const abs = changeAbsPath(folder, c.path);
+                  const label = statusLabel(c.status);
                   return (
                     <button
                       key={c.path}
+                      type="button"
                       className="mx-1.5 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-md px-1.5 py-1 text-left hover:bg-bg-hover disabled:hover:bg-transparent"
-                      title={c.path}
-                      disabled={!abs || c.status === "apagado"}
-                      onClick={() => abs && onOpenFile(abs)}
+                      title={`${label}: ${c.path} — clique para ver o diff`}
+                      disabled={!abs}
+                      onClick={() => {
+                        if (!abs) return;
+                        if (onOpenDiff) onOpenDiff(abs, c.status);
+                        else onOpenFile(abs);
+                      }}
                     >
-                      <span className={cn("w-14 shrink-0 text-[10px]", STATUS_COLOR[c.status] ?? "text-text-3")}>{c.status}</span>
-                      <FileKindIcon name={name} size={18} />
+                      <StatusBadge status={c.status} />
+                      <FileKindIcon name={base} size={18} />
                       <span className="min-w-0 flex-1 truncate text-text-1">
-                        {name}
+                        {base}
                         {dir && <span className="text-text-3"> {dir}</span>}
                       </span>
                     </button>
@@ -212,6 +310,7 @@ function TreeRow({
   path,
   depth,
   open,
+  query,
   onToggle,
   onOpenFile,
 }: {
@@ -219,14 +318,21 @@ function TreeRow({
   path: string;
   depth: number;
   open: Record<string, Entry[] | "loading" | "err">;
+  query: string;
   onToggle: (path: string) => void;
   onOpenFile: (path: string) => void;
 }) {
   const state = open[path];
   const expanded = Array.isArray(state);
+  const children = expanded
+    ? query
+      ? state.filter((e) => nameMatches(e.name, query))
+      : state
+    : [];
   return (
     <>
       <button
+        type="button"
         className="mx-1.5 flex w-[calc(100%-12px)] items-center gap-1 rounded-md py-1 pr-2 text-left hover:bg-bg-hover"
         style={{ paddingLeft: 8 + depth * 12 }}
         title={path}
@@ -242,13 +348,14 @@ function TreeRow({
         {state === "loading" && <Loader2 size={11} className="animate-spin text-text-3" />}
       </button>
       {expanded &&
-        state.map((e) => (
+        children.map((e) => (
           <TreeRow
             key={e.name}
             entry={e}
             path={joinFolder(path, e.name)}
             depth={depth + 1}
             open={open}
+            query={query}
             onToggle={onToggle}
             onOpenFile={onOpenFile}
           />

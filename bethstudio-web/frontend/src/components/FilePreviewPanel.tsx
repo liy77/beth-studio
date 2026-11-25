@@ -347,16 +347,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
     return () => document.removeEventListener("selectionchange", onSel);
   }, []);
 
-  useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    window.addEventListener("mousedown", close);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("blur", close);
-    };
-  }, [menu]);
+  // Fechar: GlassMenu (clique fora / Esc). blur do WebView no Mac fecha o menu cedo demais.
 
   const html = useMemo(
     () => (doc.phase === "text" && doc.markdown ? renderMarkdownSafe(draft ?? doc.raw, { filePath: path }) : ""),
@@ -814,7 +805,11 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
           </IconButton>
           {!REMOTE && !untitled && (
             <>
-              <IconButton label="Abrir com o editor padrão do Windows" onClick={openDefault} disabled={doc.phase === "error" || doc.phase === "loading"}>
+              <IconButton
+                label={/Mac/.test(navigator.platform) ? "Abrir com o app padrão do Mac" : "Abrir com o editor padrão do Windows"}
+                onClick={openDefault}
+                disabled={doc.phase === "error" || doc.phase === "loading"}
+              >
                 <ExternalLink size={15} />
               </IconButton>
               <IconButton label="Mostrar na pasta (Explorer)" onClick={reveal} disabled={doc.phase === "error" || doc.phase === "loading"}>

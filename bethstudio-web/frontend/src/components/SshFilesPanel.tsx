@@ -309,7 +309,7 @@ export function SshFilesPanel({ conn, host, readOnly, onBack }: { conn: SshApiCl
         </SshConfirm>
       )}
       {(pending?.kind === "mkdir" || pending?.kind === "rename") && (
-        <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[16vh]" onMouseDown={() => setPending(null)}>
+        <div className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[16vh] backdrop-blur-xl" onMouseDown={() => setPending(null)}>
           <form
             className="w-[min(420px,92vw)] bt-dialog p-4"
             onMouseDown={(e) => e.stopPropagation()}

@@ -20,6 +20,7 @@ import { RestoreBanner } from "@/components/RestoreBanner";
 import { ResumeBanner } from "@/components/ResumeBanner";
 import { AgentProcsBell } from "@/components/AgentProcsBanner";
 import { CpuLimitButton } from "@/components/CpuLimitButton";
+import { RamLimitButton } from "@/components/RamLimitButton";
 import { restoreBanner } from "@/lib/restoreBanner";
 import { GoneLeaf, SplitView } from "@/components/SplitView";
 import { PaneMenu, type PaneMenuActions } from "@/components/PaneMenu";
@@ -28,24 +29,25 @@ import { TerminalGrid } from "@/components/TerminalGrid";
 import type { ResultActions } from "@/components/SearchResults";
 import { useSearch } from "@/lib/useSearch";
 import { SettingsDialog, type SettingsSection } from "@/components/SettingsDialog";
+import { TaskManager } from "@/components/TaskManager";
 import { NewTerminalDialog } from "@/components/NewTerminalDialog";
 import { EmptyTabBoard } from "@/components/EmptyTabBoard";
 import { SplitShellMenu } from "@/components/SplitShellMenu";
-import { TaskManager } from "@/components/TaskManager";
 import { FilePreviewPanel } from "@/components/FilePreviewPanel";
+import { GitDiffPanel } from "@/components/GitDiffPanel";
 import { FolderBrowser, type FolderBrowserMode } from "@/components/FolderBrowser";
 import { UNTITLED_PATH } from "@/lib/folderBrowser";
 import { StartupOverlay } from "@/components/StartupOverlay";
 import { resolveLinkPath } from "@/lib/localFile";
 import { paneFolder } from "@/lib/worktree";
-import { nativeGlassPlates, toggleFolderPanel } from "@/lib/sidebarFrame";
+import { glassPlateFields, nativeGlassPlates, toggleFolderPanel } from "@/lib/sidebarFrame";
 import { shellVibrancyOn } from "@/lib/appearanceTune";
 import { installLinkGuard } from "@/lib/links";
 import { SshScreen, type ToolKind } from "@/components/SshScreen";
 import { TopResizeEdges } from "@/components/WindowControls";
 import { AppTitle } from "@/components/AppTitle";
 import { TooltipLayer } from "@/components/TooltipLayer";
-import { dragMacWindow, isMacTitlebar, useWindowState, zoomMacWindow } from "@/lib/windowFrame";
+import { dragMacWindow, isMacTitlebar, isWinAcrylicHost, useWindowState, winCommand, zoomMacWindow } from "@/lib/windowFrame";
 import { isRemote, openRemoteTab } from "@/lib/remote";
 import { RemoteConnectedBadge } from "@/components/RemoteStudioSection";
 import { returnFocus, withTabFocus } from "@/lib/termFocus";
@@ -297,6 +299,7 @@ export function App() {
     });
   };
   const [filePreviewPath, setFilePreviewPath] = useState<string | null>(null);
+  const [gitDiff, setGitDiff] = useState<{ path: string; folder: string } | null>(null);
   // arquivo recém-criado: o painel já abre em "Editar"
   const [editPath, setEditPath] = useState<string | null>(null);
   const [browser, setBrowser] = useState<{ mode: FolderBrowserMode; initial: string; content?: string } | null>(null);
@@ -412,10 +415,39 @@ export function App() {
     return live.some((l) => l.leaf.pane === f) ? f : (live[0]?.leaf.pane ?? null);
   })();
 
-  // Observa so' os terminais visiveis (aba ativa).
+  // Visíveis na aba ativa + panes com agente (pra fase rodando/pronto na lista
+  // lateral, mesmo com o terminal noutra aba — lê "ctrl+c to stop" na tela).
+  const agentPaneIds = useMemo(
+    () =>
+      (snap.panes ?? [])
+        .filter((p) => p.agent_name || p.agent)
+        .map((p) => p.pane_id)
+        .sort((a, b) => a - b),
+    [snap.panes],
+  );
+  const [agentScreenRev, setAgentScreenRev] = useState(0);
+  const agentWorkingRef = useRef<Record<number, boolean>>({});
   useEffect(() => {
-    conn.setWatched(activeLeaves.filter((l) => !l.leaf.gone && paneById.has(l.leaf.pane)).map((l) => l.leaf.pane));
-  }, [activeLeaves, paneById]);
+    const visible = activeLeaves.filter((l) => !l.leaf.gone && paneById.has(l.leaf.pane)).map((l) => l.leaf.pane);
+    conn.setWatched([...new Set([...visible, ...agentPaneIds])]);
+  }, [activeLeaves, paneById, agentPaneIds]);
+  useEffect(() => {
+    let t = 0;
+    const stops = agentPaneIds.map((id) =>
+      conn.onScreen(id, (s) => {
+        const working = /ctrl\+c to stop/i.test(s.text.length > 2400 ? s.text.slice(-2400) : s.text);
+        if (agentWorkingRef.current[id] === working) return;
+        agentWorkingRef.current[id] = working;
+        window.clearTimeout(t);
+        t = window.setTimeout(() => setAgentScreenRev((n) => n + 1), 100);
+      }),
+    );
+    return () => {
+      window.clearTimeout(t);
+      stops.forEach((stop) => stop());
+    };
+  }, [agentPaneIds, conn]);
+  void agentScreenRev; // redesenha a Sidebar quando a fase rodando muda na tela
 
   // Escondido na bandeja ou minimizado por mais de 3 s: para de observar (a
   // ponte deixa de consultar as telas a cada 30 ms). Voltou: observa de novo.
@@ -435,25 +467,12 @@ export function App() {
   }, []);
 
   // --- acoes -----------------------------------------------------------
-  // "Abrir arquivo…": janela do Windows, começando na pasta do terminal em foco
   // pasta do terminal em foco, como caminho do Windows (\\wsl.localhost\... no WSL)
   const focusedFolder = () => {
     const p = focusedPane !== null ? paneById.get(focusedPane) : undefined;
     return p?.cwd
       ? paneFolder(p.cwd, { paneKind: p.kind, paneWsl: p.wsl, paneDistro: p.wsl_distro || p.distro, paneCwd: p.cwd }, !/Windows/.test(navigator.userAgent))
       : "";
-  };
-  const openFileDialog = () => {
-    const initial = focusedFolder();
-    // Studio remoto: o "Abrir" do Windows apareceria no PC; usa o navegador da página.
-    if (isRemote()) {
-      setBrowser({ mode: "file", initial });
-      return;
-    }
-    void conn
-      .api<{ path?: string; canceled?: boolean }>("/api/local-file/open-dialog", { initial })
-      .then((r) => r.path && setFilePreviewPath(r.path))
-      .catch((e: unknown) => setNotice(e instanceof Error ? e.message : "não foi possível abrir o arquivo"));
   };
   const focusPane = (tabId: string, pane: number) => setFocus((f) => withTabFocus(f, tabId, pane));
 
@@ -557,7 +576,11 @@ export function App() {
         return {
           onKill: () => setKillTarget({ pane, mode: "matar" }),
           onRestart: shell ? () => setKillTarget({ pane, mode: "reiniciar" }) : undefined,
-          restartBlocked: shell ? undefined : "Só dá para reiniciar PowerShell, pwsh, cmd, WSL, Git Bash e MobaXterm",
+          restartBlocked: shell
+            ? undefined
+            : /Mac/.test(navigator.platform)
+              ? "Só dá para reiniciar o shell de login, zsh, bash e Apple Container"
+              : "Só dá para reiniciar PowerShell, pwsh, cmd, WSL, Git Bash e MobaXterm",
         };
       };
   const matarDone = (pane: number) => {
@@ -772,7 +795,6 @@ export function App() {
     onTaskManager: () => setTaskManager(true),
     onDatabase: openDatabase,
     onTools: () => setToolScreen("ssh"),
-    onOpenFile: openFileDialog,
     onNewFile: () => newScratch(focusedFolder()),
     onSpeak: readOnly || focusedPane === null ? undefined : () => setSpeakPane(focusedPane),
   });
@@ -781,8 +803,15 @@ export function App() {
   const shortcuts = snap.settings?.shortcuts;
   const searchShortcut = shortcutOf(shortcuts, "search");
 
-  // Abas do web com algum agente aguardando.
+  // Atalhos de aba/config: teclado e CustomEvent nativo (⌘T no macOS).
   useEffect(() => {
+    const newTab = () => {
+      if (!layout) return;
+      commit(L.addTab(layout, ""));
+    };
+    const onNative = (e: Event) => {
+      if ((e as CustomEvent).detail === "new_tab") newTab();
+    };
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       const typing = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement | null)?.isContentEditable;
@@ -793,34 +822,38 @@ export function App() {
         return;
       }
       if (typing) return;
-    if (hit("settings")) {
-      e.preventDefault();
-      openSettings("atalhos");
-      return;
-    }
-    if (!layout) return;
-    if (hit("new_tab")) {
-      e.preventDefault();
-      commit(L.addTab(layout, ""));
-      return;
-    }
-    if (hit("close_tab")) {
-      e.preventDefault();
-      commit(L.closeTab(layout, layout.active));
-      return;
-    }
-    if (hit("next_tab") || hit("prev_tab")) {
-      e.preventDefault();
-      const ids = layout.tabs.map((t) => t.id);
-      const i = ids.indexOf(layout.active);
-      if (i < 0 || ids.length < 2) return;
-      const step = hit("next_tab") ? 1 : -1;
-      const next = ids[(i + step + ids.length) % ids.length];
-      commit(L.setActive(layout, next));
-    }
+      if (hit("settings")) {
+        e.preventDefault();
+        openSettings("atalhos");
+        return;
+      }
+      if (!layout) return;
+      if (hit("new_tab")) {
+        e.preventDefault();
+        newTab();
+        return;
+      }
+      if (hit("close_tab")) {
+        e.preventDefault();
+        commit(L.closeTab(layout, layout.active));
+        return;
+      }
+      if (hit("next_tab") || hit("prev_tab")) {
+        e.preventDefault();
+        const ids = layout.tabs.map((t) => t.id);
+        const i = ids.indexOf(layout.active);
+        if (i < 0 || ids.length < 2) return;
+        const step = hit("next_tab") ? 1 : -1;
+        const next = ids[(i + step + ids.length) % ids.length];
+        commit(L.setActive(layout, next));
+      }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("beth-shortcut", onNative);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("beth-shortcut", onNative);
+      window.removeEventListener("keydown", onKey, true);
+    };
   }, [searchShortcut, shortcuts, layout]);
 
   const waitingTabs = useMemo(() => {
@@ -844,21 +877,49 @@ export function App() {
   // Aberto nesta sessão. O layout gravado também vale, mas o botão não
   // pode depender só dele: um servidor antigo descarta files_open.
   const [filesNow, setFilesNow] = useState<Record<string, boolean>>({});
+  // Mantém a pasta montada até a animação de fechar terminar; filesExpand
+  // sobe no frame seguinte para a largura animar de 0 → aberta.
+  const [filesKeep, setFilesKeep] = useState(false);
+  const [filesExpand, setFilesExpand] = useState(false);
   const filesOpen = activeTab ? (filesNow[activeTab.id] ?? activeTab.files_open === true) : false;
   const setFilesOpen = (open: boolean) => {
     if (!activeTab) return;
+    if (open) setFilesKeep(true);
     setFilesNow((cur) => ({ ...cur, [activeTab.id]: open }));
     if (layout) commit(L.setTabFilesOpen(layout, activeTab.id, open));
   };
+  // Só anima depois do 1º quadro — senão a abertura da janela “desliza”.
+  const [sideAnim, setSideAnim] = useState(false);
+  useEffect(() => {
+    const id = window.requestAnimationFrame(() => setSideAnim(true));
+    return () => window.cancelAnimationFrame(id);
+  }, []);
+  useEffect(() => {
+    if (filesOpen) {
+      setFilesKeep(true);
+      // Antes de sideAnim: abre na hora. Depois: um frame em 0 px e anima.
+      if (!sideAnim) {
+        setFilesExpand(true);
+        return;
+      }
+      const id = window.requestAnimationFrame(() => setFilesExpand(true));
+      return () => window.cancelAnimationFrame(id);
+    }
+    setFilesExpand(false);
+  }, [filesOpen, sideAnim]);
   const sidebarPrefs: SidebarPrefs = sidebarLocal ?? snap.settings?.sidebar ?? { collapsed: false, width: 288 };
   // Depois que /api/settings chegou, campo ausente é desligado. O
   // localStorage só cobre o instante anterior à resposta; senão um "1"
   // antigo religa o material quando o JSON omite false.
-  const vibrancy = isMacTitlebar() && shellVibrancyOn(
+  const materialOn = shellVibrancyOn(
     snap.settings?.ui_theme,
     snap.settings != null,
     typeof localStorage !== "undefined" && localStorage.getItem("bethstudio-vibrancy") === "1",
   );
+  // macOS: Vibrancy + liquid glass. Windows: Acrylic só na sidebar (sem glass).
+  const vibrancy = isMacTitlebar() && materialOn;
+  const acrylic = isWinAcrylicHost() && materialOn;
+  const sideMaterial = vibrancy || acrylic;
   const [paneTools, setPaneTools] = useState<Record<number, string>>({});
   useEffect(() => {
     if (!layout) return;
@@ -876,34 +937,42 @@ export function App() {
   const sidebarWidth = dragWidth ?? sidebarPrefs.width ?? 288;
   const filesWidth = dragFiles ?? sidebarPrefs.files_width ?? 308;
   useEffect(() => {
-    if (!isMacTitlebar()) return;
-    const w = window as unknown as {
-      webkit?: { messageHandlers?: { bethVibrancy?: { postMessage: (v: string) => void }; bethSidebar?: { postMessage: (v: string) => void } } };
-    };
     document.documentElement.classList.toggle("bt-vibrancy", vibrancy);
+    document.documentElement.classList.toggle("bt-acrylic", acrylic);
     document.documentElement.style.setProperty("--bt-side", `${sidebarCollapsed ? 48 : sidebarWidth}px`);
     const dark = document.documentElement.classList.contains("dark");
     const topbarRgb = dark ? "19 19 19" : "236 236 236";
     document.documentElement.style.setProperty("--bt-topbar-rgb", topbarRgb);
     document.documentElement.style.setProperty("--bt-topbar", `rgb(${topbarRgb})`);
     // O vão tem de ser opaco. Transparente deixa o material nativo aparecer.
-    document.body.style.background = vibrancy ? "transparent" : "";
+    document.body.style.background = sideMaterial ? "transparent" : "";
+
+    if (isWinAcrylicHost()) {
+      winCommand(acrylic ? "acrylic:1" : "acrylic:0");
+      return;
+    }
+    if (!isMacTitlebar()) return;
+    const w = window as unknown as {
+      webkit?: { messageHandlers?: { bethVibrancy?: { postMessage: (v: string) => void }; bethSidebar?: { postMessage: (v: string) => void } } };
+    };
     w.webkit?.messageHandlers?.bethVibrancy?.postMessage(vibrancy ? "1" : "0");
     const power = (snap.settings?.ui_theme?.glass || 55) / 100;
     const alpha = (snap.settings?.ui_theme?.glass_alpha || 70) / 100;
     document.documentElement.style.setProperty("--bt-preview-vibrancy-opacity", String(0.34 + alpha * 0.32));
-    (w.webkit?.messageHandlers as { bethGlassTune?: { postMessage: (v: string) => void } } | undefined)?.bethGlassTune?.postMessage(`${power},${alpha}`);
+    // Véu do liquid glass (Ver selecionado / chat): cor = accent do tema.
+    const accentParts = getComputedStyle(document.documentElement).getPropertyValue("--bt-accent").trim().split(/\s+/).map(Number);
+    const [ar, ag, ab] = accentParts.length >= 3 && accentParts.every((n) => Number.isFinite(n)) ? accentParts : [0, 120, 212];
+    // Último campo: 1 = tema escuro (véu/texto do vidro), 0 = claro.
+    (w.webkit?.messageHandlers as { bethGlassTune?: { postMessage: (v: string) => void } } | undefined)?.bethGlassTune?.postMessage(
+      `${power},${alpha},${Math.round(ar)},${Math.round(ag)},${Math.round(ab)},${dark ? 1 : 0}`,
+    );
     const width = !vibrancy ? 0 : sidebarCollapsed ? 48 : sidebarWidth;
     w.webkit?.messageHandlers?.bethSidebar?.postMessage(String(width));
-    const probe = document.createElement("span");
-    probe.style.background = getComputedStyle(document.documentElement).getPropertyValue("--bt-topbar").trim() || "rgb(26, 26, 26)";
-    probe.style.position = "absolute";
-    probe.style.visibility = "hidden";
-    document.body.appendChild(probe);
-    const gutter = getComputedStyle(probe).backgroundColor || "rgb(18, 18, 18)";
-    probe.remove();
+    // Cor explícita com vírgulas: o vão nativo tem de bater com a topbar.
+    // Probe + rgb sem vírgula falhava e o AppKit caía no default quase preto.
+    const gutter = dark ? "rgb(19, 19, 19)" : "rgb(236, 236, 236)";
     (w.webkit?.messageHandlers as { bethGutter?: { postMessage: (v: string) => void } } | undefined)?.bethGutter?.postMessage(gutter);
-  }, [vibrancy, sidebarCollapsed, sidebarWidth, snap.settings?.ui_theme?.glass, snap.settings?.ui_theme?.glass_alpha]);
+  }, [vibrancy, acrylic, sideMaterial, sidebarCollapsed, sidebarWidth, snap.settings?.ui_theme?.glass, snap.settings?.ui_theme?.glass_alpha, uiColors, uiPreview]);
   const previewOpen = !!filePreviewPath;
   useEffect(() => {
     if (!isMacTitlebar() || !vibrancy || previewOpen) {
@@ -911,26 +980,14 @@ export function App() {
       off.webkit?.messageHandlers?.bethGlass?.postMessage("[]");
       return;
     }
-    const pngCache = new Map<string, string>();
-    const iconPng = (el: Element): Promise<string> => {
-      const svg = el.querySelector("svg");
-      if (!svg) return Promise.resolve("");
-      const key = svg.outerHTML;
+    // Silhueta branca (só alfa). O AppKit pinta com bethGlassInk — no tema
+    // claro a guia inativa fica escura; selecionado/accent fica branco.
+    const SILHOUETTE: [number, number, number] = [255, 255, 255];
+    type IconShot = { p: string; mono: boolean };
+    const pngCache = new Map<string, IconShot>();
+    const toPng = (src: string, key: string, recolor: [number, number, number] | null, mono: boolean): Promise<IconShot> => {
       const hit = pngCache.get(key);
       if (hit) return Promise.resolve(hit);
-      const clone = svg.cloneNode(true) as SVGElement;
-      if (!clone.getAttribute("xmlns")) clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      clone.setAttribute("width", "32");
-      clone.setAttribute("height", "32");
-      clone.setAttribute("color", "#ffffff");
-      clone.querySelectorAll("*").forEach((n) => {
-        const stroke = n.getAttribute("stroke");
-        const fill = n.getAttribute("fill");
-        if (stroke === "currentColor" || stroke == null) n.setAttribute("stroke", "#ffffff");
-        if (fill === "currentColor") n.setAttribute("fill", "#ffffff");
-      });
-      const xml = new XMLSerializer().serializeToString(clone);
-      const src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
       return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
@@ -938,79 +995,190 @@ export function App() {
           c.width = 64;
           c.height = 64;
           const ctx = c.getContext("2d");
-          if (!ctx) return resolve("");
+          if (!ctx) return resolve({ p: "", mono });
           ctx.drawImage(img, 0, 0, 64, 64);
+          if (recolor) {
+            const [ir, ig, ib] = recolor;
+            const px = ctx.getImageData(0, 0, 64, 64);
+            for (let i = 0; i < px.data.length; i += 4) {
+              if (px.data[i + 3] < 8) continue;
+              px.data[i] = ir;
+              px.data[i + 1] = ig;
+              px.data[i + 2] = ib;
+            }
+            ctx.putImageData(px, 0, 0);
+          }
           const data = c.toDataURL("image/png").split(",")[1] || "";
-          if (data) pngCache.set(key, data);
-          resolve(data);
+          const shot = { p: data, mono };
+          if (data) pngCache.set(key, shot);
+          resolve(shot);
         };
-        img.onerror = () => resolve("");
+        img.onerror = () => resolve({ p: "", mono });
         img.src = src;
       });
+    };
+    /** Ícone da ferramenta — nunca o SVG do X de fechar a aba. */
+    const toolSvg = (el: Element): SVGElement | null => {
+      for (const s of el.querySelectorAll("svg")) {
+        if (s.closest(".bt-tab-close")) continue;
+        return s as SVGElement;
+      }
+      return null;
+    };
+    const toolImg = (el: Element): HTMLImageElement | null =>
+      (el.querySelector("img.bt-tool-icon") as HTMLImageElement | null) || null;
+    const toolMask = (el: Element): HTMLElement | null =>
+      (el.querySelector("span.bt-tool-icon") as HTMLElement | null) || null;
+    const maskUrl = (el: HTMLElement): string => {
+      const st = getComputedStyle(el);
+      return (st.webkitMaskImage || st.maskImage || "").match(/url\(["']?([^"')]+)/)?.[1] || "";
+    };
+    /** SVG só com currentColor / preto / branco → silhueta; senão (Gemini) mantém cor. */
+    const svgIsMono = (svg: SVGElement): boolean => {
+      for (const n of svg.querySelectorAll("*")) {
+        for (const v of [n.getAttribute("fill"), n.getAttribute("stroke")]) {
+          if (!v || v === "none" || v === "currentColor") continue;
+          const low = v.toLowerCase();
+          if (low === "#fff" || low === "#ffffff" || low === "#000" || low === "#000000" || low === "#0a0a0a") continue;
+          if (low.startsWith("#") || low.startsWith("rgb")) return false;
+        }
+      }
+      return true;
+    };
+    const glassOn = (el: Element) =>
+      el.classList.contains("bt-glass-on") || el.classList.contains("bt-tab-tool-over");
+    const iconPng = (el: Element): Promise<IconShot> => {
+      const imgEl = toolImg(el);
+      if (imgEl?.src) return toPng(imgEl.src, `img:${imgEl.src}`, null, false);
+      const mask = toolMask(el);
+      if (mask) {
+        const url = maskUrl(mask);
+        if (url) return toPng(url, `mask:${url}`, SILHOUETTE, true);
+      }
+      const svg = toolSvg(el);
+      if (!svg) return Promise.resolve({ p: "", mono: true });
+      const mono = svgIsMono(svg);
+      const key = `svg:${svg.outerHTML}:${mono ? "m" : "c"}`;
+      const clone = svg.cloneNode(true) as SVGElement;
+      if (!clone.getAttribute("xmlns")) clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      clone.setAttribute("width", "32");
+      clone.setAttribute("height", "32");
+      if (mono) {
+        clone.setAttribute("color", "#ffffff");
+        clone.querySelectorAll("*").forEach((n) => {
+          const stroke = n.getAttribute("stroke");
+          const fill = n.getAttribute("fill");
+          if (stroke === "currentColor" || stroke == null) n.setAttribute("stroke", "#ffffff");
+          if (fill === "currentColor") n.setAttribute("fill", "#ffffff");
+        });
+      }
+      const xml = new XMLSerializer().serializeToString(clone);
+      const src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+      return toPng(src, key, mono ? SILHOUETTE : null, mono);
     };
     const w = window as unknown as { webkit?: { messageHandlers?: { bethGlass?: { postMessage: (v: string) => void } } } };
     let last = "";
     let disposed = false;
     let request = 0;
     let delivered = 0;
-    const send = () => {
+    const lastIcon = new Map<string, IconShot>();
+    const iconCacheKey = (el: Element): string => {
+      const imgEl = toolImg(el);
+      if (imgEl?.src) return `img:${imgEl.src}`;
+      const mask = toolMask(el);
+      if (mask) {
+        const url = maskUrl(mask);
+        if (url) return `mask:${url}`;
+      }
+      const svg = toolSvg(el);
+      if (!svg) return "";
+      return `svg:${svg.outerHTML}:${svgIsMono(svg) ? "m" : "c"}`;
+    };
+    const cachedShot = (el: Element): IconShot => {
+      const key = iconCacheKey(el);
+      if (!key) return { p: "", mono: true };
+      return pngCache.get(key) || lastIcon.get(key) || { p: "", mono: true };
+    };
+    const collect = () => {
       const modal = !!document.querySelector(".bt-modal");
-      const sequence = ++request;
       const found = modal
         ? [...document.querySelectorAll(".bt-glass-sample")]
-        : [...document.querySelectorAll(".bt-tab:not(.bt-tab-active), .bt-tab-tool, .bt-sidebar .bt-glass, .bt-sidebar .bt-search, .bt-sidebar .bt-chat, .bt-sidebar .bt-chip")];
-      const nodes = nativeGlassPlates(true, found);
-      void Promise.all(nodes.map(iconPng)).then((pngs) => {
+        : [
+            ...document.querySelectorAll(
+              ".bt-tab:not(.bt-tab-active), .bt-tab-tool, .bt-sidebar .bt-glass, .bt-sidebar .bt-search, .bt-sidebar .bt-chip.bt-glass-on, .bt-sidebar .bt-chat.bt-glass-on",
+            ),
+          ];
+      return nativeGlassPlates(true, found);
+    };
+    const post = (nodes: Element[], shots: IconShot[]) => {
+      const rects: { x: number; y: number; w: number; h: number; r: number; p: string; t: string; sub: string; hov: number; f: number; on: number; ph: number; tip: number; side: string; ax: number; wrap: number; row: number; mono: number }[] = [];
+      nodes.forEach((el, i) => {
+        const b = el.getBoundingClientRect();
+        const chat = el.classList.contains("bt-chat");
+        // Chat selecionado é mais alto (cwd + na aba + fase).
+        if (b.width < 8 || b.height < 4 || b.width > 420 || b.height > (chat ? 200 : 110)) return;
+        if (b.bottom < 0 || b.top > window.innerHeight) return;
+        const rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 8;
+        const field = el.classList.contains("bt-search");
+        const tip = el.classList.contains("bt-tip");
+        const input = el.querySelector("input");
+        const typed = input?.value || "";
+        const name = field
+          ? typed || input?.placeholder || "Buscar terminal ou pasta"
+          : tip
+            ? (el.querySelector(".font-medium")?.textContent || "").trim()
+            : (el.textContent || "").replace(/\s+/g, " ").trim();
+        const sub = tip ? (el.querySelector(".text-white\\/70")?.textContent || "").trim() : "";
+        const ikey = iconCacheKey(el);
+        let shot = field || chat ? { p: "", mono: true } : shots[i] || { p: "", mono: true };
+        // Sem ícone no cache (Claude PNG ainda carregando) não posta vazio —
+        // senão o vidro some o Claude e sobra só o X de fechar da página.
+        if (!field && !chat && !shot.p && ikey) shot = lastIcon.get(ikey) || shot;
+        if (!field && !chat && shot.p && ikey) lastIcon.set(ikey, shot);
+        const fields = glassPlateFields(el.className, name);
+        rects.push({
+          x: Math.round(b.x),
+          y: Math.round(b.y),
+          w: Math.round(b.width),
+          h: Math.round(b.height),
+          r: field ? 16 : Math.round(rad),
+          // Chat: placa só material; nome/na aba/badge ficam no HTML por cima.
+          p: chat ? "" : shot.p,
+          t: chat ? "" : name.slice(0, 48),
+          sub: chat ? "" : sub.slice(0, 48),
+          hov: el.matches(":hover") ? 1 : 0,
+          f: field ? 1 : 0,
+          tip: tip ? 1 : 0,
+          side: tip ? el.getAttribute("data-tip-side") || "below" : "",
+          ax: tip ? Number(el.getAttribute("data-tip-arrow") || 0) : 0,
+          on: glassOn(el) ? 1 : 0,
+          ph: field && !typed ? 1 : 0,
+          wrap: el.classList.contains("bt-mode") ? 1 : 0,
+          row: fields?.row ?? 0,
+          mono: shot.mono ? 1 : 0,
+        });
+      });
+      rects.sort((a, b) => a.tip - b.tip);
+      const json = JSON.stringify(rects);
+      if (json === last) return;
+      last = json;
+      w.webkit?.messageHandlers?.bethGlass?.postMessage(json);
+    };
+    // Posição no mesmo frame (cache de ícone). Sem esperar PNG no resize.
+    const sendFast = () => {
+      if (disposed) return;
+      const nodes = collect();
+      post(nodes, nodes.map(cachedShot));
+    };
+    // Completa ícones que ainda não estão no cache.
+    const sendFull = () => {
+      const sequence = ++request;
+      const nodes = collect();
+      post(nodes, nodes.map(cachedShot));
+      void Promise.all(nodes.map(iconPng)).then((shots) => {
         if (disposed || sequence < delivered) return;
         delivered = sequence;
-        const rects: { x: number; y: number; w: number; h: number; r: number; p: string; t: string; sub: string; hov: number; f: number; on: number; ph: number; tip: number; side: string; ax: number; wrap: number; row: number }[] = [];
-        nodes.forEach((el, i) => {
-          const b = el.getBoundingClientRect();
-          if (b.width < 8 || b.height < 4 || b.height > 110 || b.width > 420) return;
-          if (b.bottom < 0 || b.top > window.innerHeight) return;
-          const rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 8;
-          const field = el.classList.contains("bt-search");
-          const tip = el.classList.contains("bt-tip");
-          const chat = el.classList.contains("bt-chat");
-          const input = el.querySelector("input");
-          const typed = input?.value || "";
-          const name = field
-            ? typed || input?.placeholder || "Buscar terminal ou pasta"
-            : tip
-              ? (el.querySelector(".font-medium")?.textContent || "").trim()
-              : chat
-                ? (el.querySelector("span.truncate")?.textContent || "").replace(/\s+/g, " ").trim()
-                : (el.textContent || "").replace(/\s+/g, " ").trim();
-          const sub = tip
-            ? (el.querySelector(".text-white\\/70")?.textContent || "").trim()
-            : chat
-              ? (el.querySelector(".font-mono")?.textContent || "").replace(/\s+/g, " ").trim()
-              : "";
-          rects.push({
-            x: Math.round(b.x),
-            y: Math.round(b.y),
-            w: Math.round(b.width),
-            h: Math.round(b.height),
-            r: field ? 16 : Math.round(rad),
-            p: field ? "" : pngs[i] || "",
-            t: name.slice(0, 48),
-            sub: sub.slice(0, 48),
-            hov: el.matches(":hover") ? 1 : 0,
-            f: field ? 1 : 0,
-            tip: tip ? 1 : 0,
-            side: tip ? el.getAttribute("data-tip-side") || "below" : "",
-            ax: tip ? Number(el.getAttribute("data-tip-arrow") || 0) : 0,
-            on: el.classList.contains("bt-glass-on") ? 1 : 0,
-            ph: field && !typed ? 1 : 0,
-            wrap: el.classList.contains("bt-mode") ? 1 : 0,
-            row: chat || (el.closest(".bt-sidebar") && !el.classList.contains("bt-mode") && !el.classList.contains("h-7") && !field) ? 1 : 0,
-          });
-        });
-        rects.sort((a, b) => a.tip - b.tip);
-        const json = JSON.stringify(rects);
-        if (json === last) return;
-        last = json;
-        w.webkit?.messageHandlers?.bethGlass?.postMessage(json);
+        post(nodes, shots);
       });
     };
     let frame = 0;
@@ -1018,30 +1186,58 @@ export function App() {
       if (frame) return;
       frame = window.requestAnimationFrame(() => {
         frame = 0;
-        send();
+        sendFull();
       });
     };
+    // Enquanto redimensiona, posta a cada frame — senão o vidro atrasa ~120 ms.
+    let resizeLive = 0;
+    let resizeIdle = 0;
+    const onResize = () => {
+      if (!resizeLive) {
+        const tick = () => {
+          sendFast();
+          resizeLive = window.requestAnimationFrame(tick);
+        };
+        resizeLive = window.requestAnimationFrame(tick);
+      }
+      window.clearTimeout(resizeIdle);
+      resizeIdle = window.setTimeout(() => {
+        if (resizeLive) window.cancelAnimationFrame(resizeLive);
+        resizeLive = 0;
+        sendFull();
+      }, 90);
+    };
     kick();
-    const timer = window.setInterval(kick, 120);
-    window.addEventListener("resize", kick);
+    const timer = window.setInterval(kick, 200);
+    window.addEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
     document.addEventListener("mouseover", kick);
     document.addEventListener("mouseout", kick);
     document.addEventListener("input", kick);
     document.addEventListener("transitionrun", kick);
-    const watch = new MutationObserver(kick);
+    // Largura da sidebar (arraste) muda style a cada pixel — posta na hora,
+    // sem reiniciar este efeito (sidebarWidth não entra nas deps).
+    const watch = new MutationObserver(() => {
+      sendFast();
+      kick();
+    });
     watch.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
+    watch.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "class"] });
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      window.clearTimeout(resizeIdle);
       if (frame) window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", kick);
+      if (resizeLive) window.cancelAnimationFrame(resizeLive);
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
       document.removeEventListener("mouseover", kick);
       document.removeEventListener("mouseout", kick);
       document.removeEventListener("input", kick);
       document.removeEventListener("transitionrun", kick);
       watch.disconnect();
     };
-  }, [vibrancy, sidebarCollapsed, sidebarWidth, snap.settings?.ui_theme?.glass, snap.settings?.ui_theme?.glass_alpha, previewOpen]);
+  }, [vibrancy, previewOpen]);
   const saveSidebar = (patch: Partial<SidebarPrefs>) => {
     const next = { ...sidebarPrefs, ...patch };
     setSidebarLocal(next);
@@ -1084,7 +1280,7 @@ export function App() {
   }, [pendingSpawn, layout, snap.panes, commit]);
 
   return (
-    <div className={cn("flex h-full flex-col text-text-1", vibrancy ? "" : "bg-bg-body")}>
+    <div className={cn("flex h-full flex-col text-text-1", sideMaterial ? "" : "bg-bg-body")}>
       <TopResizeEdges state={winState} />
       <TooltipLayer />
       {/* Avisos */}
@@ -1111,10 +1307,17 @@ export function App() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <div className="bt-side-col relative h-full shrink-0 self-stretch" style={{ width: sidebarCollapsed ? 48 : sidebarWidth, background: vibrancy ? "transparent" : "rgb(19, 19, 19)" }}>
+        <div
+          className={cn(
+            "bt-side-col relative h-full shrink-0 self-stretch overflow-hidden",
+            sideAnim && "bt-side-anim",
+            dragWidth != null && "bt-side--dragging",
+          )}
+          style={{ width: sidebarCollapsed ? 48 : sidebarWidth, background: sideMaterial ? "transparent" : "var(--bt-topbar)" }}
+        >
         <div
           className="bt-mac-gutter absolute inset-x-0 top-0 z-30 h-10"
-          style={{ background: "rgb(19, 19, 19)" }}
+          style={{ background: "var(--bt-topbar)" }}
           title="Arraste para mover a janela"
           onMouseDown={(e) => {
             if (!isMacTitlebar() || e.button !== 0 || e.detail > 1) return;
@@ -1123,11 +1326,11 @@ export function App() {
           }}
           onDoubleClick={() => isMacTitlebar() && zoomMacWindow()}
         />
-        <div className="bt-side-slot bt-side-slot-left absolute inset-x-0" style={{ top: 48, bottom: 8, padding: "0 8px", background: vibrancy ? "transparent" : undefined }}>
+        <div className="bt-side-slot bt-side-slot-left absolute inset-x-0" style={{ top: 40, bottom: 8, padding: "0 8px", background: sideMaterial ? "transparent" : undefined }}>
         <aside
           className={cn(
             "bt-sidebar relative h-full overflow-hidden",
-            vibrancy ? "bg-transparent" : "bg-bg-panel",
+            sideMaterial ? "bg-transparent" : "bg-bg-panel",
             "bt-side-card",
             sidebarCollapsed && "flex flex-col items-center gap-1 overflow-y-auto overflow-x-hidden pb-2 [scrollbar-width:none]",
           )}
@@ -1225,6 +1428,8 @@ export function App() {
                 search={searchState}
                 where={where}
                 resultActions={resultActions!}
+                notify={notifyPrefs}
+                onNotify={setNotifyPrefs}
               />
             )}
           </div>
@@ -1263,6 +1468,7 @@ export function App() {
               onToggleFiles={() => {
                 if (!activeTab) return;
                 const flipped = toggleFolderPanel(filesNow, activeTab.id, activeTab.files_open === true);
+                if (flipped.open) setFilesKeep(true);
                 setFilesNow(flipped.next);
                 if (layout) commit(L.setTabFilesOpen(layout, activeTab.id, flipped.open));
               }}
@@ -1270,7 +1476,6 @@ export function App() {
               onTaskManager={() => setTaskManager(true)}
               onDatabase={openDatabase}
               onTools={() => setToolScreen("ssh")}
-              onOpenFile={openFileDialog}
               onNewFile={() => newScratch(focusedFolder())}
               onSpeak={readOnly || focusedPane === null ? undefined : () => setSpeakPane(focusedPane)}
               hideActions
@@ -1280,6 +1485,7 @@ export function App() {
               alerts={
                 <>
                   <CpuLimitButton conn={conn} limit={snap.cpuLimit} />
+                  <RamLimitButton conn={conn} limit={snap.ramLimit} />
                   <AgentProcsBell conn={conn} items={snap.agentProcs} />
                 </>
               }
@@ -1370,43 +1576,64 @@ export function App() {
               />
             )}
           </div>
-          {filesOpen && activeTab && (
-            <div className="bt-side-slot bt-side-slot-right relative h-full min-h-0 shrink-0 self-stretch" style={{ width: filesWidth + 16, background: "rgb(19, 19, 19)" }}>
-              <div
-                className="absolute -left-1 top-2 z-20 h-[calc(100%-1rem)] w-2 cursor-col-resize hover:bg-accent/40"
-                title="Arraste para mudar a largura da pasta"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  const x0 = e.clientX;
-                  const w0 = filesWidth;
-                  let w = w0;
-                  const move = (ev: MouseEvent) => {
-                    w = Math.max(200, Math.min(640, w0 - (ev.clientX - x0)));
-                    setFilesWidth(w);
-                  };
-                  const up = () => {
-                    window.removeEventListener("mousemove", move);
-                    window.removeEventListener("mouseup", up);
-                    document.body.style.cursor = "";
-                    saveSidebar({ files_width: w });
-                  };
-                  document.body.style.cursor = "col-resize";
-                  window.addEventListener("mousemove", move);
-                  window.addEventListener("mouseup", up);
-                }}
-                onDoubleClick={() => {
-                  setFilesWidth(308);
-                  saveSidebar({ files_width: 308 });
-                }}
-              />
-              <WorktreePanel
-                key={activeTab.id}
-                conn={conn}
-                folder={focusedFolder()}
-                folderLabel={focusedPane !== null ? shortCwd(paneById.get(focusedPane)?.cwd ?? "", 2) : ""}
-                onClose={() => setFilesOpen(false)}
-                onOpenFile={setFilePreviewPath}
-              />
+          {activeTab && (filesOpen || filesKeep) && (
+            <div
+              className={cn(
+                "bt-side-slot bt-side-slot-right relative h-full min-h-0 shrink-0 self-stretch overflow-hidden",
+                sideAnim && "bt-side-anim",
+                dragFiles != null && "bt-side--dragging",
+                !filesOpen && "pointer-events-none",
+              )}
+              style={{ width: filesExpand ? filesWidth + 16 : 0, background: "var(--bt-topbar)" }}
+              aria-hidden={!filesOpen}
+              onTransitionEnd={(e) => {
+                if (e.propertyName !== "width" || filesExpand) return;
+                setFilesKeep(false);
+              }}
+            >
+              {/* Largura = filesWidth: o slot já tem 8 px de padding nos lados;
+                  filesWidth+16 aqui comia o vão/radius da direita (overflow). */}
+              <div className="relative h-full w-full" style={{ width: filesWidth }}>
+                <div
+                  className="absolute -left-1 top-2 z-20 h-[calc(100%-1rem)] w-2 cursor-col-resize hover:bg-accent/40"
+                  title="Arraste para mudar a largura da pasta"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    const x0 = e.clientX;
+                    const w0 = filesWidth;
+                    let w = w0;
+                    const move = (ev: MouseEvent) => {
+                      w = Math.max(200, Math.min(640, w0 - (ev.clientX - x0)));
+                      setFilesWidth(w);
+                    };
+                    const up = () => {
+                      window.removeEventListener("mousemove", move);
+                      window.removeEventListener("mouseup", up);
+                      document.body.style.cursor = "";
+                      saveSidebar({ files_width: w });
+                    };
+                    document.body.style.cursor = "col-resize";
+                    window.addEventListener("mousemove", move);
+                    window.addEventListener("mouseup", up);
+                  }}
+                  onDoubleClick={() => {
+                    setFilesWidth(308);
+                    saveSidebar({ files_width: 308 });
+                  }}
+                />
+                <WorktreePanel
+                  key={activeTab.id}
+                  conn={conn}
+                  folder={focusedFolder()}
+                  folderLabel={focusedPane !== null ? shortCwd(paneById.get(focusedPane)?.cwd ?? "", 2) : ""}
+                  onClose={() => setFilesOpen(false)}
+                  onOpenFile={setFilePreviewPath}
+                  onOpenDiff={(path) => {
+                    setFilePreviewPath(null);
+                    setGitDiff({ path, folder: focusedFolder() });
+                  }}
+                />
+              </div>
             </div>
           )}
           </div>
@@ -1461,6 +1688,9 @@ export function App() {
           onNewFile={newScratch}
           onSaveUntitled={(content) => setBrowser({ mode: "new-file", initial: untitledDir, content })}
         />
+      )}
+      {gitDiff && (
+        <GitDiffPanel conn={conn} path={gitDiff.path} folder={gitDiff.folder} onClose={() => setGitDiff(null)} />
       )}
       {browser && (
         <FolderBrowser
@@ -1519,16 +1749,6 @@ export function App() {
           }}
         />
       )}
-      {taskManager && (
-        <TaskManager
-          conn={conn}
-          onClose={() => setTaskManager(false)}
-          onGoToPane={(id) => {
-            setTaskManager(false);
-            goPane(id); // mesma acao do clique na barra lateral
-          }}
-        />
-      )}
       {killTarget !== null && (
         <KillDialog
           conn={conn}
@@ -1555,6 +1775,16 @@ export function App() {
             setToolScreen(kind);
           }}
           onClose={() => setNewTab(false)}
+        />
+      )}
+      {taskManager && (
+        <TaskManager
+          conn={conn}
+          onClose={() => setTaskManager(false)}
+          onGoToPane={(id) => {
+            setTaskManager(false);
+            goPane(id);
+          }}
         />
       )}
       {general && (

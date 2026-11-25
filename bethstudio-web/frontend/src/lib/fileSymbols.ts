@@ -54,6 +54,10 @@ import gradle from "@/assets/symbols/gradle.svg";
 import license from "@/assets/symbols/license.svg";
 import http from "@/assets/symbols/http.svg";
 import sass from "@/assets/symbols/sass.svg";
+import html from "@/assets/symbols/html.svg";
+import css from "@/assets/symbols/css.svg";
+import less from "@/assets/symbols/less.svg";
+import json from "@/assets/symbols/json.svg";
 import dts from "@/assets/symbols/dts.svg";
 import ignore from "@/assets/symbols/ignore.svg";
 import graphql from "@/assets/symbols/graphql.svg";
@@ -158,6 +162,11 @@ const EXT: Record<string, string> = {
   proto,
   scss: sass,
   sass,
+  html,
+  htm: html,
+  css,
+  less,
+  json,
   http,
   gradle,
   gitignore: ignore,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, ExternalLink, KeyRound, Loader2, Mic, RotateCcw, Search, Server, X } from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import {
@@ -19,11 +19,21 @@ import {
 import { copyText } from "@/lib/clipboard";
 import { openExternal } from "@/lib/links";
 import { cn } from "@/lib/utils";
+import { isMacOS } from "@/lib/windowFrame";
 import { MicPicker } from "./MicPicker";
 import { ModelPicker } from "./ModelPicker";
 import { PipelineTest } from "./PipelineTest";
 import { TechVocabDialog } from "./TechVocabDialog";
 import type { ModelFunc } from "@/lib/modelCatalog";
+import {
+  AppSheet,
+  SettingsBtn,
+  SettingsGroup,
+  SettingsHint,
+  SettingsRow,
+  SettingsSectionLabel,
+  SettingsSwitch,
+} from "./settings/SettingsUI";
 
 type Tab = "voz" | "provedores";
 
@@ -73,8 +83,8 @@ export function VoiceSettingsDialog({
   };
   const patch = (p: Partial<VoiceSettings>) => v && save({ ...v, ...p });
 
-  const body = (
-    <div className="min-h-0 flex-1 overflow-y-auto p-4">
+  const content = (
+    <>
       {embedded && (saving || msg) && (
         <div className="mb-2 flex items-center gap-2 text-[12px] text-text-2">
           {saving && <Loader2 size={12} className="animate-spin" />}
@@ -82,46 +92,37 @@ export function VoiceSettingsDialog({
         </div>
       )}
       {!snap || !v ? (
-        <div className="text-text-2">Carregando…</div>
+        <SettingsHint>Carregando…</SettingsHint>
       ) : tab === "voz" ? (
         <VoiceTab conn={conn} snap={snap} v={v} patch={patch} goProviders={() => setTab("provedores")} />
       ) : (
         <ProvidersTab conn={conn} snap={snap} v={v} save={save} apply={apply} setMsg={setMsg} />
       )}
-    </div>
+    </>
   );
-  if (embedded) return body;
+  if (embedded) {
+    return <div className="space-y-5">{content}</div>;
+  }
 
   return (
-    <div className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[6vh] backdrop-blur-xl" onMouseDown={onClose}>
-      <div
-        className="flex max-h-[92vh] w-[min(860px,95vw)] flex-col overflow-hidden bt-dialog"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-          <Mic size={16} className="text-accent-text" />
-          <div className="text-[15px] font-semibold text-text-1">Voz e IA</div>
-          <div className="ml-4 flex gap-1">
-            {(["voz", "provedores"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                className={cn("rounded px-3 py-1 text-[13px]", tab === t ? "bg-accent-soft font-semibold text-text-1" : "text-text-2 hover:bg-bg-hover")}
-                onClick={() => setTab(t)}
-              >
-                {t === "voz" ? "Microfone" : "Provedores de IA"}
-              </button>
-            ))}
-          </div>
-          <div className="flex-1" />
-          {saving && <Loader2 size={14} className="animate-spin text-text-3" />}
-          {msg && <span className="text-[12px] text-text-2">{msg}</span>}
-          <button className="rounded p-1 text-text-2 hover:bg-bg-hover hover:text-text-1" title="Fechar" onClick={onClose}>
-            <X size={16} />
+    <AppSheet title="Voz e IA" icon={<Mic size={16} className="text-accent-text" />} onClose={onClose} width="xl" bodyClassName="space-y-5">
+      <div className="flex items-center gap-2">
+        {(["voz", "provedores"] as Tab[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            className={cn("rounded px-3 py-1 text-[13px]", tab === t ? "bg-accent-soft font-semibold text-text-1" : "text-text-2 hover:bg-bg-hover")}
+            onClick={() => setTab(t)}
+          >
+            {t === "voz" ? "Microfone" : "Provedores de IA"}
           </button>
-        </div>
-        {body}
+        ))}
+        <div className="flex-1" />
+        {saving && <Loader2 size={14} className="animate-spin text-text-3" />}
+        {msg && <span className="text-[12px] text-text-2">{msg}</span>}
       </div>
-    </div>
+      {content}
+    </AppSheet>
   );
 }
 
@@ -177,92 +178,102 @@ function VoiceTab({
           onClose={() => setPicker(null)}
         />
       )}
-      <Section title="Microfone">
+      <div>
+        <SettingsSectionLabel>Microfone</SettingsSectionLabel>
         <MicPicker
           conn={conn}
           value={{ id: v.mic_device_id ?? "", label: v.mic_label ?? "" }}
           onChange={(c) => patch({ mic_device_id: c.id, mic_label: c.label })}
           withTest
         />
-        <p className="mt-1 text-[11px] text-text-3">Os nomes dos microfones aparecem depois da primeira permissão. “Testar microfone” mede o sinal por 5 s.</p>
-      </Section>
-      <Section title="Testar tudo">
-        <p className="mb-2 text-[12px] text-text-2">
+        <SettingsHint className="mt-1">Os nomes dos microfones aparecem depois da primeira permissão. “Testar microfone” mede o sinal por 5 s.</SettingsHint>
+      </div>
+      <div>
+        <SettingsSectionLabel>Testar tudo</SettingsSectionLabel>
+        <SettingsHint className="mb-2">
           Roda o caminho inteiro — microfone (ou áudio de exemplo), transcrição, correção e o texto final — sem enviar nada ao terminal, com tempos e
           custo de cada etapa. Só roda quando você clica (gasta alguns centavos).
-        </p>
+        </SettingsHint>
         <PipelineTest conn={conn} v={v} providerName={(id) => snap.providers.find((p) => p.id === id)?.name ?? id} />
-      </Section>
-      <Section title="Transcrição (voz → texto)">
-        <Row label="Provedor">
-          <ProviderSelect list={stt} value={v.stt_provider} onChange={(id) => patch({ stt_provider: id, stt_model: models(snap.providers.find((p) => p.id === id), "stt")[0] ?? "" })} />
-          <KeyStatus p={sttP} onGo={goProviders} />
-        </Row>
-        <Row label="Modelo">
-          <ModelInput value={v.stt_model} options={models(sttP, "stt")} onChange={(m) => patch({ stt_model: m })} id="stt-models" />
-          <Btn onClick={() => setPicker("stt")}>Escolher com preços…</Btn>
-        </Row>
-        <Row label="Idioma">
-          <select
-            className="h-8 bt-field bg-bg-term px-2 text-text-1"
-            value={v.language}
-            onChange={(e) => patch({ language: e.target.value })}
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-        </Row>
-      </Section>
+      </div>
+      <div>
+        <SettingsSectionLabel>Transcrição (voz → texto)</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow label="Provedor">
+            <ProviderSelect list={stt} value={v.stt_provider} onChange={(id) => patch({ stt_provider: id, stt_model: models(snap.providers.find((p) => p.id === id), "stt")[0] ?? "" })} />
+            <KeyStatus p={sttP} onGo={goProviders} />
+          </SettingsRow>
+          <SettingsRow label="Modelo">
+            <ModelSelect value={v.stt_model} options={models(sttP, "stt")} onChange={(m) => patch({ stt_model: m })} />
+            <SettingsBtn onClick={() => setPicker("stt")}>Escolher com preços…</SettingsBtn>
+          </SettingsRow>
+          <SettingsRow label="Idioma">
+            <select
+              className="h-8 bt-field bg-bg-term px-2 text-text-1"
+              value={v.language}
+              onChange={(e) => patch({ language: e.target.value })}
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </SettingsRow>
+        </SettingsGroup>
+      </div>
 
-      <Section title="Correção por IA (opcional)">
-        <Toggle on={v.llm_enabled} onClick={() => patch({ llm_enabled: !v.llm_enabled })} label="Passar o texto num modelo para corrigir erros de reconhecimento" />
-        {v.llm_enabled && (
-          <>
-            <Row label="Provedor">
-              <ProviderSelect list={llm} value={v.llm_provider} onChange={(id) => patch({ llm_provider: id, llm_model: models(snap.providers.find((p) => p.id === id), "llm")[0] ?? "" })} />
-              <KeyStatus p={llmP} onGo={goProviders} />
-            </Row>
-            <Row label="Modelo">
-              <ModelInput value={v.llm_model} options={models(llmP, "llm")} onChange={(m) => patch({ llm_model: m })} id="llm-models" />
-              <Btn onClick={() => setPicker("llm")}>Escolher com preços…</Btn>
-            </Row>
-            <Row label="Prazo">
-              <select
-                className="h-8 bt-field bg-bg-term px-2 text-text-1"
-                value={v.correct_timeout_sec || 30}
-                onChange={(e) => patch({ correct_timeout_sec: Number(e.target.value) })}
-              >
-                {[10, 15, 20, 30, 45, 60, 90, 120].map((n) => (
-                  <option key={n} value={n}>
-                    {n} s{n === 30 ? " (padrão)" : ""}
-                  </option>
-                ))}
-              </select>
-              <span className="text-[11px] text-text-3">passou disso, usa o texto transcrito sem correção</span>
-            </Row>
-            <Toggle
-              on={!!v.show_correction_stream}
-              onClick={() => patch({ show_correction_stream: !v.show_correction_stream })}
-              label="Mostrar a correção enquanto chega (senão aparece de uma vez, no fim)"
-            />
-          </>
-        )}
-        <div className="mt-2">
+      <div>
+        <SettingsSectionLabel>Correção por IA (opcional)</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow label="Passar o texto num modelo para corrigir erros de reconhecimento">
+            <SettingsSwitch on={v.llm_enabled} onChange={(on) => patch({ llm_enabled: on })} label="Correção por IA" />
+          </SettingsRow>
+          {v.llm_enabled && (
+            <>
+              <SettingsRow label="Provedor">
+                <ProviderSelect list={llm} value={v.llm_provider} onChange={(id) => patch({ llm_provider: id, llm_model: models(snap.providers.find((p) => p.id === id), "llm")[0] ?? "" })} />
+                <KeyStatus p={llmP} onGo={goProviders} />
+              </SettingsRow>
+              <SettingsRow label="Modelo">
+                <ModelSelect value={v.llm_model} options={models(llmP, "llm")} onChange={(m) => patch({ llm_model: m })} />
+                <SettingsBtn onClick={() => setPicker("llm")}>Escolher com preços…</SettingsBtn>
+              </SettingsRow>
+              <SettingsRow label="Prazo" hint="passou disso, usa o texto transcrito sem correção">
+                <select
+                  className="h-8 bt-field bg-bg-term px-2 text-text-1"
+                  value={v.correct_timeout_sec || 30}
+                  onChange={(e) => patch({ correct_timeout_sec: Number(e.target.value) })}
+                >
+                  {[10, 15, 20, 30, 45, 60, 90, 120].map((n) => (
+                    <option key={n} value={n}>
+                      {n} s{n === 30 ? " (padrão)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </SettingsRow>
+              <SettingsRow label="Mostrar a correção enquanto chega (senão aparece de uma vez, no fim)">
+                <SettingsSwitch
+                  on={!!v.show_correction_stream}
+                  onChange={(on) => patch({ show_correction_stream: on })}
+                  label="Mostrar correção em streaming"
+                />
+              </SettingsRow>
+            </>
+          )}
+        </SettingsGroup>
+        <div className="mt-3">
           <div className="mb-1 flex items-center gap-2 text-[12px] text-text-2">
             Prompt da correção <span className="text-text-3">— variáveis: {"{idioma}"}, {"{vocabulario}"}, {"{foneticos}"}</span>
             <div className="flex-1" />
-            <button
-              className="flex items-center gap-1 rounded bg-bg-hover px-2 py-0.5 text-text-1 hover:bg-border"
+            <SettingsBtn
               onClick={() => {
                 setPrompt(snap.default_prompt);
                 patch({ prompt: snap.default_prompt });
               }}
             >
               <RotateCcw size={12} /> Restaurar padrão
-            </button>
+            </SettingsBtn>
           </div>
           <textarea
             value={prompt}
@@ -276,74 +287,80 @@ function VoiceTab({
             Vocabulário do projeto <span className="text-text-3">— um termo por linha; vai no prompt e como dica na transcrição</span>
             <div className="flex-1" />
             {!vocab.trim() && (
-              <button
-                className="rounded bg-bg-hover px-2 py-0.5 text-text-1 hover:bg-border"
+              <SettingsBtn
                 onClick={() => {
                   setVocab(snap.default_vocabulary);
                   patch({ vocabulary: snap.default_vocabulary });
                 }}
               >
                 Sugerir termos
-              </button>
+              </SettingsBtn>
             )}
           </div>
           <textarea
             value={vocab}
             onChange={(e) => setVocab(e.target.value)}
             onBlur={() => vocab !== v.vocabulary && patch({ vocabulary: vocab })}
-            placeholder={"BethStudio\nWezTerm\nWSL\nPowerShell"}
+            placeholder={
+              isMacOS()
+                ? "BethStudio\nzsh\nClaude Code\nbash"
+                : "BethStudio\nWezTerm\nWSL\nPowerShell"
+            }
             className="h-24 w-full resize-y bt-field bg-bg-term p-2 font-mono text-[12px] text-text-1 outline-none"
           />
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-text-2">
-            <label className="flex items-center gap-1.5">
-              <input type="checkbox" checked={v.tech_vocab !== false} onChange={(e) => patch({ tech_vocab: e.target.checked })} />
-              Incluir vocabulário técnico padrão
-            </label>
-            <span className="text-text-3">(linguagens, IA, ferramentas, protocolos, termos em inglês — com a grafia correta)</span>
-            <button className="rounded bg-bg-hover px-2 py-0.5 text-text-1 hover:bg-border" onClick={() => setShowTech(true)}>
-              Ver lista
-            </button>
-          </div>
+          <SettingsGroup className="mt-2">
+            <SettingsRow
+              label="Incluir vocabulário técnico padrão"
+              hint="linguagens, IA, ferramentas, protocolos, termos em inglês — com a grafia correta"
+            >
+              <SettingsSwitch
+                on={v.tech_vocab !== false}
+                onChange={(on) => patch({ tech_vocab: on })}
+                label="Vocabulário técnico padrão"
+              />
+              <SettingsBtn onClick={() => setShowTech(true)}>Ver lista</SettingsBtn>
+            </SettingsRow>
+          </SettingsGroup>
           {showTech && <TechVocabDialog conn={conn} onClose={() => setShowTech(false)} />}
         </div>
-      </Section>
+      </div>
 
-      <Section title="Envio ao agente">
-        <Toggle
-          on={v.prefix_enabled !== false}
-          onClick={() => patch({ prefix_enabled: !(v.prefix_enabled !== false) })}
-          label="Avisar o agente que o texto veio de voz"
-        />
-        {v.prefix_enabled !== false && (
-          <div className="mt-2 flex items-start gap-2">
-            <textarea
-              value={prefix}
-              onChange={(e) => setPrefix(e.target.value)}
-              onBlur={() => prefix !== v.prefix_text && patch({ prefix_text: prefix })}
-              className="h-16 flex-1 resize-y bt-field bg-bg-term p-2 text-[12px] text-text-1 outline-none"
+      <div>
+        <SettingsSectionLabel>Envio ao agente</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow label="Avisar o agente que o texto veio de voz">
+            <SettingsSwitch
+              on={v.prefix_enabled !== false}
+              onChange={(on) => patch({ prefix_enabled: on })}
+              label="Prefixo de voz"
             />
-            <button
-              className="flex items-center gap-1 rounded bg-bg-hover px-2 py-1 text-[12px] text-text-1 hover:bg-border"
-              onClick={() => {
-                setPrefix(snap.default_prefix);
-                patch({ prefix_text: snap.default_prefix });
-              }}
-            >
-              <RotateCcw size={12} /> Padrão
-            </button>
-          </div>
-        )}
-        <div className="mt-2">
-          <Toggle
-            on={v.send_direct}
-            onClick={() => patch({ send_direct: !v.send_direct })}
-            label="Enviar direto ao terminal, sem revisar (o Enter continua sendo seu)"
-          />
-        </div>
-        <p className="mt-2 text-[11px] text-text-3">
+          </SettingsRow>
+          {v.prefix_enabled !== false && (
+            <div className="flex items-start gap-2 px-3 pb-3">
+              <textarea
+                value={prefix}
+                onChange={(e) => setPrefix(e.target.value)}
+                onBlur={() => prefix !== v.prefix_text && patch({ prefix_text: prefix })}
+                className="h-16 flex-1 resize-y bt-field bg-bg-term p-2 text-[12px] text-text-1 outline-none"
+              />
+              <SettingsBtn
+                onClick={() => {
+                  setPrefix(snap.default_prefix);
+                  patch({ prefix_text: snap.default_prefix });
+                }}
+              >
+                <RotateCcw size={12} /> Padrão
+              </SettingsBtn>
+            </div>
+          )}
+          <SettingsRow label="Enviar direto ao terminal, sem revisar (o Enter continua sendo seu)">
+            <SettingsSwitch on={v.send_direct} onChange={(on) => patch({ send_direct: on })} label="Enviar direto" />
+          </SettingsRow>
+        </SettingsGroup>
+        <SettingsHint className="mt-2">
           O texto é colado no terminal sem Enter no final: você revisa no próprio agente e aperta Enter. Quebras de linha não viram Enter.
-        </p>
-      </Section>
+        </SettingsHint>
+      </div>
     </div>
   );
 }
@@ -380,7 +397,7 @@ function ProvidersTab({
   const list = needle ? snap.providers.filter((p) => providerHay(p).includes(needle)) : snap.providers;
   return (
     <div className="space-y-2">
-      <div className="sticky top-0 z-10 -mx-4 bg-bg-card px-4 pb-2">
+      <div className="sticky top-0 z-10 bg-bg-card pb-2">
         <div className="flex items-center gap-1.5 bt-field bg-bg-term px-2">
           <Search size={14} className="shrink-0 text-text-3" />
           <input
@@ -398,8 +415,9 @@ function ProvidersTab({
         </div>
       </div>
       <p className="text-[12px] text-text-2">
-        As chaves ficam cifradas neste computador (DPAPI do Windows) e nunca voltam para a tela. Todas as chamadas aos provedores são feitas pelo
-        bethstudio-web. Uma chave serve para transcrição e correção no mesmo provedor.
+        {isMacOS()
+          ? "As chaves ficam guardadas só neste Mac e nunca voltam para a tela. Todas as chamadas aos provedores passam pelo Studio. Uma chave serve para transcrição e correção no mesmo provedor."
+          : "As chaves ficam cifradas neste computador (DPAPI do Windows) e nunca voltam para a tela. Todas as chamadas aos provedores passam pelo Studio. Uma chave serve para transcrição e correção no mesmo provedor."}
       </p>
       {list.length === 0 ? (
         <p className="text-[12px] text-text-3">Nenhum provedor com “{q.trim()}”.</p>
@@ -503,7 +521,7 @@ function ProviderCard({
                 placeholder="Cole a chave de API"
                 className="h-7 min-w-0 flex-1 bt-field bg-bg-term px-2 text-[12px] text-text-1 outline-none"
               />
-              <Btn
+              <SettingsBtn
                 disabled={!key.trim()}
                 onClick={() =>
                   void saveKey(conn, p.id, key)
@@ -517,14 +535,14 @@ function ProviderCard({
                 }
               >
                 Salvar
-              </Btn>
-              {p.configured && <Btn onClick={() => setEditKey(false)}>Cancelar</Btn>}
+              </SettingsBtn>
+              {p.configured && <SettingsBtn onClick={() => setEditKey(false)}>Cancelar</SettingsBtn>}
             </>
           ) : (
             <>
-              <Btn onClick={() => setEditKey(true)}>Trocar chave</Btn>
+              <SettingsBtn onClick={() => setEditKey(true)}>Trocar chave</SettingsBtn>
               {p.key_source === "salva" && (
-                <Btn
+                <SettingsBtn
                   onClick={() =>
                     void saveKey(conn, p.id, "")
                       .then(apply)
@@ -532,7 +550,7 @@ function ProviderCard({
                   }
                 >
                   Apagar chave
-                </Btn>
+                </SettingsBtn>
               )}
             </>
           )}
@@ -611,12 +629,12 @@ function ProviderCard({
         </label>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {(p.stt || p.llm) && <Btn onClick={() => setPick(true)}>Ver modelos e preços…</Btn>}
-        <Btn disabled={!!busy || (p.needs_key && !p.configured)} onClick={() => void run("test", async () => (await testProvider(conn, p.id)).message)}>
+        {(p.stt || p.llm) && <SettingsBtn onClick={() => setPick(true)}>Ver modelos e preços…</SettingsBtn>}
+        <SettingsBtn disabled={!!busy || (p.needs_key && !p.configured)} onClick={() => void run("test", async () => (await testProvider(conn, p.id)).message)}>
           {busy === "test" ? <Loader2 size={12} className="animate-spin" /> : null} Testar
-        </Btn>
+        </SettingsBtn>
         {p.models_list && (
-          <Btn
+          <SettingsBtn
             disabled={!!busy || (p.needs_key && !p.configured)}
             onClick={() =>
               void run("models", async () => {
@@ -627,7 +645,7 @@ function ProviderCard({
             }
           >
             {busy === "models" ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />} Buscar modelos
-          </Btn>
+          </SettingsBtn>
         )}
         {result && <span className={cn("text-[11px]", result.ok ? "text-status-ok" : "text-status-err")}>{result.text}</span>}
       </div>
@@ -656,27 +674,15 @@ function ProviderCard({
 
 // --- pecas -------------------------------------------------------------
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section>
-      <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-2">{title}</div>
-      <div className="space-y-2">{children}</div>
-    </section>
-  );
-}
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-24 shrink-0 text-text-2">{label}</span>
-      {children}
-    </div>
-  );
-}
 
 function ProviderSelect({ list, value, onChange }: { list: ProviderView[]; value: string; onChange: (id: string) => void }) {
   return (
-    <select className="h-8 min-w-0 flex-1 bt-field bg-bg-term px-2 text-text-1" value={value} onChange={(e) => onChange(e.target.value)}>
+    <select
+      className="h-8 max-w-[min(240px,42vw)] min-w-0 bt-field bg-bg-term px-2 text-text-1"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
       {list.map((p) => (
         <option key={p.id} value={p.id}>
           {p.name}
@@ -700,49 +706,26 @@ function KeyStatus({ p, onGo }: { p: ProviderView | undefined; onGo: () => void 
   );
 }
 
-function ModelInput({ value, options, onChange, id }: { value: string; options: string[]; onChange: (m: string) => void; id: string }) {
-  const [text, setText] = useState(value);
-  useEffect(() => setText(value), [value]);
+/** Lista de modelos numa linha de Configurações (sem chips nem campo monoespaçado). */
+function ModelSelect({ value, options, onChange }: { value: string; options: string[]; onChange: (m: string) => void }) {
+  const opts = value && !options.includes(value) ? [value, ...options] : options;
   return (
-    <>
-      <input
-        list={id}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => text !== value && onChange(text.trim())}
-        className="h-8 min-w-0 flex-1 bt-field bg-bg-term px-2 font-mono text-[12px] text-text-1 outline-none"
-      />
-      <datalist id={id}>
-        {options.map((o) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
-      <div className="flex shrink-0 flex-wrap gap-1">
-        {options.slice(0, 3).map((o) => (
-          <button
-            key={o}
-            className={cn("rounded px-1.5 py-0.5 text-[10px]", o === value ? "bg-accent text-white" : "bg-bg-hover text-text-2 hover:text-text-1")}
-            onClick={() => onChange(o)}
-            title={o}
-          >
-            {o.split("/").pop()}
-          </button>
-        ))}
-      </div>
-    </>
+    <select
+      className="h-8 max-w-[min(260px,46vw)] min-w-0 bt-field bg-bg-term px-2 text-text-1"
+      value={value}
+      title={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {opts.length === 0 && <option value={value || ""}>{value || "Nenhum modelo"}</option>}
+      {opts.map((o) => (
+        <option key={o} value={o} title={o}>
+          {o.includes("/") ? o.split("/").pop() : o}
+        </option>
+      ))}
+    </select>
   );
 }
 
-function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
-  return (
-    <button className="flex items-center gap-2 text-left text-[13px] text-text-1" onClick={onClick}>
-      <span className={cn("relative h-4 w-7 shrink-0 rounded-full transition-colors", on ? "bg-accent" : "bg-border-strong")}>
-        <span className={cn("absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all", on ? "left-3.5" : "left-0.5")} />
-      </span>
-      {label}
-    </button>
-  );
-}
 
 function AccountLogin({
   conn,
@@ -832,23 +815,23 @@ function AccountLogin({
       )}
       <div className="flex flex-wrap items-center gap-1.5">
         {phase !== "wait" && (
-          <Btn disabled={phase === "busy"} onClick={() => void start()}>
+          <SettingsBtn disabled={phase === "busy"} onClick={() => void start()}>
             {phase === "busy" ? <Loader2 size={12} className="animate-spin" /> : null}
             {configured ? "Entrar de novo" : "Entrar com código"}
-          </Btn>
+          </SettingsBtn>
         )}
         {phase === "wait" && (
-          <Btn
+          <SettingsBtn
             onClick={() => {
               stop.current = true;
               setPhase("idle");
             }}
           >
             Cancelar
-          </Btn>
+          </SettingsBtn>
         )}
         {configured && phase === "idle" && (
-          <Btn
+          <SettingsBtn
             onClick={() =>
               void logoutAccount(conn, provider)
                 .then(onLogout)
@@ -856,21 +839,10 @@ function AccountLogin({
             }
           >
             Sair da conta
-          </Btn>
+          </SettingsBtn>
         )}
       </div>
     </div>
   );
 }
 
-function Btn({ children, onClick, disabled }: { children: ReactNode; onClick: () => void; disabled?: boolean }) {
-  return (
-    <button
-      className="flex items-center gap-1 rounded bg-bg-hover px-2 py-0.5 text-[12px] text-text-1 hover:bg-border disabled:opacity-40"
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}

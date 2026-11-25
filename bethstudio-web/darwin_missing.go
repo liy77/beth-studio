@@ -20,23 +20,11 @@ var webviewDataName = "WebView2"
 
 func allowForeground() {}
 
-type sampler struct{}
-
-func newSampler() *sampler { return &sampler{} }
-
-func (s *sampler) close()                                   {}
-func (s *sampler) prime(func() []PaneLite)                  {}
-func (s *sampler) sample(func() []PaneLite) *SysmonSnapshot { return &SysmonSnapshot{} }
-
 func sshHelperMain(string) int { return 0 }
 
 func serialHelperMain(string) int { return 0 }
 
 func openInSystemBrowser(raw string) { _ = exec.Command("open", raw).Run() }
-
-func servePickFolder(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "escolha a pasta no painel"})
-}
 
 func serveLocalFileCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "criar arquivo não está ligado neste build"})

@@ -59,7 +59,7 @@ export function AgentBadge({ size = 12, name }: { size?: number; name?: string }
   if (a) {
     return (
       <span
-        className="inline-flex shrink-0 items-center rounded px-1.5 py-px text-[10px] font-semibold leading-4 text-white"
+        className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold leading-4 text-white shadow-sm"
         style={{ background: a.color }}
         title={`${a.label} rodando neste terminal`}
       >

@@ -128,6 +128,7 @@ export function GlassMenu({
         ...pageMenuStyle(mac, typeof window !== "undefined" && !!window.webkit?.messageHandlers?.bethMenu),
       }}
       onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
       {children}

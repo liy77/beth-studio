@@ -14,17 +14,41 @@ declare global {
   }
 }
 
-export type WinCommand = "drag" | "toggle" | "min" | "close" | "state" | "resize:top" | "resize:topleft" | "resize:topright";
+export type WinCommand =
+  | "drag"
+  | "toggle"
+  | "min"
+  | "close"
+  | "state"
+  | "resize:top"
+  | "resize:topleft"
+  | "resize:topright"
+  | "acrylic:1"
+  | "acrylic:0";
 
 /** Estamos na janela propria sem moldura? (no navegador comum/celular: nao) */
 export function isFrameless(): boolean {
   return typeof window !== "undefined" && !!window.__bethstudioFrameless && !!window.chrome?.webview;
 }
 
+/** Studio no Windows (WebView2): Acrylic da barra lateral. */
+export function isWinAcrylicHost(): boolean {
+  return isFrameless() && !isMacOS();
+}
+
 /** macOS (Studio nativo ou página no Safari/Chrome do Mac). */
 export function isMacOS(): boolean {
   if (typeof navigator === "undefined") return false;
-  return /Mac/.test(navigator.platform);
+  const p = navigator.platform || "";
+  const ua = navigator.userAgent || "";
+  // platform ainda costuma ser "MacIntel"; em builds novos pode vir vazio —
+  // o userAgent continua com "Mac OS X".
+  return /Mac|iPhone|iPad|iPod/.test(p) || /Mac OS X|Macintosh/.test(ua);
+}
+
+/** Rótulo do microfone padrão do sistema (Mac vs Windows). */
+export function defaultMicLabel(): string {
+  return isMacOS() ? "Padrão do Mac" : "Padrão do Windows";
 }
 
 /**

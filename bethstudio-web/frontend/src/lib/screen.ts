@@ -50,10 +50,12 @@ const SGR = /\x1b\[([0-9;:]*)m/g;
 // ESC ] 8 ; <params> ; <uri> (BEL | ESC \)
 const OSC8 = /\x1b\]8;[^;\x07\x1b]*;([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
 
-/** Cauda maior que isto: desiste do incremental neste quadro (escrita completa). */
-const MAX_TAIL = 2048;
+/** Cauda maior que isto: desiste do incremental neste quadro (escrita completa).
+ *  TUIs de agente (Cursor, Claude) usam muito SGR; 2 KiB caía em full frame
+ *  demais e o xterm travava. */
+const MAX_TAIL = 8192;
 /** A cada N quadros incrementais, uma escrita completa limpa qualquer desvio. */
-const FULL_EVERY = 300;
+const FULL_EVERY = 600;
 
 interface Tail {
   sgr: string; // sequencias SGR a repetir (depois de um reset)

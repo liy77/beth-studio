@@ -6,6 +6,16 @@ import { SideBadge, stateAfter, type SideState } from "./SideStatus";
 import type { AgentResumeView, ResumeMode } from "@/lib/agentResume";
 import type { AgentProcSettings } from "@/lib/agentProcs";
 import { isMacOS } from "@/lib/windowFrame";
+import {
+  SettingsBtn,
+  SettingsChoice,
+  SettingsGroup,
+  SettingsHint,
+  SettingsPanel,
+  SettingsRow,
+  SettingsSectionLabel,
+  SettingsSwitch,
+} from "./settings/SettingsUI";
 
 // Configurações > Retomar sessões (agent_resume.go).
 
@@ -15,9 +25,6 @@ interface SetupResult {
   error?: string;
 }
 
-const btn = "rounded-md border border-border bg-bg-panel px-3 py-1.5 text-[12px] text-text-1 hover:bg-bg-hover disabled:opacity-50";
-const btnMain = "rounded-md border border-accent bg-accent px-3 py-1.5 text-[12px] text-white hover:bg-accent-hover disabled:opacity-50";
-
 const MODES: { id: ResumeMode; label: string; hint: string }[] = [
   { id: "ask", label: "Perguntar", hint: "Depois da restauração, uma faixa mostra os terminais que tinham Claude, com Retomar." },
   { id: "auto", label: "Retomar sozinho", hint: "As sessões que estavam abertas voltam sozinhas; as que você tinha encerrado ficam na faixa." },
@@ -26,30 +33,30 @@ const MODES: { id: ResumeMode; label: string; hint: string }[] = [
 
 function HookCard(p: { title: string; state: SideState; busy: boolean; result: SetupResult | null; onRun: (a: "add" | "remove" | "check") => void; children?: React.ReactNode }) {
   return (
-    <div className="space-y-2 rounded-md border border-border bg-bg-panel p-3">
+    <SettingsPanel className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex-1 text-[13px] font-semibold text-text-1">{p.title}</div>
         <SideBadge state={p.state} />
         {p.children}
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={btnMain} disabled={p.busy} onClick={() => p.onRun("add")}>
+        <SettingsBtn tone="accent" disabled={p.busy} onClick={() => p.onRun("add")}>
           {p.busy ? <Loader2 size={12} className="mr-1 inline animate-spin" /> : null}
           Ligar
-        </button>
-        <button type="button" className={btn} disabled={p.busy} onClick={() => p.onRun("check")}>
+        </SettingsBtn>
+        <SettingsBtn disabled={p.busy} onClick={() => p.onRun("check")}>
           Verificar
-        </button>
-        <button type="button" className={btn} disabled={p.busy} onClick={() => p.onRun("remove")}>
+        </SettingsBtn>
+        <SettingsBtn disabled={p.busy} onClick={() => p.onRun("remove")}>
           Desligar
-        </button>
+        </SettingsBtn>
       </div>
       {p.result && (
         <div className={cn("whitespace-pre-wrap break-words rounded bg-bg-term p-2 font-mono text-[11px]", p.result.ok ? "text-status-ok" : "text-text-2")}>
           {p.result.error ? <span className="text-status-err">{p.result.error}</span> : p.result.output}
         </div>
       )}
-    </div>
+    </SettingsPanel>
   );
 }
 
@@ -160,27 +167,27 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
   }, [conn, loaded, distro]);
 
   if (!view) {
-    return <div className="px-5 py-4 text-[13px] text-text-2">{err ?? "Carregando…"}</div>;
+    return <SettingsHint>{err ?? "Carregando…"}</SettingsHint>;
   }
   const mode = view.settings.mode;
   const wslKey = `wsl:${distro}`;
 
   return (
-    <div className="space-y-5 px-5 py-4 text-[13px] text-text-1">
-      <div className="space-y-1.5 text-text-2">
-        <p>
+    <div className="space-y-5 text-[13px] text-text-1">
+      <div className="space-y-1.5">
+        <SettingsHint>
           Quando o host reinicia (queda, <b>Encerrar tudo</b>, troca de versão, reboot), o Studio recria os terminais nas mesmas pastas. Com isto ligado, ele também
           sabe qual sessão do Claude Code estava em cada terminal e digita <code className="font-mono">claude --resume &lt;id&gt;</code> no terminal certo: a conversa
           volta com o histórico.
-        </p>
-        <p>
+        </SettingsHint>
+        <SettingsHint>
           Ligue o registro abaixo onde você usa o Claude. Vale para as sessões do Claude abertas depois de ligar
           {isMacOS() ? "." : "; no WSL, só em terminais abertos depois que o host foi atualizado."}
-        </p>
+        </SettingsHint>
       </div>
 
-      <section className="space-y-2">
-        <h3 className="text-[13px] font-semibold">1. Registrar as sessões</h3>
+      <div className="space-y-2">
+        <SettingsSectionLabel>1. Registrar as sessões</SettingsSectionLabel>
         {isMacOS() ? (
           <HookCard title="macOS" state={st.windows ?? null} busy={busy === "windows"} result={results.windows ?? null} onRun={(a) => setup("windows", a)} />
         ) : (
@@ -199,76 +206,78 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
                 )}
               </HookCard>
             ) : (
-              <p className="text-text-3">Nenhuma distro do WSL encontrada.</p>
+              <SettingsHint>Nenhuma distro do WSL encontrada.</SettingsHint>
             )}
           </>
         )}
-        <p className="text-[12px] text-text-3">
+        <SettingsHint>
           Grava um hook (SessionStart e SessionEnd) no settings.json do Claude, com cópia de segurança. O hook só anota o id da sessão e o terminal; não lê a conversa.
-        </p>
-      </section>
+        </SettingsHint>
+      </div>
 
-      <section className="space-y-2">
-        <h3 className="text-[13px] font-semibold">2. Depois da restauração</h3>
-        <div className="space-y-1.5">
+      <div>
+        <SettingsSectionLabel>2. Depois da restauração</SettingsSectionLabel>
+        <div className="bt-settings-choice-grid">
           {MODES.map((m) => (
-            <label key={m.id} className="flex cursor-pointer items-start gap-2">
-              <input type="radio" name="resume-mode" className="mt-0.5" checked={mode === m.id} onChange={() => save(m.id, command)} />
-              <span>
-                <span className="font-medium">{m.label}</span>
-                <span className="block text-[12px] text-text-2">{m.hint}</span>
-              </span>
-            </label>
+            <SettingsChoice key={m.id} on={mode === m.id} onClick={() => save(m.id, command)} title={m.label} sub={m.hint} />
           ))}
         </div>
-      </section>
+      </div>
 
-      <section className="space-y-2">
-        <h3 className="text-[13px] font-semibold">3. Comando de retomar</h3>
-        <div className="flex gap-2">
-          <input
-            className="min-w-0 flex-1 rounded border border-border bg-bg-term px-2 py-1 font-mono text-[12px]"
-            value={command}
-            spellCheck={false}
-            onChange={(e) => setCommand(e.target.value)}
-          />
-          <button type="button" className={btn} disabled={command === view.settings.command} onClick={() => save(mode, command)}>
-            Salvar
-          </button>
-          <button type="button" className={btn} onClick={() => save(mode, view.default_command)}>
-            Padrão
-          </button>
-        </div>
-        <p className="text-[12px] text-text-3">
+      <div>
+        <SettingsSectionLabel>3. Comando de retomar</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow label="Comando">
+            <input
+              className="min-w-0 flex-1 rounded border border-border bg-bg-term px-2 py-1 font-mono text-[12px]"
+              value={command}
+              spellCheck={false}
+              onChange={(e) => setCommand(e.target.value)}
+            />
+            <SettingsBtn disabled={command === view.settings.command} onClick={() => save(mode, command)}>
+              Salvar
+            </SettingsBtn>
+            <SettingsBtn onClick={() => save(mode, view.default_command)}>Padrão</SettingsBtn>
+          </SettingsRow>
+        </SettingsGroup>
+        <SettingsHint className="mt-2">
           <code className="font-mono">{"{id}"}</code> vira o id da sessão. Ex.: <code className="font-mono">claude --dangerously-skip-permissions --resume {"{id}"}</code>
-        </p>
-      </section>
+        </SettingsHint>
+      </div>
       {procs && (
-        <section className="space-y-2 border-t border-border pt-4">
-          <h3 className="text-[13px] font-semibold">Processos deixados pelos agentes</h3>
-          <p className="text-text-2">
+        <div>
+          <SettingsSectionLabel>Processos deixados pelos agentes</SettingsSectionLabel>
+          <SettingsHint className="mb-2">
             {isMacOS()
               ? "No Windows o Studio avisa sobre processos deixados pelos agentes (servidor de desenvolvimento, build, script). Neste Mac a lista ainda não roda."
               : "A cada minuto o Studio procura, no Windows e nas distros do WSL que já estão rodando, os processos que um agente abriu por comando (servidor de desenvolvimento, build, script) e que continuam rodando. Passado o tempo abaixo, avisa na bandeja e mostra uma faixa com Encerrar, Ignorar e Lembrar em 1 h. Nunca encerra sozinho. Os servidores MCP do Claude ficam de fora."}
-          </p>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={!procs.off} onChange={(e) => saveProcs({ ...procs, off: !e.target.checked })} />
-            Avisar sobre processos rodando há mais de
-            <input
-              className="w-16 rounded border border-border bg-bg-term px-2 py-0.5 text-right"
-              inputMode="numeric"
-              value={minutes}
-              disabled={procs.off}
-              onChange={(e) => setMinutes(e.target.value.replace(/\D/g, ""))}
-              onBlur={() => {
-                const n = Number(minutes);
-                if (n && n !== procs.minutes) saveProcs({ ...procs, minutes: n });
-                else setMinutes(String(procs.minutes));
-              }}
-            />
-            min
-          </label>
-        </section>
+          </SettingsHint>
+          <SettingsGroup>
+            <SettingsRow
+              label="Avisar sobre processos rodando"
+              hint={
+                <span className="inline-flex items-center gap-1">
+                  há mais de
+                  <input
+                    className="w-16 rounded border border-border bg-bg-term px-2 py-0.5 text-right"
+                    inputMode="numeric"
+                    value={minutes}
+                    disabled={procs.off}
+                    onChange={(e) => setMinutes(e.target.value.replace(/\D/g, ""))}
+                    onBlur={() => {
+                      const n = Number(minutes);
+                      if (n && n !== procs.minutes) saveProcs({ ...procs, minutes: n });
+                      else setMinutes(String(procs.minutes));
+                    }}
+                  />
+                  min
+                </span>
+              }
+            >
+              <SettingsSwitch on={!procs.off} onChange={(on) => saveProcs({ ...procs, off: !on })} label="Avisar sobre processos" />
+            </SettingsRow>
+          </SettingsGroup>
+        </div>
       )}
       {err && <div className="text-status-err">{err}</div>}
     </div>

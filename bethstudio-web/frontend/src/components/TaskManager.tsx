@@ -41,12 +41,17 @@ import {
 import { cn } from "@/lib/utils";
 import { KindIcon } from "./KindIcon";
 
-/**
- * "Gerenciador de tarefas": RAM/CPU/GPU/disco, processos do Beth Studio, consumo
- * de cada terminal e do WSL. Atualiza a cada 1 s enquanto aberto; fechado,
- * nao consulta nada (e o Go para de amostrar depois de 10 s).
- */
-export function TaskManager({ conn, onClose, onGoToPane }: { conn: Connection; onClose: () => void; onGoToPane?: (paneId: number) => void }) {
+export function TaskManager({
+  conn,
+  onClose,
+  onGoToPane,
+  standalone,
+}: {
+  conn: Pick<Connection, "api">;
+  onClose: () => void;
+  onGoToPane?: (paneId: number) => void;
+  standalone?: boolean;
+}) {
   const [snap, setSnap] = useState<SysmonSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -74,70 +79,82 @@ export function TaskManager({ conn, onClose, onGoToPane }: { conn: Connection; o
 
   useEffect(() => boxRef.current?.focus(), []);
 
-  return (
-    <div className="fixed inset-0 z-[65] flex items-start justify-center bg-black/50 pt-[4vh] backdrop-blur-[2px]" onMouseDown={onClose}>
-      <div
-        ref={boxRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Gerenciador de tarefas"
-        className="flex h-[90vh] w-[min(1180px,96vw)] flex-col overflow-hidden bt-dialog bg-bg-body text-[12px] text-text-1 shadow-2xl outline-none"
-        onMouseDown={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.key === "Escape" && onClose()}
-      >
-        <div className="flex items-center gap-3 border-b border-border bg-bg-card px-5 py-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent-text">
-            <Activity size={17} />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[15px] font-semibold leading-tight">Gerenciador de tarefas</div>
-            <div className="flex items-center gap-1.5 text-[11px] text-text-3">
-              {error ? (
-                <span className="truncate text-status-err">erro: {error}</span>
-              ) : snap ? (
-                <>
-                  <span className="h-1.5 w-1.5 animate-led-pulse rounded-full bg-status-ok" />
-                  ao vivo · {new Date(snap.at).toLocaleTimeString("pt-BR")}
-                  <span title="Tempo gasto para coletar os dados">· coleta {snap.sample_ms.toLocaleString("pt-BR")} ms</span>
-                </>
-              ) : (
-                "carregando…"
-              )}
-            </div>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            {snap && (
+  const shell = standalone
+    ? "flex h-full min-h-0 w-full flex-col overflow-hidden bg-bg-body text-[12px] text-text-1 outline-none"
+    : "flex h-[88vh] w-[min(1180px,96vw)] flex-col overflow-hidden bt-dialog text-[12px] text-text-1 outline-none";
+
+  const panel = (
+    <div
+      ref={boxRef}
+      tabIndex={-1}
+      role={standalone ? "main" : "dialog"}
+      aria-modal={standalone ? undefined : true}
+      aria-label="Gerenciador de tarefas"
+      className={shell}
+      onMouseDown={standalone ? undefined : (e) => e.stopPropagation()}
+      onKeyDown={(e) => e.key === "Escape" && onClose()}
+    >
+      <div className="flex items-center gap-3 border-b border-border bg-bg-card px-5 py-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent-text">
+          <Activity size={17} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[15px] font-semibold leading-tight">Gerenciador de tarefas</div>
+          <div className="flex items-center gap-1.5 text-[11px] text-text-3">
+            {error ? (
+              <span className="truncate text-status-err">erro: {error}</span>
+            ) : snap ? (
               <>
-                <Chip icon={<Clock size={12} />} title="Tempo desde que o Windows foi ligado">
-                  ligado há {formatUptime(snap.system.uptime_sec)}
-                </Chip>
-                <Chip icon={<Layers size={12} />} title="Processos em execução no Windows">
-                  {snap.system.processes.toLocaleString("pt-BR")} processos
-                </Chip>
+                <span className="h-1.5 w-1.5 animate-led-pulse rounded-full bg-status-ok" />
+                ao vivo · {new Date(snap.at).toLocaleTimeString("pt-BR")}
+                <span title="Tempo gasto para coletar os dados">· coleta {snap.sample_ms.toLocaleString("pt-BR")} ms</span>
               </>
+            ) : (
+              "carregando…"
             )}
-            <button className="rounded-md p-1.5 text-text-2 hover:bg-bg-hover hover:text-text-1" title="Fechar" onClick={onClose}>
-              <X size={16} />
-            </button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 space-y-5 overflow-auto px-5 py-4">
-          {!snap ? (
-            <div className="py-16 text-center text-text-3">{error ? "Não foi possível ler os dados." : "Coletando…"}</div>
-          ) : (
+        <div className="ml-auto flex items-center gap-2">
+          {snap && (
             <>
-              <SystemSection s={snap} />
-              <BethStudioSection s={snap} />
-              <TerminalsSection s={snap} onGoToPane={onGoToPane} />
-              {!/Mac/.test(navigator.platform) && <WSLSection s={snap} />}
+              <Chip icon={<Clock size={12} />} title="Tempo desde que o sistema foi ligado">
+                ligado há {formatUptime(snap.system.uptime_sec)}
+              </Chip>
+              <Chip icon={<Layers size={12} />} title="Processos em execução">
+                {snap.system.processes.toLocaleString("pt-BR")} processos
+              </Chip>
             </>
           )}
+          <button className="rounded-md p-1.5 text-text-2 hover:bg-bg-hover hover:text-text-1" title="Fechar" onClick={onClose}>
+            <X size={16} />
+          </button>
         </div>
+      </div>
+      <div className="min-h-0 flex-1 space-y-5 overflow-auto px-5 py-4">
+        {!snap ? (
+          <div className="py-16 text-center text-text-3">{error ? "Não foi possível ler os dados." : "Coletando…"}</div>
+        ) : (
+          <>
+            <SystemSection s={snap} />
+            <BethStudioSection s={snap} />
+            <TerminalsSection s={snap} onGoToPane={onGoToPane} />
+            {!/Mac/.test(navigator.platform) && <WSLSection s={snap} />}
+          </>
+        )}
       </div>
     </div>
   );
+
+  if (standalone) return panel;
+  // bt-modal: o App tira o vidro nativo (liquid menus) enquanto o modal está aberto,
+  // igual às Configurações — blur e acima de tudo.
+  return (
+    <div className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[6vh] backdrop-blur-xl" onMouseDown={onClose}>
+      {panel}
+    </div>
+  );
 }
+
 
 // --- pecas ---
 

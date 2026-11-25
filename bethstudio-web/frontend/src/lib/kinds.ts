@@ -49,13 +49,16 @@ export function kindOrder(custom?: string[] | null): KindGroup[] {
   return [...new Set([...valid, ...KIND_ORDER.filter((k) => !seen.has(k))])];
 }
 
+/** Tipos só do Windows: não aparecem em filtro/agrupamento no Mac. */
+const WINDOWS_ONLY_KINDS: KindGroup[] = ["wsl", "powershell", "cmd", "gitbash"];
+
 /**
- * No Mac não há WSL: some o grupo WSL. No Windows some Container
+ * No Mac some WSL, PowerShell, cmd e Git Bash. No Windows some Container
  * (Apple Container é só macOS).
  */
 export function visibleKindOrder(custom?: string[] | null): KindGroup[] {
   const base = kindOrder(custom);
-  if (isMacPlatform()) return base.filter((k) => k !== "wsl");
+  if (isMacPlatform()) return base.filter((k) => !WINDOWS_ONLY_KINDS.includes(k));
   return base.filter((k) => k !== "container");
 }
 
@@ -146,13 +149,24 @@ export interface KindSection {
   distros?: { distro: string; panes: PaneInfo[] }[];
 }
 
+function isAgentPane(p: PaneInfo): boolean {
+  return !!(p.agent || p.agent_name);
+}
+
 /** Agrupa por tipo (ordem fixa) e, dentro de WSL/Container/SSH, por subgrupo.
+ *  Agentes (Cursor, Claude…) ficam num grupo próprio no topo — senão no Mac
+ *  (bash/zsh) todos caem em Outros e “Por tipo” parece sem separação.
  *  Usa a ordem completa (não esconde WSL no Mac aqui): o filtro de plataforma
  *  é só nos chips / Configurações via visibleKindOrder. */
 export function groupByKind(panes: PaneInfo[], order?: string[] | null): KindSection[] {
   const out: KindSection[] = [];
+  const agents = panes.filter(isAgentPane).sort((a, b) => a.pane_id - b.pane_id);
+  if (agents.length > 0) {
+    out.push({ key: AGENT_FILTER, group: "other", label: "Agentes", panes: agents });
+  }
+  const rest = panes.filter((p) => !isAgentPane(p));
   for (const g of kindOrder(order)) {
-    const ps = panes.filter((p) => kindGroup(p) === g).sort((a, b) => a.pane_id - b.pane_id);
+    const ps = rest.filter((p) => kindGroup(p) === g).sort((a, b) => a.pane_id - b.pane_id);
     if (ps.length === 0) continue;
     const sec: KindSection = { key: g, group: g, label: KIND_LABEL[g], panes: ps };
     if (g === "wsl" || g === "container") {

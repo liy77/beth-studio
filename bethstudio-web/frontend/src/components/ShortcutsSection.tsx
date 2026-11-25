@@ -3,6 +3,7 @@ import type { Connection } from "@/lib/connection";
 import type { SettingsEvent } from "@/lib/types";
 import { captureShortcut, shortcutCatalog, shortcutOf, shortcutParts } from "@/lib/shortcut";
 import { cn } from "@/lib/utils";
+import { SettingsBtn, SettingsGroup, SettingsHint, SettingsRow } from "./settings/SettingsUI";
 
 interface Props {
   conn: Connection;
@@ -36,17 +37,16 @@ export function ShortcutsSection({ conn, saved, onMessage }: Props) {
   }, [recording, conn, onMessage]);
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-      <h2 className="mb-1 text-[13px] font-semibold uppercase tracking-wide text-text-2">Atalhos</h2>
-      <p className="mb-3 text-[12px] text-text-3">Clique na combinação e aperte as teclas. Esc volta ao padrão do sistema.</p>
-      <div className="flex flex-col gap-1.5">
+    <div>
+      <SettingsHint className="mb-2">Clique na combinação e aperte as teclas. Esc volta ao padrão do sistema.</SettingsHint>
+      <SettingsGroup>
         {shortcutCatalog().map((item) => {
           const current = shortcutOf(saved, item.id);
           const custom = !!saved?.[item.id];
           return (
-            <div key={item.id} className="flex items-center gap-3 rounded-lg bg-bg-card px-3 py-2">
-              <span className="min-w-0 flex-1 text-[13px] text-text-1">{item.label}</span>
+            <SettingsRow key={item.id} label={item.label}>
               <button
+                type="button"
                 className={cn("flex items-center gap-1", recording === item.id && "rounded-lg ring-1 ring-accent")}
                 onClick={() => setRecording(item.id)}
               >
@@ -61,8 +61,7 @@ export function ShortcutsSection({ conn, saved, onMessage }: Props) {
                 )}
               </button>
               {custom && (
-                <button
-                  className="text-[12px] text-text-3 hover:text-text-1"
+                <SettingsBtn
                   onClick={() => {
                     conn
                       .api<SettingsEvent>("/api/settings/search-shortcut", { shortcut_id: item.id, shortcut: "" })
@@ -71,12 +70,12 @@ export function ShortcutsSection({ conn, saved, onMessage }: Props) {
                   }}
                 >
                   Padrão
-                </button>
+                </SettingsBtn>
               )}
-            </div>
+            </SettingsRow>
           );
         })}
-      </div>
+      </SettingsGroup>
     </div>
   );
 }

@@ -6,6 +6,7 @@ package main
 #cgo LDFLAGS: -framework Cocoa -framework WebKit -framework QuartzCore
 #include <stdlib.h>
 void bethOpen(const char *url, const char *title, int width, int height);
+void bethSetAuxWindow(int on);
 void bethRun(void);
 void bethOrderFront(void);
 void bethOrderFrontAsync(void);
@@ -13,6 +14,7 @@ void bethTrayInit(void);
 void bethStop(void);
 void bethInspect(void);
 int bethAsk(const char *text, const char *title);
+char *bethPickFolder(const char *initial);
 
 void bethSidebarFrame(double windowHeight, double *top, double *bottom);
 */
@@ -144,6 +146,21 @@ func messageBox(title, text string) {
 	_ = exec.Command("osascript", "-e", "display dialog "+quoteOSA(text)+" with title "+quoteOSA(title)).Run()
 }
 
+// nativePickFolder abre o NSOpenPanel (pastas). Cancelar = ("", false, nil).
+func nativePickFolder(initial string) (string, bool, error) {
+	var cInit *C.char
+	if initial != "" {
+		cInit = C.CString(initial)
+		defer C.free(unsafe.Pointer(cInit))
+	}
+	p := C.bethPickFolder(cInit)
+	if p == nil {
+		return "", false, nil
+	}
+	defer C.free(unsafe.Pointer(p))
+	return C.GoString(p), true, nil
+}
+
 func quoteOSA(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
 }
@@ -164,13 +181,26 @@ func openWindow(pageURL string, devtools bool, width, height int) error {
 	// AppKit recusa NSWindow fora da thread principal. A mesma thread tem de
 	// criar a janela e rodar o ciclo, senão a janela nasce e não aparece.
 	runtime.LockOSThread()
-	cu, ct := C.CString(pageURL), C.CString(appTitle)
+	aux := windowTitle != "" && windowTitle != appTitle
+	if aux {
+		C.bethSetAuxWindow(1)
+	}
+	title := appTitle
+	if windowTitle != "" {
+		title = windowTitle
+	}
+	cu, ct := C.CString(pageURL), C.CString(title)
 	defer C.free(unsafe.Pointer(cu))
 	defer C.free(unsafe.Pointer(ct))
 	C.bethOpen(cu, ct, C.int(width), C.int(height))
-	C.bethTrayInit()
-	bringStudioForward = func() { C.bethOrderFrontAsync() }
-	watchStudioFocus()
+	if !aux {
+		C.bethTrayInit()
+		bringStudioForward = func() { C.bethOrderFrontAsync() }
+		watchStudioFocus()
+	} else {
+		bringStudioForward = func() { C.bethOrderFrontAsync() }
+		watchTasksFocus()
+	}
 	C.bethRun()
 	return nil
 }

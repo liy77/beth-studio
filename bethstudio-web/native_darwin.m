@@ -22,6 +22,12 @@ static NSView *bethTitleDrag = nil;
 static WKWebView *bethWeb = nil;
 static int bethHidden = 0;
 static int bethAllowClose = 0;
+static int bethAuxWindow = 0;
+
+void bethSetAuxWindow(int on) {
+	bethAuxWindow = on ? 1 : 0;
+	bethAllowClose = on ? 1 : 0;
+}
 
 extern void goWindowDrag(void);
 
@@ -32,6 +38,8 @@ extern void goWindowDrag(void);
 - (BOOL)windowShouldClose:(NSWindow *)sender {
 	(void)sender;
 	if (bethAllowClose) {
+		// Janela auxiliar (--tasks, --sftp…): fecha de verdade e encerra o processo.
+		dispatch_async(dispatch_get_main_queue(), ^{ [NSApp terminate:nil]; });
 		return YES;
 	}
 	// Closing the Studio window hides it. The host and its terminals stay.
@@ -54,20 +62,61 @@ static NSView *bethTipHost = nil;
 static NSView *bethMenuHost = nil;
 static CGFloat bethGlassPower = 0.55;
 static CGFloat bethGlassAlpha = 0.7;
+// Accent do tema da interface (Véu do selecionado em Ver / chat). Padrão =
+// azul do VS Code Dark; a página manda R,G,B 0–255 no bethGlassTune.
+static CGFloat bethAccentR = 0.0;
+static CGFloat bethAccentG = 120.0 / 255.0;
+static CGFloat bethAccentB = 212.0 / 255.0;
+static BOOL bethGlassDark = YES;
 
 static NSColor *bethGlassTint(BOOL selected, BOOL hover, BOOL tip) {
 	CGFloat a = (0.08 + bethGlassPower * 0.9) * bethGlassAlpha;
 	if (a > 0.95) a = 0.95;
-	if (selected) return [NSColor colorWithCalibratedRed:0.24 green:0.42 blue:0.78 alpha:a];
+	// Selecionado (Ver / chip / chat): só a tinta do accent — a página
+	// não pinta bg-accent por cima (duas tinturas).
+	if (selected) {
+		CGFloat sa = a * 1.35;
+		if (sa > 0.92) sa = 0.92;
+		if (sa < 0.45) sa = 0.45;
+		return [NSColor colorWithCalibratedRed:bethAccentR green:bethAccentG blue:bethAccentB alpha:sa];
+	}
+	if (!bethGlassDark) {
+		// Tema claro: idle claro; hover escurece (véu branco sumia no claro).
+		if (hover) {
+			CGFloat ha = 0.10 + a * 0.14;
+			if (ha > 0.22) ha = 0.22;
+			return [NSColor colorWithCalibratedWhite:0.08 alpha:ha];
+		}
+		if (tip) return [NSColor colorWithCalibratedWhite:1.0 alpha:a * 0.7];
+		return [NSColor colorWithCalibratedWhite:1.0 alpha:a * 0.55];
+	}
 	if (hover) return [NSColor colorWithCalibratedWhite:0.45 alpha:a];
 	if (tip) return [NSColor colorWithCalibratedWhite:0.5 alpha:a * 0.85];
 	return [NSColor colorWithCalibratedWhite:0.28 alpha:a];
 }
 
+/** Tinta do rótulo nativo (botões Ver, etc.): clara no tema escuro, escura no claro. */
+static NSColor *bethGlassInk(BOOL selected) {
+	if (selected) return [NSColor whiteColor];
+	if (bethGlassDark) return [NSColor colorWithWhite:0.86 alpha:1];
+	return [NSColor colorWithWhite:0.18 alpha:1];
+}
+
+@interface BethGlassPlate : NSGlassEffectView
+@property (nonatomic) BOOL bethSelected;
+@property (nonatomic) BOOL bethHover;
+@property (nonatomic) BOOL bethTip;
+- (void)bethApplyTint;
+@end
+
 static void bethRetintGlass(void) {
 	void (^paint)(NSView *) = ^(NSView *host) {
 		if (host == nil) return;
 		for (NSView *child in host.subviews) {
+			if ([child isKindOfClass:[BethGlassPlate class]]) {
+				[(BethGlassPlate *)child bethApplyTint];
+				continue;
+			}
 			if (![child isKindOfClass:[NSGlassEffectView class]]) continue;
 			NSGlassEffectView *g = (NSGlassEffectView *)child;
 			g.style = bethGlassPower > 0.55 ? NSGlassEffectViewStyleRegular : NSGlassEffectViewStyleClear;
@@ -80,9 +129,10 @@ static void bethRetintGlass(void) {
 	paint(bethMenuHost);
 }
 
-// bethSidebarFrame: a faixa do cartão. top = abas (40) + 8, bottom = altura - 8.
+// bethSidebarFrame: a faixa do cartão. top = base das abas (40), bottom = altura - 8
+// (mesma altura da caixa do terminal; sem vão extra sob as abas).
 void bethSidebarFrame(double windowHeight, double *top, double *bottom) {
-	*top = 48;
+	*top = 40;
 	*bottom = windowHeight - 8;
 }
 
@@ -102,13 +152,12 @@ static void bethApplySidebarHole(void) {
 	CGFloat w = bethSidebarWidth;
 	if (w < 1) w = 0;
 	if (w > content.bounds.size.width - 16) w = content.bounds.size.width - 16;
-	// Cartão na faixa do terminal: 8 px da borda, topo abaixo das abas (40+8),
-	// base 8 px acima do fundo. O vão que sobra é a janela, pintada com a
-	// cor da topbar em bethSetVibrancy.
+	// Cartão na faixa do terminal: 8 px da borda, topo na base das abas (40),
+	// base 8 px acima do fundo — mesma altura da caixa do terminal.
 	double frameTop = 0, frameBottom = 0;
 	bethSidebarFrame(h, &frameTop, &frameBottom);
 	// AppKit: y=0 é o fundo. O vidro fica só no cartão: 8 px da borda, 8 px
-	// do terminal, topo 48 px abaixo da janela e base 8 px acima do fundo.
+	// do terminal, topo 40 px abaixo da janela e base 8 px acima do fundo.
 	// O vão em volta é a cor da topbar, não o material.
 	// O material BehindWindow aparece por cima de qualquer tinta da página.
 	// O cartão fica 8 px para dentro da coluna: a borda, os semáforos e o
@@ -177,10 +226,12 @@ static void bethApplySidebarHole(void) {
 	bethVibrancy.layer.mask = mask;
 }
 
-@interface BethGlassPlate : NSGlassEffectView
-@end
 @implementation BethGlassPlate
 - (NSView *)hitTest:(NSPoint)point { (void)point; return nil; }
+- (void)bethApplyTint {
+	self.style = bethGlassPower > 0.55 ? NSGlassEffectViewStyleRegular : NSGlassEffectViewStyleClear;
+	self.tintColor = bethGlassTint(self.bethSelected, self.bethHover, self.bethTip);
+}
 @end
 
 // Triângulo do balão. Girar uma placa de vidro derruba o processo.
@@ -251,7 +302,9 @@ static void bethApplyGlass(NSString *body) {
 			CGFloat w = [r[@"w"] doubleValue];
 			CGFloat h = [r[@"h"] doubleValue];
 			CGFloat rad = [r[@"r"] doubleValue];
-			if (w < 6 || h < 4 || w > 480 || h > 110) continue;
+			BOOL isRow = [r[@"row"] intValue] == 1;
+			// Chat selecionado passa de 110 px (cwd / na aba / fase).
+			if (w < 6 || h < 4 || w > 480 || h > 200) continue;
 			if (y < 0 || y > pageH) continue;
 			// WKWebView mede de cima para baixo. NSView mede de baixo para
 			// cima, a menos que a view seja flipped.
@@ -265,21 +318,31 @@ static void bethApplyGlass(NSString *body) {
 			BOOL tip = [r[@"tip"] intValue] == 1;
 			NSString *text = r[@"t"];
 
-			if ([r[@"row"] intValue] == 1) {
-				// Só a placa de vidro (seleção/hover). Nome, ponto de status e
-				// cwd ficam na página — desenhar de novo aqui cobria o texto.
+			g.bethSelected = [r[@"on"] intValue] == 1;
+			g.bethHover = [r[@"hov"] intValue] == 1;
+			g.bethTip = tip;
+			if (isRow) {
+				// Mesmo material dos botões Ver, mas atrás do WebView: o HTML
+				// (nome, na aba, badge) fica por cima do vidro. Sem rótulo nativo.
 				(void)text;
-				g.style = bethGlassPower > 0.55 ? NSGlassEffectViewStyleRegular : NSGlassEffectViewStyleClear;
-				g.tintColor = bethGlassTint([r[@"on"] intValue] == 1, [r[@"hov"] intValue] == 1, NO);
-				[bethGlassHost addSubview:g];
+				NSView *host = bethRowHost != nil ? bethRowHost : bethGlassHost;
+				// Garante rowHost acima do vibrancy e abaixo do web.
+				if (host == bethRowHost && bethWeb != nil && bethRowHost.superview != nil) {
+					NSView *parent = bethRowHost.superview;
+					[bethRowHost removeFromSuperview];
+					[parent addSubview:bethRowHost positioned:NSWindowBelow relativeTo:bethWeb];
+				}
+				g.frame = [bethWeb convertRect:inWeb toView:host];
+				g.bethTip = NO;
+				[g bethApplyTint];
+				[host addSubview:g];
 				n++;
 				continue;
 			}
 			// Potência escolhe a força do material; transparência multiplica o véu.
 			// Os dois vão de quase invisível a bem fechado, inclusive no
 			// selecionado e no hover.
-			g.style = bethGlassPower > 0.55 ? NSGlassEffectViewStyleRegular : NSGlassEffectViewStyleClear;
-			g.tintColor = bethGlassTint([r[@"on"] intValue] == 1, [r[@"hov"] intValue] == 1, tip);
+			[g bethApplyTint];
 			if (tip) {
 				NSString *side = r[@"side"];
 				CGFloat ax = [r[@"ax"] doubleValue];
@@ -291,9 +354,11 @@ static void bethApplyGlass(NSString *body) {
 				else if ([side isEqualToString:@"left"]) body = NSMakeRect(0, 0, w - aw, h);
 				g.frame = inHost;
 				BethGlassPlate *arrow = [[BethGlassPlate alloc] initWithFrame:NSZeroRect];
-				arrow.style = g.style;
-				arrow.tintColor = g.tintColor;
+				arrow.bethSelected = g.bethSelected;
+				arrow.bethHover = g.bethHover;
+				arrow.bethTip = YES;
 				arrow.cornerRadius = 2;
+				[arrow bethApplyTint];
 				if ([side isEqualToString:@"below"]) arrow.frame = NSMakeRect(inHost.origin.x + ax - aw / 2, NSMaxY(inHost) - aw, aw, aw);
 				else if ([side isEqualToString:@"above"]) arrow.frame = NSMakeRect(inHost.origin.x + ax - aw / 2, inHost.origin.y, aw, aw);
 				else if ([side isEqualToString:@"right"]) arrow.frame = NSMakeRect(inHost.origin.x, inHost.origin.y + h / 2 - aw / 2, aw, aw);
@@ -307,7 +372,7 @@ static void bethApplyGlass(NSString *body) {
 				NSString *desc = r[@"sub"];
 				NSTextField *label = [NSTextField labelWithString:title];
 				label.font = [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold];
-				label.textColor = [NSColor whiteColor];
+				label.textColor = bethGlassInk(NO);
 				label.lineBreakMode = NSLineBreakByTruncatingTail;
 				[label sizeToFit];
 				label.frame = NSMakeRect(10, bh - label.frame.size.height - 7, bw - 20, label.frame.size.height);
@@ -315,7 +380,7 @@ static void bethApplyGlass(NSString *body) {
 				if ([desc isKindOfClass:[NSString class]] && desc.length > 0) {
 					NSTextField *line2 = [NSTextField labelWithString:desc];
 					line2.font = [NSFont systemFontOfSize:11 weight:NSFontWeightRegular];
-					line2.textColor = [NSColor colorWithWhite:1 alpha:0.7];
+					line2.textColor = bethGlassDark ? [NSColor colorWithWhite:1 alpha:0.7] : [NSColor colorWithWhite:0.35 alpha:1];
 					line2.lineBreakMode = NSLineBreakByWordWrapping;
 					line2.maximumNumberOfLines = 3;
 					line2.frame = NSMakeRect(10, 6, w - 20, h - label.frame.size.height - 14);
@@ -331,14 +396,17 @@ static void bethApplyGlass(NSString *body) {
 				NSImage *mag = [NSImage imageWithSystemSymbolName:@"magnifyingglass" accessibilityDescription:nil];
 				if (mag != nil) {
 					NSImageView *icon = [NSImageView imageViewWithImage:mag];
-					icon.contentTintColor = [NSColor colorWithWhite:1 alpha:0.85];
+					icon.contentTintColor = bethGlassDark ? [NSColor colorWithWhite:1 alpha:0.85] : [NSColor colorWithWhite:0.35 alpha:1];
 					icon.frame = NSMakeRect(12, (h - 14) / 2.0, 14, 14);
 					[box addSubview:icon];
 				}
 				NSString *shown = [text isKindOfClass:[NSString class]] && text.length > 0 ? text : @"Buscar terminal ou pasta";
 				NSTextField *label = [NSTextField labelWithString:shown];
 				label.font = [NSFont systemFontOfSize:13 weight:NSFontWeightRegular];
-				label.textColor = [r[@"ph"] intValue] == 1 ? [NSColor colorWithWhite:1 alpha:0.62] : [NSColor whiteColor];
+				BOOL ph = [r[@"ph"] intValue] == 1;
+				label.textColor = bethGlassDark
+					? (ph ? [NSColor colorWithWhite:1 alpha:0.62] : [NSColor whiteColor])
+					: (ph ? [NSColor colorWithWhite:0.45 alpha:1] : [NSColor colorWithWhite:0.15 alpha:1]);
 				label.alignment = NSTextAlignmentLeft;
 				label.lineBreakMode = NSLineBreakByTruncatingTail;
 				[label sizeToFit];
@@ -360,15 +428,22 @@ static void bethApplyGlass(NSString *body) {
 					CGFloat icon = labeled ? 14 : 16;
 					CGFloat ix = labeled ? 10 : (w - icon) / 2.0;
 					NSImageView *view = [[NSImageView alloc] initWithFrame:NSMakeRect(ix, (h - icon) / 2.0, icon, icon)];
+					// Silhueta (mono): o AppKit pinta com a tinta do tema —
+					// escura no claro (guia inativa), branca no selecionado.
+					BOOL mono = [r[@"mono"] intValue] == 1;
+					img.template = mono;
 					view.image = img;
 					view.imageScaling = NSImageScaleProportionallyUpOrDown;
+					if (mono) view.contentTintColor = bethGlassInk([r[@"on"] intValue] == 1);
 					[box addSubview:view];
 					if (labeled && [r[@"wrap"] intValue] == 1) {
 						// Ícone em cima. O texto quebra só nos espaços, no
 						// centro, e não passa da borda do botão.
+						// Sempre claro: labelColor do sistema fica preto no
+						// tema claro e some no Vibrancy.
 						box.clipsToBounds = YES;
 						NSFont *font = [NSFont systemFontOfSize:11 weight:NSFontWeightMedium];
-						NSColor *ink = [r[@"on"] intValue] == 1 ? [NSColor whiteColor] : [NSColor labelColor];
+						NSColor *ink = bethGlassInk([r[@"on"] intValue] == 1);
 						// A página mede em CSS px; o AppKit desenha em pontos
 						// da tela. Sem este fator o texto sai mais largo que
 						// o botão e a quebra nunca dispara.
@@ -415,14 +490,14 @@ static void bethApplyGlass(NSString *body) {
 						BOOL two = [sub isKindOfClass:[NSString class]] && sub.length > 0;
 						NSTextField *label = [NSTextField labelWithString:text];
 						label.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
-						label.textColor = [NSColor labelColor];
+						label.textColor = bethGlassInk(NO);
 						label.lineBreakMode = NSLineBreakByTruncatingTail;
 						CGFloat textW = w - ix - icon - 12;
 						if (two) {
 							label.frame = NSMakeRect(ix + icon + 4, h / 2.0 - 1, textW, h / 2.0 - 2);
 							NSTextField *line2 = [NSTextField labelWithString:sub];
 							line2.font = [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightRegular];
-							line2.textColor = [NSColor secondaryLabelColor];
+							line2.textColor = bethGlassDark ? [NSColor colorWithWhite:0.7 alpha:1] : [NSColor colorWithWhite:0.35 alpha:1];
 							line2.lineBreakMode = NSLineBreakByTruncatingTail;
 							line2.frame = NSMakeRect(ix + icon + 4, 3, textW, h / 2.0 - 4);
 							[box addSubview:line2];
@@ -438,7 +513,7 @@ static void bethApplyGlass(NSString *body) {
 				NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, w, h)];
 				NSTextField *label = [NSTextField labelWithString:text];
 				label.font = [NSFont systemFontOfSize:11 weight:NSFontWeightMedium];
-				label.textColor = [r[@"on"] intValue] == 1 ? [NSColor whiteColor] : [NSColor labelColor];
+				label.textColor = bethGlassInk([r[@"on"] intValue] == 1);
 				label.alignment = NSTextAlignmentCenter;
 				label.lineBreakMode = NSLineBreakByTruncatingTail;
 				[label sizeToFit];
@@ -479,6 +554,7 @@ static void bethApplyGlass(NSString *body) {
 @end
 
 static NSPopover *bethMenuPop = nil;
+static NSPopover *bethTipPop = nil;
 
 @interface BethMenuBridge : NSObject <NSPopoverDelegate>
 @end
@@ -494,6 +570,10 @@ static NSPopover *bethMenuPop = nil;
 	}];
 }
 - (void)popoverDidClose:(NSNotification *)note {
+	if (note.object == bethTipPop) {
+		bethTipPop = nil;
+		return;
+	}
 	if (note.object != bethMenuPop) return;
 	bethMenuPop = nil;
 	[bethWeb evaluateJavaScript:@"window.__bethMenuClosed && window.__bethMenuClosed()" completionHandler:nil];
@@ -502,8 +582,16 @@ static NSPopover *bethMenuPop = nil;
 
 static BethMenuBridge *bethMenuBridge = nil;
 
+static void bethCloseTipPop(void) {
+	if (bethTipPop == nil) return;
+	NSPopover *previous = bethTipPop;
+	bethTipPop = nil;
+	[previous close];
+}
+
 static void bethApplyMenu(NSString *body) {
 	if (bethWeb == nil) return;
+	bethCloseTipPop();
 	if (bethMenuPop != nil) {
 		NSPopover *previous = bethMenuPop;
 		bethMenuPop = nil;
@@ -597,64 +685,74 @@ void bethSetMenu(const char *json) {
 	bethApplyMenu(body);
 }
 
+// Tooltip: o mesmo NSPopover do menu de contexto (liquid glass nativo),
+// sem seta desenhada à mão. ignoresMouseEvents evita sumir ao passar o mouse.
 static void bethApplyTip(NSString *body) {
-	if (bethTipHost == nil || bethWeb == nil) return;
-	if (@available(macOS 26.0, *)) {
+	if (bethWeb == nil) return;
+	bethCloseTipPop();
+	if (bethTipHost != nil) {
 		for (NSView *child in [bethTipHost.subviews copy]) [child removeFromSuperview];
-		if (body.length < 3 || [body isEqualToString:@"[]"]) return;
+	}
+	if (body.length < 3 || [body isEqualToString:@"[]"]) return;
+	if (@available(macOS 14.0, *)) {
 		NSData *data = [body dataUsingEncoding:NSUTF8StringEncoding];
 		NSDictionary *r = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
 		if (![r isKindOfClass:[NSDictionary class]]) return;
-		CGFloat x = [r[@"x"] doubleValue];
-		CGFloat y = [r[@"y"] doubleValue];
-		CGFloat ax = [r[@"ax"] doubleValue];
-		BOOL above = [r[@"above"] intValue] == 1;
 		NSString *title = [r[@"title"] isKindOfClass:[NSString class]] ? r[@"title"] : @"";
 		NSString *desc = [r[@"desc"] isKindOfClass:[NSString class]] ? r[@"desc"] : @"";
+		if (title.length == 0) return;
+		CGFloat ax = [r[@"ax"] doubleValue];
+		CGFloat ay = [r[@"ay"] doubleValue];
+		CGFloat aw = [r[@"aw"] doubleValue];
+		CGFloat ah = [r[@"ah"] doubleValue];
+		if (aw < 1) aw = 2;
+		if (ah < 1) ah = 2;
+		BOOL preferAbove = [r[@"above"] intValue] == 1;
 		CGFloat textW = 220;
-		NSFont *titleFont = [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold];
-		NSFont *descFont = [NSFont systemFontOfSize:11 weight:NSFontWeightRegular];
-		NSRect titleBox = [title boundingRectWithSize:NSMakeSize(textW, 40) options:NSStringDrawingUsesLineFragmentOrigin attributes:@{ NSFontAttributeName: titleFont }];
+		NSFont *titleFont = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
+		NSFont *descFont = [NSFont systemFontOfSize:12 weight:NSFontWeightRegular];
+		NSRect titleBox = [title boundingRectWithSize:NSMakeSize(textW, 60) options:NSStringDrawingUsesLineFragmentOrigin attributes:@{ NSFontAttributeName: titleFont }];
 		NSRect descBox = desc.length ? [desc boundingRectWithSize:NSMakeSize(textW, 80) options:NSStringDrawingUsesLineFragmentOrigin attributes:@{ NSFontAttributeName: descFont }] : NSZeroRect;
 		CGFloat labelH = ceil(titleBox.size.height);
 		CGFloat descH = desc.length ? ceil(descBox.size.height) : 0;
-		CGFloat w = textW + 24;
-		CGFloat h = 10 + labelH + (descH > 0 ? 4 + descH : 0) + 10;
-		CGFloat pageH = bethWeb.bounds.size.height;
-		CGFloat localY = bethWeb.isFlipped ? y : (pageH - y - h);
-		NSRect inHost = [bethWeb convertRect:NSMakeRect(x, localY, w, h) toView:bethTipHost];
-		BethGlassPlate *g = [[BethGlassPlate alloc] initWithFrame:inHost];
-		g.cornerRadius = 22;
-		g.style = NSGlassEffectViewStyleRegular;
-		g.tintColor = [NSColor colorWithCalibratedWhite:0.17 alpha:0.76];
-		NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, w, h)];
+		CGFloat padX = 12;
+		CGFloat padY = 8;
+		CGFloat gap = descH > 0 ? 2 : 0;
+		CGFloat contentW = MIN(textW, MAX(ceil(titleBox.size.width), ceil(descBox.size.width))) + padX * 2;
+		if (contentW < 80) contentW = 80;
+		CGFloat contentH = padY + labelH + gap + descH + padY;
+		NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, contentW, contentH)];
 		NSTextField *label = [NSTextField wrappingLabelWithString:title];
 		label.font = titleFont;
-		label.textColor = [NSColor whiteColor];
-		label.maximumNumberOfLines = 2;
-		label.frame = NSMakeRect(12, h - labelH - 10, textW, labelH);
+		label.textColor = [NSColor labelColor];
+		label.maximumNumberOfLines = 3;
+		label.frame = NSMakeRect(padX, contentH - padY - labelH, contentW - padX * 2, labelH);
 		[box addSubview:label];
 		if (descH > 0) {
 			NSTextField *line2 = [NSTextField wrappingLabelWithString:desc];
 			line2.font = descFont;
-			line2.textColor = [NSColor colorWithWhite:1 alpha:0.75];
+			line2.textColor = [NSColor secondaryLabelColor];
 			line2.maximumNumberOfLines = 4;
-			line2.frame = NSMakeRect(12, 10, textW, descH);
+			line2.frame = NSMakeRect(padX, padY, contentW - padX * 2, descH);
 			[box addSubview:line2];
 		}
-		g.contentView = box;
-		[bethTipHost addSubview:g];
-		CGFloat aw = 22;
-		CGFloat ah = 9;
-		BethTipArrow *arrow = [[BethTipArrow alloc] initWithFrame:NSZeroRect];
-		arrow.pointsUp = !above;
-		CGFloat arrowX = inHost.origin.x + MIN(MAX(ax, 24), w - 24) - aw / 2.0;
-		// O host não é flipped: origem embaixo. O balão abaixo do botão
-		// precisa da seta no topo da placa, apontando para cima.
-		arrow.frame = above
-			? NSMakeRect(arrowX, inHost.origin.y - ah + 1, aw, ah)
-			: NSMakeRect(arrowX, NSMaxY(inHost) - 1, aw, ah);
-		[bethTipHost addSubview:arrow];
+		if (bethMenuBridge == nil) bethMenuBridge = [BethMenuBridge new];
+		NSViewController *vc = [[NSViewController alloc] init];
+		vc.view = box;
+		NSPopover *pop = [[NSPopover alloc] init];
+		pop.contentViewController = vc;
+		pop.contentSize = NSMakeSize(contentW, contentH);
+		pop.behavior = NSPopoverBehaviorApplicationDefined;
+		pop.animates = YES;
+		pop.delegate = bethMenuBridge;
+		CGFloat pageH = bethWeb.bounds.size.height;
+		CGFloat anchorY = bethWeb.isFlipped ? ay : (pageH - ay - ah);
+		NSRect anchor = NSMakeRect(ax, anchorY, aw, ah);
+		bethTipPop = pop;
+		NSRectEdge edge = preferAbove ? NSRectEdgeMaxY : NSRectEdgeMinY;
+		[pop showRelativeToRect:anchor ofView:bethWeb preferredEdge:edge];
+		NSWindow *win = box.window;
+		win.ignoresMouseEvents = YES;
 	}
 }
 
@@ -701,22 +799,28 @@ void bethSetSidebarWidth(double width) {
 
 static char bethGutter[96] = "unset";
 
-// A página manda a cor computada da topbar (rgb/rgba). Sem isso o vão
-// fica o preto da janela transparente, mais escuro que a faixa das abas.
+// A página manda a cor da topbar (rgb/rgba). Sem isso o vão fica o preto
+// da janela transparente — no tema claro isso aparece nos cantos do cartão.
 static NSColor *bethGutterColor(void) {
 	const char *s = bethGutter;
 	int r = 0, g = 0, b = 0;
 	float a = 1;
 	// A página pinta 26 e o print devolve 32. O vão nativo, atrás do
 	// WebView, precisa do sRGB que a captura lê como 26.
-	if (sscanf(s, "rgb(%d, %d, %d)", &r, &g, &b) == 3 || sscanf(s, "rgb(%d,%d,%d)", &r, &g, &b) == 3) {
+	if (sscanf(s, "rgb(%d, %d, %d)", &r, &g, &b) == 3 || sscanf(s, "rgb(%d,%d,%d)", &r, &g, &b) == 3 ||
+	    sscanf(s, "rgb(%d %d %d)", &r, &g, &b) == 3) {
 		if (r == 26 && g == 26 && b == 26) {
 			return [NSColor colorWithSRGBRed:19.0 / 255.0 green:19.0 / 255.0 blue:19.0 / 255.0 alpha:1];
 		}
 		return [NSColor colorWithSRGBRed:r / 255.0 green:g / 255.0 blue:b / 255.0 alpha:1];
 	}
-	if (sscanf(s, "rgba(%d, %d, %d, %f)", &r, &g, &b, &a) == 4 || sscanf(s, "rgba(%d,%d,%d,%f)", &r, &g, &b, &a) == 4) {
+	if (sscanf(s, "rgba(%d, %d, %d, %f)", &r, &g, &b, &a) == 4 || sscanf(s, "rgba(%d,%d,%d,%f)", &r, &g, &b, &a) == 4 ||
+	    sscanf(s, "rgba(%d %d %d / %f)", &r, &g, &b, &a) == 4) {
 		return [NSColor colorWithSRGBRed:r / 255.0 green:g / 255.0 blue:b / 255.0 alpha:a];
+	}
+	// Antes da 1ª mensagem da página: segue o tema (claro ≠ preto).
+	if (!bethGlassDark) {
+		return [NSColor colorWithSRGBRed:236.0 / 255.0 green:236.0 / 255.0 blue:236.0 / 255.0 alpha:1];
 	}
 	return [NSColor colorWithSRGBRed:19.0 / 255.0 green:19.0 / 255.0 blue:19.0 / 255.0 alpha:1];
 }
@@ -743,8 +847,15 @@ void bethSetVibrancy(int on) {
 	if (!on) {
 		[bethVibrancy removeFromSuperview];
 		bethVibrancy = nil;
+		if (bethGutterStrip != nil) {
+			[bethGutterStrip removeFromSuperview];
+			bethGutterStrip = nil;
+		}
+		if (bethWindow != nil) {
+			bethWindow.backgroundColor = bethGutterColor();
+		}
 		if (bethWeb != nil) {
-			bethWeb.underPageBackgroundColor = [NSColor colorWithCalibratedWhite:0.12 alpha:1];
+			bethWeb.underPageBackgroundColor = bethGutterColor();
 			[bethWeb setValue:@YES forKey:@"drawsBackground"];
 		}
 		return;
@@ -757,7 +868,9 @@ void bethSetVibrancy(int on) {
 	}
 	if (bethVibrancy == nil) {
 		NSVisualEffectView *fx = [[NSVisualEffectView alloc] initWithFrame:NSMakeRect(0, 0, 0, content.bounds.size.height)];
-		fx.material = NSVisualEffectMaterialSidebar;
+		// Claro: Sidebar fica quase opaco (igual à topbar). UnderWindow
+		// deixa o blur do wallpaper aparecer. Escuro: Sidebar continua ok.
+		fx.material = bethGlassDark ? NSVisualEffectMaterialSidebar : NSVisualEffectMaterialUnderWindowBackground;
 		// BehindWindow amostra o wallpaper. O cartão da página fica
 		// transparente, então o material aparece atrás da lista. Na frente
 		// do WebView o vidro cobriria busca, botões e texto.
@@ -765,6 +878,19 @@ void bethSetVibrancy(int on) {
 		fx.state = NSVisualEffectStateActive;
 		[content addSubview:fx positioned:NSWindowBelow relativeTo:bethWeb];
 		bethVibrancy = fx;
+	} else {
+		bethVibrancy.material = bethGlassDark ? NSVisualEffectMaterialSidebar : NSVisualEffectMaterialUnderWindowBackground;
+	}
+	// Camadas atrás do WebView: vibrancy (fundo) → rowHost (placa do chat)
+	// → web (texto por cima do vidro). Sem isto o rowHost ficava sob o
+	// vibrancy e a placa do selecionado sumia.
+	if (bethVibrancy != nil) {
+		[bethVibrancy removeFromSuperview];
+		[content addSubview:bethVibrancy positioned:NSWindowBelow relativeTo:bethWeb];
+	}
+	if (bethRowHost != nil) {
+		[bethRowHost removeFromSuperview];
+		[content addSubview:bethRowHost positioned:NSWindowBelow relativeTo:bethWeb];
 	}
 	bethApplySidebarHole();
 }
@@ -804,6 +930,19 @@ static BethWindowDelegate *bethWindowDelegate = nil;
 @end
 
 @implementation BethWebView
+- (BOOL)performKeyEquivalent:(NSEvent *)event {
+	NSEventModifierFlags mods = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+	BOOL cmd = (mods & NSEventModifierFlagCommand) != 0;
+	BOOL extra = (mods & (NSEventModifierFlagShift | NSEventModifierFlagOption | NSEventModifierFlagControl)) != 0;
+	if (cmd && !extra) {
+		NSString *ch = event.charactersIgnoringModifiers.lowercaseString;
+		if ([ch isEqualToString:@"t"]) {
+			[self evaluateJavaScript:@"window.dispatchEvent(new CustomEvent('beth-shortcut',{detail:'new_tab'}))" completionHandler:nil];
+			return YES;
+		}
+	}
+	return [super performKeyEquivalent:event];
+}
 @end
 
 @interface BethWebDelegate : NSObject <WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler>
@@ -887,7 +1026,10 @@ static BethWindowDelegate *bethWindowDelegate = nil;
 	if ([message.name isEqualToString:@"bethDrag"]) {
 		NSString *body = [message.body description];
 		if ([body isEqualToString:@"zoom"]) bethZoomWindow();
-		else bethDragWindow();
+		else if ([body isEqualToString:@"close"]) {
+			bethAllowClose = 1;
+			[NSApp terminate:nil];
+		} else bethDragWindow();
 	} else if ([message.name isEqualToString:@"bethVibrancy"]) {
 		bethSetVibrancy([[message.body description] isEqualToString:@"1"] ? 1 : 0);
 	} else if ([message.name isEqualToString:@"bethSidebar"]) {
@@ -895,16 +1037,12 @@ static BethWindowDelegate *bethWindowDelegate = nil;
 	} else if ([message.name isEqualToString:@"bethGutter"]) {
 		NSString *g = [message.body description];
 		if (g.length > 0 && g.length < 90) snprintf(bethGutter, sizeof(bethGutter), "%s", g.UTF8String);
-		if (bethSidebarWidth > 1 && bethWindow != nil && bethVibrancy != nil) {
-			NSRect vf = bethVibrancy.frame;
-			CGFloat h = bethWindow.contentView.bounds.size.height;
-			FILE *out = fopen("/tmp/beth-vibrancy-frame.txt", "a");
-			if (out != NULL) {
-				fprintf(out, "glass x %.0f y %.0f w %.0f h %.0f windowH %.0f gutter %s\n", vf.origin.x, vf.origin.y, vf.size.width, vf.size.height, h, bethGutter);
-				fclose(out);
-			}
-		}
+		// A cor chega depois do vibrancy (mesmo effect da página). Sem
+		// reaplica, a faixa fica no default escuro e o tema claro mostra
+		// preto nos cantos do cartão.
+		if (bethVibrancy != nil) bethApplySidebarHole();
 	} else if ([message.name isEqualToString:@"bethGlassTune"]) {
+		// "power,alpha" ou "power,alpha,r,g,b" (r/g/b = 0–255 do --bt-accent).
 		NSArray *parts = [[message.body description] componentsSeparatedByString:@","];
 		if (parts.count > 0) {
 			CGFloat v = [parts[0] doubleValue];
@@ -917,6 +1055,35 @@ static BethWindowDelegate *bethWindowDelegate = nil;
 			if (v < 0.15) v = 0.15;
 			if (v > 1) v = 1;
 			bethGlassAlpha = v;
+		}
+		if (parts.count >= 5) {
+			CGFloat rr = [parts[2] doubleValue] / 255.0;
+			CGFloat gg = [parts[3] doubleValue] / 255.0;
+			CGFloat bb = [parts[4] doubleValue] / 255.0;
+			if (rr < 0) rr = 0; if (rr > 1) rr = 1;
+			if (gg < 0) gg = 0; if (gg > 1) gg = 1;
+			if (bb < 0) bb = 0; if (bb > 1) bb = 1;
+			bethAccentR = rr;
+			bethAccentG = gg;
+			bethAccentB = bb;
+		}
+		if (parts.count >= 6) {
+			bethGlassDark = [parts[5] intValue] != 0;
+			NSAppearance *ap = [NSAppearance appearanceNamed:bethGlassDark ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua];
+			if (bethWindow != nil) bethWindow.appearance = ap;
+			if (bethVibrancy != nil) {
+				bethVibrancy.appearance = ap;
+				bethVibrancy.material = bethGlassDark ? NSVisualEffectMaterialSidebar : NSVisualEffectMaterialUnderWindowBackground;
+			}
+			if (bethGlassHost != nil) bethGlassHost.appearance = ap;
+			if (bethRowHost != nil) bethRowHost.appearance = ap;
+			// Troca claro/escuro às vezes religa o fundo opaco do WKWebView.
+			if (bethVibrancy != nil && bethWeb != nil) {
+				bethWeb.underPageBackgroundColor = [NSColor clearColor];
+				[bethWeb setValue:@NO forKey:@"drawsBackground"];
+			}
+			// Atualiza o vão (default claro/escuro) antes da mensagem bethGutter.
+			if (bethVibrancy != nil) bethApplySidebarHole();
 		}
 		bethRetintGlass();
 	} else if ([message.name isEqualToString:@"bethGlass"]) {
@@ -986,12 +1153,34 @@ static void bethCenterLights(NSWindow *win) {
 	}
 }
 
-/* Os atalhos padrão do macOS chegam ao editor focado via responder chain. */
+/* Nova aba (⌘T) e os atalhos de edição do macOS. */
+@interface BethMenuTarget : NSObject
+@end
+@implementation BethMenuTarget
+- (void)bethNewTab:(id)sender {
+	(void)sender;
+	if (bethWeb == nil) return;
+	[bethWeb evaluateJavaScript:@"window.dispatchEvent(new CustomEvent('beth-shortcut',{detail:'new_tab'}))" completionHandler:nil];
+}
+@end
+
+static BethMenuTarget *bethMenuTarget;
+
 static void bethInstallEditMenu(void) {
 	NSMenu *main = NSApp.mainMenu;
 	if (main == nil) {
 		main = [[NSMenu alloc] initWithTitle:@""];
 		NSApp.mainMenu = main;
+	}
+	if (bethMenuTarget == nil) bethMenuTarget = [BethMenuTarget new];
+	if ([main itemWithTitle:@"Arquivo"] == nil) {
+		NSMenuItem *fileItem = [[NSMenuItem alloc] initWithTitle:@"Arquivo" action:nil keyEquivalent:@""];
+		NSMenu *file = [[NSMenu alloc] initWithTitle:fileItem.title];
+		NSMenuItem *nova = [[NSMenuItem alloc] initWithTitle:@"Nova aba" action:@selector(bethNewTab:) keyEquivalent:@"t"];
+		nova.target = bethMenuTarget;
+		[file addItem:nova];
+		[main addItem:fileItem];
+		fileItem.submenu = file;
 	}
 	if ([main itemWithTitle:@"Editar"] != nil) return;
 	NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:@"Editar" action:nil keyEquivalent:@""];
@@ -1026,20 +1215,32 @@ void bethOpen(const char *url, const char *title, int width, int height) {
 	// Barra de título própria: os botões do sistema ficam, o título some e
 	// a página desenha as abas nessa faixa, como um navegador. Windows não
 	// passa por aqui.
+	NSWindowStyleMask mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
+	           NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+	if (!bethAuxWindow) {
+		mask |= NSWindowStyleMaskFullSizeContentView;
+	}
 	NSWindow *win = [[NSWindow alloc]
 		initWithContentRect:frame
-		styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
-		           NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable |
-		           NSWindowStyleMaskFullSizeContentView)
+		styleMask:mask
 		backing:NSBackingStoreBuffered
 		defer:NO];
 	[win setTitle:[NSString stringWithUTF8String:title]];
-	[win setTitlebarAppearsTransparent:YES];
-	[win setTitleVisibility:NSWindowTitleHidden];
-	win.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
-	// Sem isto o material BehindWindow amostra o fundo opaco da janela.
-	[win setOpaque:NO];
-	[win setBackgroundColor:[NSColor clearColor]];
+	if (bethAuxWindow) {
+		[win setTitlebarAppearsTransparent:NO];
+		[win setTitleVisibility:NSWindowTitleVisible];
+		win.titlebarSeparatorStyle = NSTitlebarSeparatorStyleAutomatic;
+		[win setOpaque:YES];
+		[win setBackgroundColor:[NSColor windowBackgroundColor]];
+		// Sem FullSizeContentView os semáforos ficam na barra de título normal.
+	} else {
+		[win setTitlebarAppearsTransparent:YES];
+		[win setTitleVisibility:NSWindowTitleHidden];
+		win.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+		// Sem isto o material BehindWindow amostra o fundo opaco da janela.
+		[win setOpaque:NO];
+		[win setBackgroundColor:[NSColor clearColor]];
+	}
 	bethCenterLights(win);
 	dispatch_async(dispatch_get_main_queue(), ^{ bethCenterLights(win); });
 	[[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResizeNotification object:win queue:nil usingBlock:^(NSNotification *n) {
@@ -1074,31 +1275,42 @@ void bethOpen(const char *url, const char *title, int width, int height) {
 	[cfg.userContentController addScriptMessageHandler:(id<WKScriptMessageHandler>)bethWebDelegate name:@"bethTip"];
 	[cfg.userContentController addScriptMessageHandler:(id<WKScriptMessageHandler>)bethWebDelegate name:@"bethMenu"];
 	[web setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-	// O vidro fica na frente. O conteúdo (ícone ou nome) vai dentro dele;
-	// atrás da página o efeito não aparece.
 	NSView *root = [[NSView alloc] initWithFrame:frame];
-	BethPassView *glassHost = [[BethPassView alloc] initWithFrame:frame];
-	glassHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-	BethPassView *tipHost = [[BethPassView alloc] initWithFrame:frame];
-	tipHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-	BethPassView *menuHost = [[BethPassView alloc] initWithFrame:frame];
-	menuHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-	BethPassView *rowHost = [[BethPassView alloc] initWithFrame:frame];
-	rowHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-	[root addSubview:rowHost];
-	[root addSubview:web];
-	[root addSubview:glassHost];
-	[root addSubview:tipHost];
-	[root addSubview:menuHost];
-	[win setContentView:root];
-	BethDragView *titleDrag = [[BethDragView alloc] initWithFrame:NSZeroRect];
-	titleDrag.autoresizingMask = NSViewMinYMargin | NSViewWidthSizable;
-	[root addSubview:titleDrag];
-	bethTitleDrag = titleDrag;
-	bethRowHost = rowHost;
-	bethGlassHost = glassHost;
-	bethTipHost = tipHost;
-	bethMenuHost = menuHost;
+	if (bethAuxWindow) {
+		// Janela auxiliar: sem vidro/liquid menus (eles cobriam o conteúdo).
+		[root addSubview:web];
+		[win setContentView:root];
+		bethTitleDrag = nil;
+		bethRowHost = nil;
+		bethGlassHost = nil;
+		bethTipHost = nil;
+		bethMenuHost = nil;
+	} else {
+		// O vidro fica na frente. O conteúdo (ícone ou nome) vai dentro dele;
+		// atrás da página o efeito não aparece.
+		BethPassView *glassHost = [[BethPassView alloc] initWithFrame:frame];
+		glassHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+		BethPassView *tipHost = [[BethPassView alloc] initWithFrame:frame];
+		tipHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+		BethPassView *menuHost = [[BethPassView alloc] initWithFrame:frame];
+		menuHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+		BethPassView *rowHost = [[BethPassView alloc] initWithFrame:frame];
+		rowHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+		[root addSubview:rowHost];
+		[root addSubview:web];
+		[root addSubview:glassHost];
+		[root addSubview:tipHost];
+		[root addSubview:menuHost];
+		[win setContentView:root];
+		BethDragView *titleDrag = [[BethDragView alloc] initWithFrame:NSZeroRect];
+		titleDrag.autoresizingMask = NSViewMinYMargin | NSViewWidthSizable;
+		[root addSubview:titleDrag];
+		bethTitleDrag = titleDrag;
+		bethRowHost = rowHost;
+		bethGlassHost = glassHost;
+		bethTipHost = tipHost;
+		bethMenuHost = menuHost;
+	}
 
 	NSURL *nsurl = [NSURL URLWithString:[NSString stringWithUTF8String:url]];
 	[web loadRequest:[NSURLRequest requestWithURL:nsurl]];
@@ -1217,4 +1429,40 @@ int bethAsk(const char *text, const char *title) {
 	[alert addButtonWithTitle:@"Cancelar"];
 	[alert setAlertStyle:NSAlertStyleWarning];
 	return [alert runModal] == NSAlertFirstButtonReturn ? 1 : 0;
+}
+
+// Seletor de pasta (NSOpenPanel). NULL = cancelou; quem chama libera com free.
+// Corre na thread principal (o handler HTTP do Go vem de outra).
+char *bethPickFolder(const char *initial) {
+	__block char *out = NULL;
+	void (^run)(void) = ^{
+		NSOpenPanel *panel = [NSOpenPanel openPanel];
+		[panel setCanChooseFiles:NO];
+		[panel setCanChooseDirectories:YES];
+		[panel setAllowsMultipleSelection:NO];
+		[panel setCanCreateDirectories:YES];
+		[panel setResolvesAliases:YES];
+		[panel setTitle:@"Escolher pasta inicial"];
+		[panel setPrompt:@"Selecionar pasta"];
+		[panel setMessage:@"Pasta em que o terminal abre"];
+		if (initial != NULL && initial[0] != '\0') {
+			NSString *path = [NSString stringWithUTF8String:initial];
+			if (path.length > 0) {
+				[panel setDirectoryURL:[NSURL fileURLWithPath:path isDirectory:YES]];
+			}
+		}
+		NSInteger resp = [panel runModal];
+		if (resp != NSModalResponseOK) return;
+		NSURL *url = [[panel URLs] firstObject];
+		if (url == nil) return;
+		NSString *picked = [url path];
+		if (picked.length == 0) return;
+		out = strdup([picked UTF8String]);
+	};
+	if ([NSThread isMainThread]) {
+		run();
+	} else {
+		dispatch_sync(dispatch_get_main_queue(), run);
+	}
+	return out;
 }

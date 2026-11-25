@@ -5,6 +5,14 @@ import { loadVoice, saveVoice } from "@/lib/voice";
 import { formatSeconds, formatUSD } from "@/lib/voicePipeline";
 import { FUNC_LABEL, filterUsage, type UsageRecord, type UsageSummary } from "@/lib/aiUsage";
 import { cn } from "@/lib/utils";
+import {
+  SettingsBtn,
+  SettingsGroup,
+  SettingsHint,
+  SettingsPanel,
+  SettingsRow,
+  SettingsSectionLabel,
+} from "./settings/SettingsUI";
 
 /** Configuracoes → "Uso e custos de IA". */
 export function AIUsageSection({ conn, onMessage }: { conn: Connection; onMessage: (m: string) => void }) {
@@ -43,9 +51,15 @@ export function AIUsageSection({ conn, onMessage }: { conn: Connection; onMessag
   const rows = useMemo(() => (s ? filterUsage(s.recent ?? [], q, fn) : []), [s, q, fn]);
   const maxDay = Math.max(0.000001, ...(s?.daily ?? []).map((d) => d.usd));
 
-  if (!s) return <div className="flex items-center gap-2 p-4 text-text-2">{loading && <Loader2 size={14} className="animate-spin" />} Carregando…</div>;
+  if (!s) {
+    return (
+      <SettingsHint>
+        {loading && <Loader2 size={14} className="mr-1 inline animate-spin" />} Carregando…
+      </SettingsHint>
+    );
+  }
   return (
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+    <div className="space-y-5">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {(
           [
@@ -55,25 +69,29 @@ export function AIUsageSection({ conn, onMessage }: { conn: Connection; onMessag
             ["Total", s.all],
           ] as const
         ).map(([l, t]) => (
-          <div key={l} className={cn("rounded border bg-bg-panel p-2.5", l === "Este mês" && s.over_limit ? "border-status-warn" : "border-border")}>
+          <SettingsPanel key={l} className={cn(l === "Este mês" && s.over_limit ? "border border-status-warn" : "")}>
             <div className="text-[11px] text-text-3">{l}</div>
             <div className="text-[17px] font-semibold tabular-nums text-text-1">{formatUSD(t.usd)}</div>
             <div className="text-[11px] text-text-2">{t.calls} chamadas</div>
-          </div>
+          </SettingsPanel>
         ))}
       </div>
-      {s.over_limit && <div className="rounded bg-status-warn/15 p-2 text-[12px] text-status-warn">O gasto deste mês passou do limite de {formatUSD(s.limit_usd)} (só um aviso: nada é bloqueado).</div>}
+      {s.over_limit && (
+        <div className="rounded bg-status-warn/15 p-2 text-[12px] text-status-warn">
+          O gasto deste mês passou do limite de {formatUSD(s.limit_usd)} (só um aviso: nada é bloqueado).
+        </div>
+      )}
 
-      <section>
-        <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-text-2">Por dia (30 dias)</div>
-        <div className="flex h-20 items-end gap-px bt-field bg-bg-panel p-1">
+      <div>
+        <SettingsSectionLabel>Por dia (30 dias)</SettingsSectionLabel>
+        <SettingsPanel className="flex h-20 items-end gap-px p-1">
           {s.daily.map((d) => (
             <div key={d.key} className="flex h-full flex-1 items-end" title={`${d.key.split("-").reverse().join("/")}: ${formatUSD(d.usd)} · ${d.calls} chamadas`}>
               <div className={cn("w-full rounded-t-sm", d.usd > 0 ? "bg-accent" : "bg-bg-hover")} style={{ height: `${d.usd > 0 ? Math.max(4, (d.usd / maxDay) * 100) : 2}%` }} />
             </div>
           ))}
-        </div>
-      </section>
+        </SettingsPanel>
+      </div>
 
       <div className="grid gap-3 md:grid-cols-3">
         {(
@@ -83,27 +101,27 @@ export function AIUsageSection({ conn, onMessage }: { conn: Connection; onMessag
             ["Por modelo", s.by_model],
           ] as const
         ).map(([title, gs]) => (
-          <section key={title}>
-            <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-text-2">{title}</div>
-            <ul className="space-y-0.5 text-[12px]">
+          <div key={title}>
+            <SettingsSectionLabel>{title}</SettingsSectionLabel>
+            <SettingsGroup>
               {(gs ?? []).slice(0, 8).map((g) => (
-                <li key={g.key} className="flex gap-2">
-                  <span className="min-w-0 flex-1 truncate text-text-1" title={g.key}>
-                    {FUNC_LABEL[g.key] ?? g.key}
-                  </span>
-                  <span className="tabular-nums text-text-2">{formatUSD(g.usd)}</span>
-                  <span className="w-10 text-right tabular-nums text-text-3">{g.calls}</span>
-                </li>
+                <SettingsRow
+                  key={g.key}
+                  label={FUNC_LABEL[g.key] ?? g.key}
+                  hint={`${g.calls} chamadas`}
+                >
+                  <span className="tabular-nums text-[12px] text-text-2">{formatUSD(g.usd)}</span>
+                </SettingsRow>
               ))}
-              {(gs ?? []).length === 0 && <li className="text-text-3">nada ainda</li>}
-            </ul>
-          </section>
+              {(gs ?? []).length === 0 && <SettingsRow label="nada ainda" />}
+            </SettingsGroup>
+          </div>
         ))}
       </div>
 
-      <section>
-        <div className="mb-1 flex flex-wrap items-center gap-2">
-          <span className="text-[12px] font-semibold uppercase tracking-wide text-text-2">Últimas chamadas</span>
+      <div>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <SettingsSectionLabel>Últimas chamadas</SettingsSectionLabel>
           <div className="flex-1" />
           <select className="h-7 bt-field bg-bg-term px-1 text-[12px] text-text-1" value={fn} onChange={(e) => setFn(e.target.value as typeof fn)}>
             <option value="">todas</option>
@@ -118,7 +136,7 @@ export function AIUsageSection({ conn, onMessage }: { conn: Connection; onMessag
             className="h-7 w-52 bt-field bg-bg-term px-2 text-[12px] text-text-1 outline-none"
           />
         </div>
-        <div className="max-h-72 overflow-auto bt-field">
+        <SettingsPanel className="max-h-72 overflow-auto p-0">
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-bg-card text-text-3">
               <tr>
@@ -143,45 +161,43 @@ export function AIUsageSection({ conn, onMessage }: { conn: Connection; onMessag
               )}
             </tbody>
           </table>
-        </div>
-      </section>
+        </SettingsPanel>
+      </div>
 
-      <section className="flex flex-wrap items-center gap-2">
-        <span className="text-[12px] text-text-2">Avisar quando o mês passar de US$</span>
-        <input
-          value={limit}
-          onChange={(e) => setLimit(e.target.value)}
-          onBlur={() => void saveLimit()}
-          placeholder="sem limite"
-          className="h-7 w-24 bt-field bg-bg-term px-2 text-[12px] text-text-1 outline-none"
-        />
-        <span className="text-[11px] text-text-3">(aviso no “Falar”; não bloqueia)</span>
-        <div className="flex-1" />
-        <button className="flex items-center gap-1 rounded bg-bg-hover px-2.5 py-1 text-[12px] text-text-1 hover:bg-border" onClick={load}>
-          <RefreshCw size={12} className={cn(loading && "animate-spin")} /> Atualizar
-        </button>
-        <button
-          className="flex items-center gap-1 rounded bg-bg-hover px-2.5 py-1 text-[12px] text-text-1 hover:bg-border"
-          onClick={() =>
-            void conn
-              .api<{ path: string }>("/api/ai-usage/export", {})
-              .then((r) => onMessage(`CSV salvo: ${r.path}`))
-              .catch((e: Error) => onMessage(`Erro: ${e.message}`))
-          }
+      <SettingsGroup>
+        <SettingsRow
+          label="Avisar quando o mês passar de US$"
+          hint="aviso no “Falar”; não bloqueia"
         >
-          <Download size={12} /> Exportar CSV
-        </button>
-        <button
-          className="flex items-center gap-1 rounded bg-bg-hover px-2.5 py-1 text-[12px] text-text-1 hover:bg-border"
-          onClick={() => void conn.api("/api/ai-usage/open", {}).catch((e: Error) => onMessage(`Erro: ${e.message}`))}
-        >
-          <FolderOpen size={12} /> Abrir pasta
-        </button>
-      </section>
-      <p className="text-[11px] text-text-3">
+          <input
+            value={limit}
+            onChange={(e) => setLimit(e.target.value)}
+            onBlur={() => void saveLimit()}
+            placeholder="sem limite"
+            className="h-7 w-24 bt-field bg-bg-term px-2 text-[12px] text-text-1 outline-none"
+          />
+          <SettingsBtn onClick={load}>
+            <RefreshCw size={12} className={cn(loading && "animate-spin")} /> Atualizar
+          </SettingsBtn>
+          <SettingsBtn
+            onClick={() =>
+              void conn
+                .api<{ path: string }>("/api/ai-usage/export", {})
+                .then((r) => onMessage(`CSV salvo: ${r.path}`))
+                .catch((e: Error) => onMessage(`Erro: ${e.message}`))
+            }
+          >
+            <Download size={12} /> Exportar CSV
+          </SettingsBtn>
+          <SettingsBtn onClick={() => void conn.api("/api/ai-usage/open", {}).catch((e: Error) => onMessage(`Erro: ${e.message}`))}>
+            <FolderOpen size={12} /> Abrir pasta
+          </SettingsBtn>
+        </SettingsRow>
+      </SettingsGroup>
+      <SettingsHint>
         Registro em {s.file} (uma linha por chamada paga; nunca guarda áudio nem texto). Custos pelo catálogo de preços do momento; “estimado” quando o provedor não
         informa o uso.
-      </p>
+      </SettingsHint>
     </div>
   );
 }

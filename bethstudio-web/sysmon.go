@@ -504,7 +504,7 @@ func matchLabel(conf string) string {
 func buildTerminals(t *procTree, host *procInfo, panes []PaneLite, titles map[procKey]string, stable map[procKey]paneMatch) ([]TermStat, MatchSummary, map[procKey]paneMatch) {
 	sum := MatchSummary{Panes: len(panes)}
 	if host == nil {
-		sum.Note = "bethstudio-host.exe não está rodando"
+		sum.Note = "bethstudio-host não está rodando"
 		var ts []TermStat
 		for _, p := range panes {
 			id := p.ID

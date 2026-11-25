@@ -52,6 +52,7 @@ func main() {
 		diag      = flag.Bool("diag", false, "a UI manda diagnosticos (fonte efetiva etc.) para o log")
 		sftpHost  = flag.String("sftp", "", "abre so' a janela SFTP do host salvo (id hex de 16 digitos)")
 		dbWindow  = flag.Bool("db", false, "abre só a janela Banco de dados (barra de tarefas própria)")
+		tasksWindow = flag.Bool("tasks", false, "abre só o Gerenciador de tarefas (janela própria)")
 		supervise = flag.Bool("supervise", false, "liga a supervisão do host mesmo com --no-window (testes)")
 		termPane  = flag.Int("term", -1, "abre só a janela destacada do terminal <pane> (aberta pelo Studio)")
 		afterPID  = flag.Int("after-pid", 0, "espera este processo (o Studio anterior) terminar antes de abrir: Reiniciar Beth Studio")
@@ -68,6 +69,10 @@ func main() {
 	}
 	if *dbWindow {
 		runDBMode(*noWindow, *devtools, *port, *winSize, *devOrig)
+		return
+	}
+	if *tasksWindow {
+		runTasksMode(*noWindow, *devtools, *port, *winSize, *devOrig)
 		return
 	}
 
@@ -138,6 +143,8 @@ func main() {
 		// Limite de CPU dos terminais (cpu_limit.go): reaplica e desfaz no prazo.
 		hub.publishCPULimit()
 		go hub.runCPULimit(ctx)
+		hub.publishRAMLimit()
+		go hub.runRAMLimit(ctx)
 	}
 	go br.run(ctx)
 	// Tipos dos terminais: pane-commands.json da GUI pode mudar sem a lista

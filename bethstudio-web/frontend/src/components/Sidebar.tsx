@@ -1,5 +1,22 @@
 import { useMemo, useState, type DragEvent as RDragEvent, type ReactNode } from "react";
-import { AppWindow, Bot, ChevronDown, ChevronRight, Columns2, Folder, FolderTree, Inbox, LayoutGrid, PanelLeftClose, Shapes, Trash2, X } from "lucide-react";
+import {
+  AppWindow,
+  Bot,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Columns2,
+  Folder,
+  FolderTree,
+  Inbox,
+  LayoutGrid,
+  Loader2,
+  MessageCircleQuestion,
+  PanelLeftClose,
+  Shapes,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { PaneInfo } from "@/lib/types";
 import { groupPanes, paneLabel } from "@/lib/panes";
 import { groupByFolder, splitCwd } from "@/lib/folders";
@@ -16,7 +33,8 @@ import { isMacTitlebar } from "@/lib/windowFrame";
 import { AGENT_FILTER, KIND_LABEL, countKinds, groupByKind, passesKindFilter, visibleKindOrder } from "@/lib/kinds";
 import type { SearchResult } from "@/lib/search";
 import { AgentDot } from "./AgentDot";
-import { reasonLabel, waitingList, type AgentInfo, type AgentState } from "@/lib/agents";
+import { agentChatPhase, reasonLabel, waitingList, type AgentInfo, type AgentState } from "@/lib/agents";
+import type { NotifyPrefs } from "@/lib/notify";
 import { SearchInput, SearchResults, type ResultActions } from "./SearchResults";
 import type { SearchState } from "@/lib/useSearch";
 
@@ -63,6 +81,9 @@ interface Props {
   onReopenClosed: (index: number) => void;
   /** Texto da tela do pane, para o nome e o ícone baterem com a aba. */
   paneScreen?: (pane: number) => string | undefined;
+  /** Avisos do sistema (aguardar / pronto); opcional na lista. */
+  notify?: NotifyPrefs;
+  onNotify?: (p: NotifyPrefs) => void;
 }
 
 export function Sidebar(p0: Props) {
@@ -102,6 +123,20 @@ export function Sidebar(p0: Props) {
           </IconButton>
         </div>
         <WaitingBar {...p0} />
+        {p0.onNotify && p0.notify && (
+          <label className="mt-1.5 flex cursor-pointer items-center gap-2 px-0.5 text-[11px] text-text-2 hover:text-text-1">
+            <input
+              type="checkbox"
+              className="accent-[rgb(var(--bt-accent))]"
+              checked={p0.notify.os || p0.notify.ready}
+              onChange={(e) => {
+                const on = e.target.checked;
+                p0.onNotify!({ ...p0.notify!, os: on, ready: on });
+              }}
+            />
+            Notificar no sistema (aguardar e pronto)
+          </label>
+        )}
       </div>
       <div className="px-2 pt-2">
         <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-text-3">Ver</div>
@@ -124,7 +159,10 @@ export function Sidebar(p0: Props) {
         <KindChips panes={p0.panes ?? []} selected={p0.kindFilter} onChange={p0.onKindFilter} order={p0.kindOrder} />
       </div>
       {(p.mode === "web" || p.mode === "host") && !p.search.query.trim() && (
-        <label className="flex cursor-pointer items-center gap-1.5 px-3 pb-1.5 text-[11px] text-text-2" title="Subdivide a lista por tipo de terminal (WSL, PowerShell, SSH…)">
+        <label
+          className="flex cursor-pointer items-center gap-1.5 px-3 pb-1.5 text-[11px] text-text-2"
+          title={/Mac/.test(navigator.platform) ? "Subdivide a lista por tipo de terminal (Container, SSH…)" : "Subdivide a lista por tipo de terminal (WSL, PowerShell, SSH…)"}
+        >
           <input type="checkbox" checked={p.splitByKind} onChange={(e) => p.onSplitByKind(e.target.checked)} />
           Separar a lista por tipo
         </label>
@@ -158,8 +196,9 @@ function ModeButton({ active, onClick, icon, children }: { active: boolean; onCl
   return (
     <button
       className={cn(
+        // Sem bg-accent/bg-hover: com vibrancy a tinta é só a placa nativa.
         "bt-mode bt-glass flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[11px] leading-tight",
-        active ? "bt-glass-on bg-accent text-white" : "bg-bg-hover text-text-2 hover:text-text-1",
+        active ? "bt-glass-on text-white" : "text-text-2 hover:text-text-1",
       )}
       onClick={onClick}
     >
@@ -391,6 +430,15 @@ function PaneItem(p: {
   const id = paneIdentity({ title: x.title, kind_label: x.kind_label, tool: x.tool, agent: x.agent_name, screen: p.screen, stored: p.stored }, paneLabel(x));
   const sidebarName = id.tool === "codex" ? "Codex" : id.name;
   const cwd = p.hideCwd ? { parent: "", name: "" } : splitCwd(x.cwd);
+  const phase = agentChatPhase({
+    title: x.title,
+    screen: p.screen,
+    agentName: x.agent_name,
+    agentFlag: x.agent,
+    waiting: !!p.agent,
+  });
+  const phaseLabel =
+    phase === "waiting" ? "aguardando você" : phase === "running" ? "rodando…" : phase === "ready" ? "pronto" : null;
   return (
     <li>
       <div
@@ -405,20 +453,35 @@ function PaneItem(p: {
           p.onMenu(e.clientX, e.clientY);
         }}
         className={cn(
-          "bt-chat group flex min-h-9 cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5",
+          "bt-chat group flex min-h-10 cursor-pointer items-start gap-2.5 rounded-2xl px-2.5 py-2",
           p.focused ? "bt-glass-on" : "hover:bg-bg-hover",
+          phase === "waiting" && !p.focused && "ring-1 ring-status-warn/35",
+          phase === "running" && !p.focused && "ring-1 ring-status-busy/30",
         )}
-        title={`${paneLabel(x)}${x.cwd ? ` — ${x.cwd}` : ""}`}
+        title={`${paneLabel(x)}${x.cwd ? ` — ${x.cwd}` : ""}${phaseLabel ? ` — ${phaseLabel}` : ""}`}
       >
-        {p.agent ? (
+        {phase === "waiting" && p.agent ? (
           <AgentDot agent={p.agent} className="mt-1.5" />
+        ) : phase === "running" ? (
+          <span className="relative mt-1.5 inline-flex h-2.5 w-2.5 shrink-0" title="Chat rodando">
+            <span className="absolute inset-0 animate-ping rounded-full bg-status-busy opacity-50" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-status-busy" />
+          </span>
+        ) : phase === "ready" ? (
+          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-status-ok" title="Chat pronto" />
         ) : (
           <span
             className={cn("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", x.is_active ? "bg-status-ok" : "bg-border-strong")}
             title={x.is_active ? "Pane ativo na aba do Beth Studio" : "Pane inativo"}
           />
         )}
-        <span className="mt-0.5 shrink-0">{id.tool ? <ToolIcon tool={id.tool} size={14} /> : <KindIcon pane={x} />}</span>
+        {/* Logo do agente fica; loading / espera / pronto vão abaixo dela. */}
+        <span className="mt-0.5 flex w-4 shrink-0 flex-col items-center gap-0.5" title={phaseLabel ?? undefined}>
+          {id.tool ? <ToolIcon tool={id.tool} size={14} /> : <KindIcon pane={x} />}
+          {phase === "running" && <Loader2 size={12} className="animate-spin text-status-busy" strokeWidth={2.75} aria-hidden />}
+          {phase === "waiting" && <MessageCircleQuestion size={11} className="text-status-warn" strokeWidth={2.5} aria-hidden />}
+          {phase === "ready" && <CheckCircle2 size={11} className="text-status-ok" strokeWidth={2.5} aria-hidden />}
+        </span>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <span className={cn("truncate text-[13px] text-text-1", p.focused && "font-semibold")}>{sidebarName}</span>
@@ -429,11 +492,30 @@ function PaneItem(p: {
               {cwd.name}
             </div>
           )}
-          {p.badge && <div className="mt-0.5 truncate text-[10px] text-accent-text">na aba “{p.badge}”</div>}
-          {p.agent && <div className="mt-0.5 truncate text-[10px] font-semibold text-status-warn">aguardando você</div>}
+          {p.badge && (
+            <div className={cn("mt-0.5 truncate text-[10px]", p.focused ? "text-white/85" : "text-accent-text")}>
+              na aba “{p.badge}”
+            </div>
+          )}
+          {phaseLabel && (
+            <div
+              className={cn(
+                "mt-0.5 truncate text-[10px] font-semibold",
+                phase === "waiting" && "text-status-warn",
+                phase === "running" && "text-status-busy",
+                phase === "ready" && "text-status-ok",
+              )}
+            >
+              {phaseLabel}
+            </div>
+          )}
         </div>
         {p.onBeside && (
-          <IconButton label="Abrir ao lado do terminal em foco" onClick={p.onBeside} className="h-6 w-6 opacity-60 group-hover:opacity-100">
+          <IconButton
+            label="Abrir ao lado do terminal em foco"
+            onClick={p.onBeside}
+            className={cn("h-7 w-7 opacity-60 group-hover:opacity-100", p.focused && "text-white/85 hover:bg-white/15 hover:text-white")}
+          >
             <Columns2 size={14} />
           </IconButton>
         )}
@@ -441,7 +523,10 @@ function PaneItem(p: {
           <IconButton
             label="Tirar da aba — o terminal continua em Não organizados"
             onClick={p.onClose}
-            className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+            className={cn(
+              "h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+              p.focused && "bg-white/15 text-white opacity-90 hover:bg-white/25",
+            )}
           >
             <X size={14} />
           </IconButton>
@@ -503,21 +588,25 @@ function KindChips({ panes, selected, onChange, order }: { panes: PaneInfo[]; se
     <button
       key={key}
       className={cn(
+        // Selecionado: bt-glass-on → placa nativa; sem text-accent (segunda tinta).
         "bt-chip flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px]",
-        selected.includes(key) ? "bt-glass-on text-accent-text font-semibold" : "text-text-2 hover:text-text-1",
+        selected.includes(key) ? "bt-glass-on font-semibold text-white" : "text-text-2 hover:text-text-1",
       )}
       onClick={() => toggle(key)}
       title={title}
     >
       {label}
-      <span className={cn("text-[10px]", selected.includes(key) ? "text-accent-text/80" : "text-text-3")}>{n}</span>
+      <span className={cn("text-[10px]", selected.includes(key) ? "text-white/85" : "text-text-3")}>{n}</span>
     </button>
   );
   const kinds = visibleKindOrder(order);
   return (
     <div className="flex flex-wrap gap-1">
       <button
-        className={cn("bt-chip rounded-lg px-2 py-0.5 text-[11px]", selected.length === 0 ? "bt-glass-on text-accent-text font-semibold" : "text-text-2 hover:text-text-1")}
+        className={cn(
+          "bt-chip rounded-lg px-2 py-0.5 text-[11px]",
+          selected.length === 0 ? "bt-glass-on font-semibold text-white" : "text-text-2 hover:text-text-1",
+        )}
         onClick={() => onChange([])}
         title="Mostrar todos os tipos"
       >
@@ -620,7 +709,7 @@ function KindSections({ panes, order, render, compact }: { panes: PaneInfo[]; or
             title={closed[s.key] ? "Mostrar o grupo" : "Recolher o grupo"}
           >
             {closed[s.key] ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-            <KindIcon pane={s.panes[0]} size={12} />
+            {s.key === AGENT_FILTER ? <Bot size={12} className="shrink-0" /> : <KindIcon pane={s.panes[0]} size={12} />}
             {s.label}
             <span className="ml-auto font-normal text-text-3">{s.panes.length}</span>
           </button>

@@ -83,7 +83,7 @@ export function SshScreen({ conn, readOnly, onConnect, onClose, initialTab = "ss
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onMouseDown={onClose}>
+    <div className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[6vh] backdrop-blur-xl" onMouseDown={onClose}>
       <div
         className="flex h-[min(820px,94vh)] w-[min(1180px,96vw)] flex-col bt-dialog"
         onMouseDown={(e) => e.stopPropagation()}

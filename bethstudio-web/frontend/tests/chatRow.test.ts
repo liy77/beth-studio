@@ -2,17 +2,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-test("com vibrancy o chat não pinta fundo opaco e mantém o texto na página", () => {
+test("com vibrancy o chat idle tem véu; selecionado fica transparente (vidro atrás, texto por cima)", () => {
   const css = readFileSync(new URL("../src/index.css", import.meta.url), "utf8");
-  const page = css.split("}").map((part) => part.trim()).find((part) => part.includes(".bt-sidebar .bt-chat,") && part.includes("bt-vibrancy"));
-  assert.ok(page);
-  const body = page.slice(page.lastIndexOf("{") + 1);
-  assert.match(body, /background:\s*transparent/);
-  assert.match(body, /opacity:\s*1/);
-  assert.match(page, /bt-chat\.bt-glass-on/);
-  assert.equal(/opacity:\s*0/.test(body), false);
-  assert.equal(/rgb\(var\(--bt-bg-hover\)\)/.test(body), false);
-  assert.equal(/rgb\(var\(--bt-accent\)\)/.test(body), false);
-  // Não esconde filhos (ponto de status, nome, cwd).
-  assert.equal(/\.bt-chat \*/.test(page), false);
+  const blocks = css.split("}").map((part) => part.trim()).filter((part) => part.includes("bt-vibrancy") && part.includes(".bt-sidebar .bt-chat"));
+  assert.ok(blocks.length >= 1);
+  const joined = blocks.join("\n");
+  assert.match(joined, /bt-bg-hover/); // tema escuro idle
+  assert.match(joined, /255 255 255/); // tema claro: véu branco over vibrancy
+  assert.match(joined, /bt-chat\.bt-glass-on/);
+  assert.match(joined, /transparent/); // selecionado: liquid glass atrás do WebView
+  assert.match(joined, /text-accent-text/); // "na aba" branco no selecionado
+  assert.match(joined, /bt-chat:hover/);
+  assert.equal(/\.bt-chat \*/.test(joined), false);
+  assert.equal(/opacity:\s*0/.test(joined), false);
 });

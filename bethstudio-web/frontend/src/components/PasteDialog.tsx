@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { ClipboardPaste } from "lucide-react";
+import { AppSheet, SettingsBtn, SettingsHint } from "./settings/SettingsUI";
 
 interface Props {
   onSend: (text: string) => void;
@@ -11,34 +13,30 @@ export function PasteDialog({ onSend, onCancel }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => ref.current?.focus(), []);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onMouseDown={onCancel}>
-      <div
-        className="w-[min(560px,90vw)] bt-dialog p-4"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="mb-1 text-[15px] font-semibold text-text-1">Colar no terminal</div>
-        <div className="mb-3 text-text-2">
-          O navegador não liberou a leitura da área de transferência. Cole o texto abaixo e clique em Enviar.
-        </div>
-        <textarea
-          ref={ref}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className="h-40 w-full resize-none bt-field bg-bg-term p-2 font-mono text-[12px] text-text-1 outline-none"
-        />
-        <div className="mt-3 flex justify-end gap-2">
-          <button className="rounded px-3 py-1.5 text-text-2 hover:bg-bg-hover hover:text-text-1" onClick={onCancel}>
-            Cancelar
-          </button>
-          <button
-            className="rounded bg-accent px-3 py-1.5 text-white hover:bg-accent-hover disabled:opacity-50"
-            disabled={!text}
-            onClick={() => onSend(text)}
-          >
+    <AppSheet
+      title="Colar no terminal"
+      icon={<ClipboardPaste size={15} className="text-accent-text" />}
+      onClose={onCancel}
+      width="md"
+      footer={
+        <>
+          <div className="flex-1" />
+          <SettingsBtn onClick={onCancel}>Cancelar</SettingsBtn>
+          <SettingsBtn tone="accent" disabled={!text} onClick={() => onSend(text)}>
             Enviar
-          </button>
-        </div>
-      </div>
-    </div>
+          </SettingsBtn>
+        </>
+      }
+    >
+      <SettingsHint className="mb-3">
+        O navegador não liberou a leitura da área de transferência. Cole o texto abaixo e clique em Enviar.
+      </SettingsHint>
+      <textarea
+        ref={ref}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="h-40 w-full resize-none rounded-xl border border-border bg-bg-term p-3 font-mono text-[12px] text-text-1 outline-none"
+      />
+    </AppSheet>
   );
 }

@@ -66,7 +66,7 @@ Status legend: 🟢 shipped · ⚪ planned.
 
 - 🟢 **Interface atualizável sem reiniciar** — the Beth Studio screen can be replaced on its own: `bethstudio-web\deploy-ui.ps1` installs a new interface package under `%APPDATA%\bethstudio\ui\current`, and **Configurações > Sobre > Recarregar interface** (or F5) applies it. The Studio process, the host and the terminals are not restarted. The previous package is kept for `-Rollback`. A package that needs a newer Studio, or a broken one, is ignored and the interface built into the executable is used.
 - 🟢 **Verificar atualização** — **Configurações > Sobre > Verificar atualização** compares the running version with the latest published GitHub release. If a newer one exists, you choose: install only the interface (no restart) or download the installer for the Studio and the host. Nothing is installed until you confirm. Read-only mode and the remote browser only say that a newer version exists. The phone page does not have this.
-- 🟢 **Desempenho em PC lento** (2026-10-24) — three changes for slow computers, in **Configurações > Terminais > Desempenho**. (1) The terminal is drawn with WebGL on the graphics card when there is a real one, and falls back to the compatible mode on its own if WebGL is missing, runs in software or fails; you can force *Sempre WebGL* or *Modo compatível* (this screen only, stored in the browser). At most 8 terminals use WebGL at once. (2) Only the screen lines that changed are redrawn (the host sends the whole screen every time). (3) With the window hidden in the tray or minimized, the Studio's WebView2 stops painting and gives memory back; set `BETHSTUDIO_WEBVIEW_NO_BG=1` to turn this off. It does not pause the page, so notifications still arrive. Escape hatches, set in the browser console of the Studio page: `localStorage.setItem('bethstudio.renderer','dom')` (or `webgl`) and `localStorage.setItem('bethstudio.screenwrite','full')` to go back to writing the whole screen every frame.
+- 🟢 **Desempenho em PC lento** (2026-10-24; TUI/agent paint coalesce 2026-11-25) — three changes for slow computers, in **Configurações > Terminais > Desempenho**. (1) The terminal is drawn with WebGL on the graphics card when there is a real one, and falls back to the compatible mode on its own if WebGL is missing, runs in software or fails; you can force *Sempre WebGL* or *Modo compatível* (this screen only, stored in the browser). At most 8 terminals use WebGL at once. (2) Only the screen lines that changed are redrawn (the host sends the whole screen every time); agent TUIs (Cursor, Claude) paint on the display refresh and keep incremental redraw longer so the terminal does not freeze. (3) With the window hidden in the tray or minimized, the Studio's WebView2 stops painting and gives memory back; set `BETHSTUDIO_WEBVIEW_NO_BG=1` to turn this off. It does not pause the page, so notifications still arrive. Escape hatches, set in the browser console of the Studio page: `localStorage.setItem('bethstudio.renderer','dom')` (or `webgl`) and `localStorage.setItem('bethstudio.screenwrite','full')` to go back to writing the whole screen every frame.
 - 🟢 **Antivírus: exclusões do Windows Defender** (2026-10-24) — **Configurações > Terminais > Desempenho** lists the two folders the Studio uses (the program and the data folder, which holds the WebView2 profile) and offers a step-by-step guide, a button that opens Windows Security, and a button that adds (or removes) the exclusions for you. The button asks for your confirmation, then Windows shows its administrator prompt (UAC); the Studio never runs as administrator, only one PowerShell command with those two folders does, and it checks afterwards that the exclusion took effect (company policy or Tamper Protection can refuse). It lowers protection for those folders. Only on the PC, never in the remote browser or read-only mode; with another antivirus it only shows the guide.
 - 🟢 **Log de latência sem títulos** (2026-10-24) — `bridge-latency.log` no longer records terminal titles (they are free text and could hold a typed password). Lines end with `prog=<program>` from a fixed list. Old logs with titles are deleted once.
 - 🟢 **Aviso de zoom da tela** — when the whole-screen zoom (Ctrl + wheel, Ctrl +/-) is not 100%, a small "Zoom 125%" pill appears in the bottom-right corner; click it (or Ctrl+0) to go back to 100%. **Configurações > Aparência > Zoom da tela** shows the current value with a **Redefinir para 100%** button. Only in the Studio window on this computer.
@@ -172,21 +172,37 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   `host-life.log`. **Ignorar** and **Lembrar em 1 h** are saved
   (`agent-procs-hold.json`) and survive restarting the Studio while the same
   process lives; a process already announced is not announced again.
-- 🟢 **Limitar CPU dos terminais** (2026-11-21). A ceiling in % of the PC's
+- 🟢 **Limitar CPU dos terminais** (Atualizado 2026-11-25). A ceiling in % of the PC's
   CPU (5–95%) for the host and everything it opened (shells, agents,
   builds), without ending anything: they only run slower, and the Studio
   window stays fast. On Windows it is a job object with a hard CPU cap;
   processes started later join it on their own. In the WSL terminals (they
   run in the WSL VM, outside the job) the same ceiling becomes a number of
   cores (`taskset` on the distro user's processes, only distros already
-  running). A deadline (30 min, 1 h, 2 h, 4 h or until removed; 2 h by default) puts
-  everything back to normal by itself, with a tray notification. Set it from
-  the gauge icon in the tab bar (with a limit it shows "CPU 70% · até
+  running). On macOS the same ceiling is a duty-cycle (`SIGCONT`/`SIGSTOP`)
+  on the host process tree (shells, agents, builds); the Studio window is
+  not included. A deadline (30 min, 1 h, 2 h, 4 h or until removed; 2 h by default) puts
+  everything back to normal by itself, with a tray notification on Windows.
+  Set it from the gauge icon in the tab bar (with a limit it shows "CPU 70% · até
   23:15") or from the tray (**Limitar CPU dos terminais**: 30/50/70% with the
   last deadline, **Escolher porcentagem e prazo…**, **Voltar ao normal**).
   The limit is saved (`cpu-limit.json`): it survives restarting the Studio,
   and a deadline that passed while the Studio was closed is undone at the
   next start. Each change goes to `host-life.log`.
+- 🟢 **Limitar RAM dos terminais** (2026-11-25). A ceiling in % of the PC's
+  RAM (10–90%) for the host and everything it opened (shells, agents,
+  builds) together, without ending anything. On Windows it is
+  `JOB_OBJECT_LIMIT_JOB_MEMORY` on the same job as the CPU ceiling (new
+  allocations fail above the cap). On macOS, if the host tree goes over the
+  ceiling the Studio pauses it (`SIGSTOP`) until memory drops or you raise
+  the limit; the Studio window is not included. A deadline (30 min, 1 h, 2 h,
+  4 h or until removed; 2 h by default) puts everything back to normal by
+  itself. Set it from the memory icon in the tab bar (with a limit it shows
+  "RAM 40% · até 23:15") or from the tray (**Limitar RAM dos terminais**:
+  25/40/60% with the last deadline, **Escolher porcentagem e prazo…**,
+  **Voltar ao normal**). Saved in `ram-limit.json`; each change goes to
+  `host-life.log`.
+
 - 🟢 **Session file** — `%APPDATA%\bethstudio\session.json` is written
   atomically in the background with a 2 s timeout, and restore drops
   unreachable network/WSL working directories after a 300 ms probe
@@ -261,9 +277,12 @@ ends the shell together with everything it started (patch 0203).
 - 🟢 Own tabs and splits (drag, new terminal to the right / below / above /
   left), views **Minha organização**, **Como no Beth Studio**, **Por tipo**,
   and **Por pasta** (groups by each terminal's current folder, follows
-  `cd`; same-named folders get their parent). Every card shows the folder
-  name in bold and the start of the path dimmed (2026-09-29).
-  Search by title, folder, tab, host window, id, and optional screen text.
+  `cd`; same-named folders get their parent). **Por tipo** (and “Separar a
+  lista por tipo”) puts **Agentes** (Cursor, Claude…) in their own group at
+  the top, so on Mac they are not all dumped into Outros with bash/zsh
+  (2026-11-25). Every card shows the folder name in bold and the start of
+  the path dimmed (2026-09-29). Search by title, folder, tab, host window,
+  id, and optional screen text.
 - 🟢 **Tool buttons in the side panel**: SSH/Serial, open/new file, speak,
   tasks, database and settings sit in a row under "Beth Studio" in the left
   panel, so the tab bar is left to the tabs. With the side panel collapsed
@@ -294,11 +313,15 @@ ends the shell together with everything it started (patch 0203).
   opening logs its phase times (`abertura` in `bethstudio-web.log`). Only
   one Studio runs: opening it again brings the open window to the front
   (2026-09-29).
-- 🟢 **Nova aba** → **Pasta inicial** has **Procurar…**. It opens the Windows
-  folder dialog and fills the path. A WSL shell receives `/mnt/…` when the
-  chosen folder is on a drive letter, and `/home/…` when it is inside the
-  Linux distro (`\\wsl.localhost\<distro>\…`). In the remote Studio it opens
-  the in-page folder browser instead.
+- 🟢 **Nova aba** → **Pasta inicial** has **Procurar…**. It opens the native
+  folder dialog (Windows Explorer picker, or macOS NSOpenPanel) and fills
+  the path. A WSL shell receives `/mnt/…` when the chosen folder is on a
+  drive letter, and `/home/…` when it is inside the Linux distro
+  (`\\wsl.localhost\<distro>\…`). In the remote Studio it opens the in-page
+  folder browser instead (updated 2026-11-25: macOS picker).
+- 🟢 **⌘T / Ctrl+T — Nova aba** (2026-11-25). Opens a new empty tab right away
+  (same as the + in the tab bar). On macOS the app menu **Arquivo → Nova aba**
+  also binds ⌘T so WKWebView does not swallow the key.
 - 🟢 **Navegador de pastas** inside the page (remote Studio "Procurar…" and
   "Abrir arquivo", and "Salvar" of a new text): shortcuts for the user
   folder, every drive and every WSL distro; clickable path trail (click the
@@ -457,7 +480,14 @@ ends the shell together with everything it started (patch 0203).
   visible area (patch 0188). `http(s)` links, including an OSC 8 hyperlink
   whose visible text is only "here", open in the default browser. Local
   `.md` / `.txt` / `.log` and images open in a preview panel. On macOS, Vibrancy gives the
-  entire preview a translucent background that follows the opacity setting. Any other
+  entire preview a translucent background that follows the opacity setting. Vibrancy (and
+  Acrylic on Windows) also works with a light UI theme: gutter, tab strip and glass
+  follow the light background (no forced charcoal), with dark text on the light
+  material; dark theme keeps light text on dark glass. The selected liquid-glass
+  veil in **Ver** (and selected chats) uses the interface accent color from the
+  theme (2026-11-25). On Windows,
+  **Configurações > Aparência > Acrylic** turns on DWM Acrylic behind the sidebar only
+  (same toggle place as Vibrancy on the Mac; no liquid glass). Any other
   existing file (PDF, Office, archive, and the rest) opens in the Windows
   default program. Programs and scripts (`.exe`, `.bat`, `.ps1`, `.lnk`,
   `.js` and the like) are shown in Explorer and are not launched. While a
@@ -468,7 +498,8 @@ ends the shell together with everything it started (patch 0203).
   A folder path in the output (absolute, no extension: `/mnt/data/dir/`,
   `~/dir`, `C:\dir`) opens that folder in Explorer; in a WSL terminal it
   opens the WSL folder on Windows. The folder path in the terminal header
-  does the same (2026-10-15).
+  does the same (2026-10-15); click it to type another path — **Tab**
+  completes folder names (2026-11-25).
   Right-click on **selected** text that is a link, a folder or a file adds
   the matching items at the top of the terminal menu: **Abrir link no
   navegador**, **Abrir no Explorer** (folder), **Abrir arquivo** and
@@ -488,6 +519,14 @@ ends the shell together with everything it started (patch 0203).
   than N days (default 10, 1 to 365; on by default, can be turned off). It
   runs 1 minute after the Studio opens and every 6 h, only touches files the
   Studio created, and has an "Apagar os antigos agora" button (2026-11-01).
+- 🟢 **Pré-visualizar imagem ao colar** (2026-11-25). When you paste or drop
+  an image into a terminal (screenshot, clipboard image, Finder/Explorer file,
+  or drag onto the terminal), Beth Studio shows a thumbnail strip over the
+  terminal — like Ghostty — before sending the Markdown path to the agent.
+  You can paste or drop more images into that strip (up to 8) before
+  confirming; **Enter** or **Colar** sends all, **Esc** or Cancel discards;
+  × removes one thumbnail. On by default; turn off in
+  **Configurações > Terminais > Colar imagem** to paste immediately as before.
 - 🟢 **Colar arquivo do Explorer** (Ctrl+V or Colar, 2026-10-01). A file
   copied in Explorer — PDF, video, or anything else — is copied into
   `C:\tmp\bethstudio\clipboard-images` (or `%TEMP%\bethstudio\clipboard-images`
@@ -502,26 +541,39 @@ ends the shell together with everything it started (patch 0203).
 - 🟢 **Pasta da guia** (tab bar, 2026-11-23). The panel-right button opens a
   sidebar on the right of the active tab only. It lists the files of the
   focused terminal's folder and, in **Mudanças**, the git status of that
-  same folder (branch and changed, new and deleted files). Switching tabs
+  same folder (branch and changed, new and deleted files; each row shows a
+  short status mark — M / U / A / D / R — with the Portuguese name on hover,
+  updated 2026-11-25). Clicking a row in **Mudanças** opens a diff panel
+  with lines added (green) and removed (red) versus HEAD; new untracked
+  files show the whole file as additions, and binary files say there is
+  no text diff (2026-11-25). A search field filters the file tree and the
+  changes list by name (2026-11-25). Switching tabs
   shows that tab's own sidebar, open or closed as it was left. That choice
   is saved with the tabs, so the next launch opens each tab the same way.
   Both sidebars are cards with the same corner, and both can be resized
   by dragging the edge between them and the terminal. The widths are saved.
-  The left sidebar's collapsed state is saved the same way. Clicking a
-  text or image file opens it in the file panel. The list refreshes every
-  few seconds, so files an agent writes in that folder show up there.
+  The left sidebar's collapsed state is saved the same way. Opening and
+  closing either sidebar animates the width. The left card matches the
+  terminal box height (from the tab strip to 8 px above the window bottom,
+  updated 2026-11-25). Clicking a
+  text or image file in **Arquivos** opens it in the file panel. The list
+  refreshes every few seconds, so files an agent writes in that folder show
+  up there.
   Each row uses the file symbols from
   [vscode-symbols](https://github.com/miguelsolorio/vscode-symbols): Rust,
-  C, C++, Java, Go, Python, TypeScript, and the other languages in that
-  set, plus folder symbols (`src`, `docs`, `assets`). `README.md` and
-  `CLAUDE.md` use their own marks from that set. `.mika` and `.crs`
+  C, C++, Java, Go, Python, TypeScript, HTML, CSS, Less, JSON, and the
+  other languages in that set, plus folder symbols (`src`, `docs`,
+  `assets`). `README.md` and `CLAUDE.md` use their own marks from that
+  set. `.mika` and `.crs`
   keep the Mikasa mark from Copper, the light bird on a dark theme and the
   dark bird on a light theme. `.mui` and `app.bundle` use the Mocida mark
   (the two overlapping squares) from the copper-lang MUI editor, the same
   logo as mocida. The same icons appear in the folder browser,
   the file panel title, and the SFTP lists.
-- 🟢 **Abrir arquivo** (tab bar) opens the Windows file dialog in the
-  focused terminal's folder. The file panel opens text, not only
+- 🟢 **Abrir arquivo** (Pasta da guia, links no terminal, 2026-11-25). Open a
+  file from the right-hand folder panel or from a path in the terminal; the
+  old tab-bar file dialog button was removed (the panel already lists the
+  folder). The file panel opens text, not only
   `.md` / `.txt` / `.log`: code (`.crs`, `.mika`, `.mui`, `app.bundle`, Rust, Go, C, C++, Java,
   Python, TypeScript and the other common source extensions) and config
   (JSON, YAML, TOML) open in the editor with colored syntax, line numbers
@@ -558,6 +610,15 @@ ends the shell together with everything it started (patch 0203).
   condensados para evitar uma fila de imagens antigas (2026-09-27).
 - 🟢 Agent-waiting dot (patches 0175, 0181). A bell at the end of a turn
   does not stay “waiting” while the title still shows a working spinner.
+- 🟢 **Fase do chat na barra lateral** (2026-11-25). Each agent row shows
+  **rodando…** (Claude title spinner, Cursor `⏳ Working` / title status, or
+  Cursor TUI `ctrl+c to stop` on screen), **pronto** (idle after a turn), or
+  **aguardando você** (needs a reply, with a question-mark icon instead of
+  the tool mark; Cursor `❓ Waiting` in the title counts too). **Avisos de agente**
+  in settings (and a checkbox under the waiting bar) can send a system
+  notification when the agent waits or when the chat becomes ready; sound is
+  optional. Defaults stay off. For Cursor titles like Codex, turn on
+  `/status-indicators` (or `display.showStatusIndicators` in the CLI config).
 - 🟢 Voice: record, transcribe, and optionally correct with an LLM before
   paste (no Enter). Per-call cost in `ai-usage.jsonl`; audio and text are
   not stored. API keys stay in DPAPI `secrets.dat`.
@@ -569,8 +630,16 @@ ends the shell together with everything it started (patch 0203).
   The key is added in **Provedores de IA** like the others (or
   `MINIMAX_API_KEY`); **Testar** and **Buscar modelos** use `GET /v1/models`.
   The URL is editable for China accounts (`api.minimaxi.com`).
-- 🟢 Task manager: CPU, RAM, GPU, disk, Beth Studio processes, each terminal,
-  and WSL distros that are already running. The system section shows one
+- 🟢 **Gerenciador de tarefas** (Atualizado 2026-11-25): opens like
+  Configurações — blur backdrop and above the Mac liquid glass menus
+  (`bt-modal` clears the native plates). The same overlay style
+  applies to **SSH e Serial**, Nova aba, busca, and the other in-page
+  dialogs so liquid glass never sits on top of them. CPU, RAM, GPU, disk, Beth Studio
+  processes, each terminal, and WSL distros that are already running (WSL
+  only on Windows). On macOS it also shows per-process CPU and RAM for
+  `bethstudio-host`, the Studio app, the bridge, and each terminal shell
+  under the host (matched by creation order when console titles are
+  unavailable). The system section shows one
   card per metric (large percentage, absolute value beside it, bar that
   turns yellow at 75 % and red at 90 %), then the WSL2 card: a memory
   gauge whose full width is the VM limit, filled with what Linux uses and
@@ -580,10 +649,16 @@ ends the shell together with everything it started (patch 0203).
   disk swap file); a 60-second CPU graph; and the distro's virtual disk. RAM columns in the tables carry a small bar
   scaled to the largest row.
 - 🟢 Settings: Aparência, Terminais, Voz e IA, Provedores de IA, Banco de
-  dados, Uso e custos, Barra lateral, Sobre. Provedores de IA has a search
-  box at the top; it filters by name, id, notes, and model. Sobre has
-  **Verificar atualização** (GitHub releases; install the interface or
-  download the installer only after you confirm).
+  dados, Uso e custos, Barra lateral, Sobre (updated 2026-11-25). The window
+  follows a System Settings layout: sidebar groups (Geral, Terminais, IA e
+  voz, Conexões, Sobre), large page titles, inset grouped rows and Apple-style
+  switches across every section. Shared UI primitives live under
+  `components/settings/` (`SettingsUI`, `AppSheet`). The same sheet style is
+  used for **Nova aba**, Encerrar/Matar/Reiniciar, Separar, Colar, and
+  standalone Voz e IA. Provedores de IA has a search box at the top; it filters
+  by name, id, notes, and model. Sobre has **Verificar atualização** (GitHub
+  releases; install the interface or download the installer only after you
+  confirm).
 - 🟢 A new terminal or SSH/serial session opens with the Beth Studio
   theme: the terminal default theme if one is set, otherwise the
   interface theme (Claro uses VS Code Light; Escuro and Azul-marinho use
@@ -600,19 +675,17 @@ ends the shell together with everything it started (patch 0203).
   correct text and answer in the database assistant.
 - 🟢 When a process exits, the leaf shows **terminal encerrado** and can
   be removed.
-- 🟢 **Todos os terminais** (grid button next to **+** in the tab bar): a popup
-  grid with one card per terminal, showing a text print of the screen (last
-  lines), name, type, folder path and tab. Includes terminals in closed tabs,
-  loose ones and ended ones. Search by name, folder, type, tab or `#id` (and
-  optionally the screen text). Two chip rows combine: state (Todos / Em abas /
-  Sem aba / Encerrados) and type (Todos plus one chip per type that is present,
-  the same groups as the sidebar, in the sidebar's order, plus Agentes when
-  there is an agent). Counts on each row follow the other filters and the
-  search. Clicking the selected chip returns to Todos. An ended terminal has
-  no stored type, so it only matches Todos (and Encerrados). **Limpar filtros**
-  clears state, type and search. The grid's type choice does not change the
-  sidebar filter. Click opens the terminal (a closed tab is reopened, a loose
-  terminal gets a new tab); Enter opens the first match (2026-10-14).
+- 🟢 **Todos os terminais** (grid button next to **+** in the tab bar; updated
+  2026-11-25): a sheet in the same chrome as Nova aba / Configurações (title
+  bar, close, blur backdrop) with one card per terminal — text print of the
+  screen, name, type, folder and tab. Includes closed-tab, loose and ended
+  terminals. Search by name, folder, type, tab or `#id` (and optionally the
+  screen text, via the same switch style as Settings). State filters sit in a
+  segmented control (Todos / Em abas / Sem aba / Encerrados); type filters are
+  compact chips (sidebar order + Agentes). Counts follow the other filters.
+  Clicking the selected filter returns to Todos. **Limpar filtros** clears
+  state, type and search. The grid's type choice does not change the sidebar
+  filter. Click opens the terminal; Enter opens the first match.
 - 🟢 **Phone web app: grid view** (button in the list header, remembered on the
   phone). Same cards as the Studio popup: screen print, name, folder, type and
   tab (or "Aba fechada"), with the same search as the desktop popup (name,
@@ -728,8 +801,10 @@ xterm screen. Remote access from the phone is not wired on the PC yet.
 - 🟢 **macOS** (Apple Silicon): the Studio opens in a native window, starts
   `bethstudio-host`, and keeps terminals after the window is closed
   (patch 0205). Serial ports, the Windows task manager, and the WSL gate
-  stay Windows-only. On macOS the UI hides every WSL control (settings,
-  filters, task manager card, agent bridge, CPU-limit WSL option).
+  stay Windows-only. On macOS the UI hides every WSL and Windows-shell
+  control (PowerShell, cmd, Git Bash, WSL settings/filters, task-manager
+  WSL card, agent bridge, CPU-limit WSL option) and Voice/IA copy talks
+  about the Mac, not Windows/WSL (updated 2026-11-25).
 - 🟢 **Apple Container no macOS** (2026-11-24, patch 0207). Where Windows
   offers WSL, macOS offers [Apple Container](https://github.com/apple/container)
   in **Novo terminal**: running containers (`container exec -it`) or images

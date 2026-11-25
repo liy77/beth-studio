@@ -26,7 +26,7 @@ export interface VoiceSettings {
   prefix_text: string;
   send_direct: boolean;
   privacy_ack: boolean;
-  /** microfone escolhido ("" = padrao do Windows) */
+  /** microfone escolhido ("" = padrao do sistema) */
   mic_device_id?: string;
   mic_label?: string;
   /** prazo da correcao em s (0/ausente = 30) */
@@ -188,19 +188,31 @@ export const LANGUAGES: { id: string; label: string }[] = [
   { id: "es", label: "Espanhol" },
 ];
 
+function isMacMic(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const p = navigator.platform || "";
+  const ua = navigator.userAgent || "";
+  return /Mac|iPhone|iPad|iPod/.test(p) || /Mac OS X|Macintosh/.test(ua);
+}
+
 /** Mensagem amigavel para erros do getUserMedia. */
 export function micErrorMessage(name: string): string {
+  const mac = isMacMic();
   switch (name) {
     case "NotAllowedError":
     case "SecurityError":
-      return "O microfone foi bloqueado. No Windows: Configurações → Privacidade e segurança → Microfone → ligue “Acesso ao microfone” e “Permitir que aplicativos da área de trabalho acessem o microfone”.";
+      return mac
+        ? "O microfone foi bloqueado. No Mac: Ajustes do Sistema → Privacidade e segurança → Microfone → permita o Beth Studio."
+        : "O microfone foi bloqueado. No Windows: Configurações → Privacidade e segurança → Microfone → ligue “Acesso ao microfone” e “Permitir que aplicativos da área de trabalho acessem o microfone”.";
     case "NotFoundError":
     case "OverconstrainedError":
       return "Nenhum microfone encontrado. Conecte um microfone e tente de novo.";
     case "NotReadableError":
       return "O microfone está em uso por outro programa ou indisponível.";
     case "TimeoutError":
-      return "O Windows não respondeu ao abrir o microfone. Feche e abra o Falar de novo; se repetir, desligue e ligue o microfone nas configurações de som do Windows.";
+      return mac
+        ? "O Mac não respondeu ao abrir o microfone. Feche e abra o Falar de novo; se repetir, confira o microfone em Ajustes do Sistema → Som."
+        : "O Windows não respondeu ao abrir o microfone. Feche e abra o Falar de novo; se repetir, desligue e ligue o microfone nas configurações de som do Windows.";
   }
   return "Não foi possível abrir o microfone.";
 }

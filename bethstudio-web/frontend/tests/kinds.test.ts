@@ -32,27 +32,30 @@ test("contagem por tipo", () => {
   assert.deepEqual(c, { wsl: 2, container: 0, powershell: 2, cmd: 1, gitbash: 0, ssh: 0, serial: 0, other: 1, unknown: 1, agent: 2 });
 });
 
-test("agrupar por tipo e, em WSL, por distro", () => {
+test("agrupar por tipo: Agentes no topo; resto por kind (WSL por distro)", () => {
   const g = groupByKind(panes);
   assert.deepEqual(
     g.map((s) => [s.key, s.panes.map((p) => p.pane_id)]),
     [
-      ["wsl", [3, 4]],
+      ["agent", [3, 7]], // Claude/agente fora do WSL/Desconhecido
+      ["wsl", [4]],
       ["powershell", [1, 2]],
       ["cmd", [5]],
       ["other", [6]],
-      ["unknown", [7]],
     ],
   );
-  assert.deepEqual(
-    g[0].distros?.map((d) => [d.distro, d.panes.map((p) => p.pane_id)]),
-    [
-      ["padrão", [4]],
-      ["Ubuntu", [3]],
-    ],
-  );
-  // so' a distro padrao: sem subgrupos
+  const wsl = g.find((s) => s.key === "wsl")!;
+  assert.equal(wsl.distros, undefined); // só a distro padrão → sem subgrupos
   assert.equal(groupByKind([P(9, "wsl")])[0].distros, undefined);
+  // Dois agentes em zsh (Mac): Por tipo mostra Agentes, não um único Outros.
+  const macAgents = groupByKind([
+    P(10, "zsh", { agent: true, agent_name: "Cursor" }),
+    P(11, "zsh", { agent: true, agent_name: "Cursor" }),
+  ]);
+  assert.deepEqual(
+    macAgents.map((s) => [s.key, s.label, s.panes.map((p) => p.pane_id)]),
+    [["agent", "Agentes", [10, 11]]],
+  );
 });
 
 test("filtro combinado com a busca", () => {
@@ -138,4 +141,22 @@ test("Serial: grupo próprio depois de SSH", async () => {
     ["cmd", "ssh", "serial"],
   );
   assert.equal(countKinds(panes).serial, 1);
+});
+
+test("visibleKindOrder: no Mac some WSL/PowerShell/cmd/Git Bash; no Windows some Container", async () => {
+  const { visibleKindOrder } = await import("../src/lib/kinds.ts");
+  const mac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+  const order = visibleKindOrder();
+  if (mac) {
+    assert.ok(!order.includes("wsl"));
+    assert.ok(!order.includes("powershell"));
+    assert.ok(!order.includes("cmd"));
+    assert.ok(!order.includes("gitbash"));
+    assert.ok(order.includes("container"));
+    assert.ok(order.includes("ssh"));
+  } else {
+    assert.ok(!order.includes("container"));
+    assert.ok(order.includes("powershell"));
+    assert.ok(order.includes("wsl"));
+  }
 });

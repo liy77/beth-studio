@@ -2,7 +2,7 @@
 // vivo (em aba, em aba fechada ou solto) ou encerrado. Funcoes puras.
 import type { PaneInfo } from "./types.ts";
 import { closedGroupOf, findPane, leaves, tabDisplayName, type Layout } from "./layout.ts";
-import { AGENT_FILTER, KIND_LABEL, kindGroup, kindOrder, type KindGroup } from "./kinds.ts";
+import { AGENT_FILTER, KIND_LABEL, kindGroup, visibleKindOrder, type KindGroup } from "./kinds.ts";
 import { paneLabel, shortCwd } from "./panes.ts";
 import { lastFolder, stripAnsi } from "./search.ts";
 
@@ -167,7 +167,17 @@ export function facetKindChips(
   selected: GridKind = "all",
 ): GridKindChip[] {
   const pool = cards.filter((c) => inFilter(c, state) && matchesQuery(c, query, screens, withScreen));
-  const counts: Record<KindGroup, number> = { wsl: 0, powershell: 0, cmd: 0, gitbash: 0, ssh: 0, serial: 0, other: 0, unknown: 0 };
+  const counts: Record<KindGroup, number> = {
+    wsl: 0,
+    container: 0,
+    powershell: 0,
+    cmd: 0,
+    gitbash: 0,
+    ssh: 0,
+    serial: 0,
+    other: 0,
+    unknown: 0,
+  };
   let agents = 0;
   for (const c of pool) {
     if (!c.info) continue;
@@ -175,7 +185,7 @@ export function facetKindChips(
     if (c.info.agent) agents++;
   }
   const chips: GridKindChip[] = [{ id: "all", label: "Todos", count: pool.length }];
-  for (const g of kindOrder(order)) {
+  for (const g of visibleKindOrder(order)) {
     if (counts[g] > 0 || selected === g) chips.push({ id: g, label: KIND_LABEL[g], count: counts[g] });
   }
   if (agents > 0 || selected === AGENT_FILTER) chips.push({ id: AGENT_FILTER, label: "Agentes", count: agents });

@@ -47,8 +47,6 @@ interface Props {
   onDatabase?: () => void;
   /** tela SSH e Serial (hosts salvos, arquivos, portas COM) */
   onTools?: () => void;
-  /** "Abrir arquivo…": texto/Markdown no painel de ver e editar */
-  onOpenFile?: () => void;
   /** "Novo arquivo": cria um .md/.txt numa pasta escolhida e abre para editar */
   onNewFile?: () => void;
   /** abre "Aparencia geral" */
@@ -99,7 +97,6 @@ export function TabBar({
   onTaskManager,
   onDatabase,
   onTools,
-  onOpenFile,
   onNewFile,
   onGeneral,
   waitingTabs,
@@ -160,7 +157,7 @@ export function TabBar({
     return () => window.removeEventListener("mousedown", close);
   }, [moreOpen]);
 
-  const acts: StudioAction[] = hideActions ? [] : buildStudioActions({ onSearch, onGeneral, onTaskManager, onDatabase, onTools, onOpenFile, onNewFile, onSpeak });
+  const acts: StudioAction[] = hideActions ? [] : buildStudioActions({ onSearch, onGeneral, onTaskManager, onDatabase, onTools, onNewFile, onSpeak });
   // o que fica fixo: icone, recolher, minimo das abas, "Nova aba", area de arraste, LED, botoes da janela
   const newTabLabel = false; // acoes sempre so' icone (produto para devs)
   const reserved = (frameless ? 30 + 138 : 0) + 32 + 190 + (newTabLabel ? labelWidth("Nova aba") : ICON_W) + (onGrid ? 34 : 0) + 56 + 20 + 16;
@@ -174,8 +171,9 @@ export function TabBar({
       ref={barRef}
       data-term-drop="tabs"
       className={cn(
-        "bt-tabstrip flex shrink-0 overflow-hidden px-1.5 select-none",
-        macBar ? "h-10 items-center" : "h-10 items-end pt-1",
+        // overflow visible: a curva invertida da aba ativa sai ~20 px para
+        // cada lado; hidden cortava a da direita (junto do +).
+        "bt-tabstrip flex h-10 shrink-0 items-center overflow-visible px-1.5 select-none",
         macBar && sidebarCollapsed && "pl-8",
         macBar && "bt-tabstrip-mac",
         frameless && !win.active && "opacity-75",
@@ -201,11 +199,11 @@ export function TabBar({
         winCommand("toggle");
       }}
     >
-      <div className="relative flex min-w-0 shrink self-stretch">
+      <div className="relative flex min-w-0 shrink self-stretch overflow-visible">
       <div
         ref={tabsRef}
         onScroll={checkScroll}
-        className="flex items-end overflow-x-auto pl-2 pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex items-center overflow-x-auto pl-5 pr-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {layout.tabs.map((t, i) => {
           const active = t.id === layout.active;

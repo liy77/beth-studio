@@ -35,8 +35,9 @@ html.bt-vibrancy .bt-side-slot-right,
 html.bt-vibrancy .bt-tabstrip,
 html.bt-vibrancy .bt-main,
 html.bt-vibrancy .bt-main-mac {
-  background: rgb(19, 19, 19) !important;
-  background-color: rgb(19, 19, 19) !important;
+  /* Segue o tema (claro = topbar clara). Antes era 19,19,19 sempre. */
+  background: var(--bt-topbar) !important;
+  background-color: var(--bt-topbar) !important;
   background-image: none !important;
 }
 /* A coluna e o slot do cartão ficam transparentes para o material nativo
@@ -69,6 +70,100 @@ html.bt-vibrancy .bt-sidebar {
 }
 html.bt-vibrancy .bt-side-col {
   position: relative;
+}
+
+/* —— Acrylic (Windows): DWM atrás da janela; só a sidebar fica transparente.
+   Sem liquid glass / placas nativas — botões e lista com fundo semi-opaco. */
+html.bt-acrylic,
+html.bt-acrylic body,
+html.bt-acrylic #root {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+html.bt-acrylic .bt-side-col,
+html.bt-acrylic .bt-side-slot-left,
+html.bt-acrylic .bt-side-slot,
+html.bt-acrylic .bt-sidebar,
+html.bt-acrylic .bt-side-card {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+html.bt-acrylic .bt-mac-gutter,
+html.bt-acrylic .bt-tabstrip,
+html.bt-acrylic .bt-main,
+html.bt-acrylic .bt-side-slot-right {
+  background: var(--bt-topbar) !important;
+  background-color: var(--bt-topbar) !important;
+  background-image: none !important;
+}
+html.bt-acrylic .bt-sidebar {
+  position: relative;
+  z-index: 1;
+  border-right-color: transparent;
+}
+html.bt-acrylic .bt-sidebar > div,
+html.bt-acrylic .bt-sidebar nav,
+html.bt-acrylic .bt-sidebar ul,
+html.bt-acrylic .bt-sidebar li,
+html.bt-acrylic .bt-sidebar .border-b,
+html.bt-acrylic .bt-sidebar .overflow-y-auto {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+html.dark.bt-acrylic .bt-sidebar .bt-search,
+html.dark.bt-acrylic .bt-sidebar .bt-mode,
+html.dark.bt-acrylic .bt-sidebar button.h-7 {
+  background: rgb(255 255 255 / 0.08) !important;
+  background-color: rgb(255 255 255 / 0.08) !important;
+}
+html:not(.dark).bt-acrylic .bt-sidebar .bt-search,
+html:not(.dark).bt-acrylic .bt-sidebar .bt-mode,
+html:not(.dark).bt-acrylic .bt-sidebar button.h-7 {
+  background: rgb(0 0 0 / 0.05) !important;
+  background-color: rgb(0 0 0 / 0.05) !important;
+}
+html:not(.dark).bt-acrylic .bt-sidebar .bt-mode:hover:not(.bt-glass-on),
+html:not(.dark).bt-acrylic .bt-sidebar button.h-7:hover {
+  background: rgb(0 0 0 / 0.11) !important;
+  background-color: rgb(0 0 0 / 0.11) !important;
+}
+html.dark.bt-acrylic .bt-sidebar .bt-chat {
+  background: rgb(255 255 255 / 0.07) !important;
+  background-color: rgb(255 255 255 / 0.07) !important;
+}
+html.dark.bt-acrylic .bt-sidebar .bt-chat:hover {
+  background: rgb(255 255 255 / 0.12) !important;
+  background-color: rgb(255 255 255 / 0.12) !important;
+}
+html:not(.dark).bt-acrylic .bt-sidebar .bt-chat {
+  background: rgb(255 255 255 / 0.78) !important;
+  background-color: rgb(255 255 255 / 0.78) !important;
+  box-shadow: inset 0 0 0 1px rgb(15 23 41 / 0.1);
+}
+html:not(.dark).bt-acrylic .bt-sidebar .bt-chat:hover {
+  background: rgb(255 255 255 / 0.92) !important;
+  background-color: rgb(255 255 255 / 0.92) !important;
+  box-shadow: inset 0 0 0 1px rgb(15 23 41 / 0.14);
+}
+html.dark.bt-acrylic .bt-sidebar .bt-chat.bt-glass-on,
+html.dark.bt-acrylic .bt-sidebar .bt-chat.bt-glass-on:hover {
+  background: rgb(var(--bt-accent) / 0.82) !important;
+  background-color: rgb(var(--bt-accent) / 0.82) !important;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  color: white;
+}
+html:not(.dark).bt-acrylic .bt-sidebar .bt-chat.bt-glass-on,
+html:not(.dark).bt-acrylic .bt-sidebar .bt-chat.bt-glass-on:hover {
+  background: rgb(48 52 60 / 0.82) !important;
+  background-color: rgb(48 52 60 / 0.82) !important;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1), inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  color: white;
+}
+html.bt-acrylic .bt-sidebar .bt-chip,
+html.bt-acrylic .bt-sidebar .bt-folder {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 /* As guias ficam só sobre a área do terminal. A faixa da sidebar, atrás
@@ -116,6 +211,34 @@ html:not(.dark) {
   border: 1px solid rgb(var(--bt-border) / 0.9);
   background: rgb(var(--bt-bg-panel));
 }
+/* Tema claro: cartão e busca com mais contraste (borda/hover), sem texto branco. */
+html:not(.dark) .bt-worktree {
+  border-color: rgb(var(--bt-border-strong));
+  background: rgb(var(--bt-bg-card));
+  box-shadow: 0 1px 3px rgb(15 23 41 / 0.08);
+}
+html:not(.dark) .bt-worktree .bt-search {
+  background: rgb(var(--bt-bg-hover));
+  border-color: rgb(var(--bt-border));
+  color: rgb(var(--bt-text-1));
+}
+html:not(.dark) .bt-worktree .bt-search input {
+  color: rgb(var(--bt-text-1));
+}
+html:not(.dark) .bt-worktree .bt-search input::placeholder {
+  color: rgb(var(--bt-text-3));
+}
+html:not(.dark) .bt-worktree .bt-search svg {
+  color: rgb(var(--bt-text-2));
+}
+html:not(.dark) .bt-worktree .bt-worktree-btn {
+  background: rgb(var(--bt-bg-hover));
+  color: rgb(var(--bt-text-2));
+}
+html:not(.dark) .bt-worktree .bt-worktree-btn:hover {
+  background: rgb(var(--bt-border) / 0.55);
+  color: rgb(var(--bt-text-1));
+}
 /* A caixa do terminal usa a mesma borda do cartão da sidebar. Sobe 1 px
    para encostar na aba selecionada; o meio de cima fica reto, as pontas
    continuam curvas, no mesmo desenho da aba. */
@@ -132,20 +255,38 @@ html:not(.dark) {
 .bt-sidebar {
   transition: none;
 }
+/* Abrir/fechar: anima a largura da coluna (não o arraste de redimensionar). */
+.bt-side-col,
+.bt-side-slot-right.bt-side-anim {
+  transition: width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: width;
+}
+.bt-side-col.bt-side--dragging,
+.bt-side-slot-right.bt-side--dragging,
+.bt-side-col:not(.bt-side-anim),
+.bt-side-slot-right:not(.bt-side-anim) {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bt-side-col,
+  .bt-side-slot-right.bt-side-anim {
+    transition: none;
+  }
+}
 /* A barra da esquerda é um cartão na mesma faixa do terminal: 8 px da
    borda, 8 px do terminal e a base na mesma linha da caixa. */
-/* Mesma faixa da pasta da direita: começa abaixo das abas e acaba 8 px
+/* Mesma faixa da pasta da direita: começa na base das abas e acaba 8 px
    antes do fundo. O vão em volta usa a cor da topbar. */
 .bt-side-slot {
   height: calc(100% - 8px);
   padding: 8px 8px 8px 0;
   background: var(--bt-topbar);
 }
-/* A coluna da esquerda já reservou os 40 px das abas. O cartão ocupa o
-   resto e o padding de 8 px deixa a base na mesma linha do terminal. */
+/* A coluna da esquerda já reservou os 40 px das abas. O cartão começa
+   aí (sem vão extra) para ter a mesma altura da caixa do terminal. */
 .bt-side-slot-left {
   position: absolute;
-  top: 48px;
+  top: 40px;
   right: 0;
   bottom: 8px;
   left: 0;
@@ -156,8 +297,9 @@ html:not(.dark) {
   overflow: hidden;
   background: var(--bt-topbar);
 }
-/* A pasta da guia está na faixa do terminal, abaixo das abas. 100% dessa
-   faixa, com 8 px embaixo, acaba na mesma linha da caixa do terminal. */
+/* A pasta da guia está na faixa do terminal, abaixo das abas. 8 px em
+   volta (esquerda/direita/baixo) para o cartão mostrar radius e vão —
+   igual à sidebar da esquerda. */
 .bt-side-slot-right {
   height: 100%;
   max-height: none;
@@ -167,9 +309,13 @@ html:not(.dark) {
   overflow: hidden;
   background: var(--bt-topbar);
 }
+.bt-side-slot-right > .relative {
+  min-width: 0;
+  max-width: 100%;
+}
 html.bt-vibrancy .bt-side-slot-right {
-  background: rgb(19, 19, 19) !important;
-  background-color: rgb(19, 19, 19) !important;
+  background: var(--bt-topbar) !important;
+  background-color: var(--bt-topbar) !important;
 }
 .bt-side-card {
   height: 100%;
@@ -187,8 +333,8 @@ html.bt-vibrancy .bt-side-card {
 
 html.bt-vibrancy .bt-tabstrip,
 html.bt-vibrancy .bt-main-mac > .bt-tabstrip {
-  background: rgb(19, 19, 19) !important;
-  background-color: rgb(19, 19, 19) !important;
+  background: var(--bt-topbar) !important;
+  background-color: var(--bt-topbar) !important;
   background-image: none !important;
 }
 html.bt-vibrancy .bt-sidebar::before {
@@ -197,13 +343,13 @@ html.bt-vibrancy .bt-sidebar::before {
 }
 html.bt-vibrancy .bt-mac-gutter,
 html.bt-vibrancy .bt-side-slot-right {
-  background: rgb(19, 19, 19) !important;
-  background-color: rgb(19, 19, 19) !important;
+  background: var(--bt-topbar) !important;
+  background-color: var(--bt-topbar) !important;
   background-image: none !important;
 }
 html.bt-vibrancy .bt-main {
-  background: rgb(19, 19, 19) !important;
-  background-color: rgb(19, 19, 19) !important;
+  background: var(--bt-topbar) !important;
+  background-color: var(--bt-topbar) !important;
 }
 /* A faixa dos semáforos é a cor da topbar. O vidro fica só no cartão,
    abaixo dessa faixa, então a página pode pintar aqui sem cobrir o material. */
@@ -249,6 +395,234 @@ body {
   background: rgb(var(--bt-bg-card));
   box-shadow: 0 16px 48px rgb(0 0 0 / 0.35);
 }
+
+/* Diff git (Mudanças): uma linha = uma faixa; gutter sticky; código sem wrap. */
+.bt-diff__grid {
+  min-width: 100%;
+  width: max-content;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 20px;
+}
+.bt-diff__row,
+.bt-diff__hunk,
+.bt-diff__meta {
+  display: flex;
+  align-items: stretch;
+  min-height: 20px;
+  min-width: 100%;
+  width: max-content;
+}
+.bt-diff__gutter {
+  display: flex;
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: inherit;
+  box-shadow: 1px 0 0 rgb(var(--bt-border) / 0.8);
+  user-select: none;
+}
+.bt-diff__no {
+  box-sizing: border-box;
+  width: 3.1rem;
+  padding: 0 6px;
+  text-align: right;
+  color: rgb(var(--bt-text-3));
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.bt-diff__mark {
+  box-sizing: border-box;
+  width: 1.15rem;
+  text-align: center;
+  font-weight: 600;
+}
+.bt-diff__code {
+  flex: 1 0 auto;
+  padding: 0 14px 0 8px;
+  white-space: pre;
+  color: rgb(var(--bt-text-2));
+}
+.bt-diff__row--ctx {
+  background: rgb(var(--bt-bg-term));
+}
+.bt-diff__row--add {
+  background: rgb(var(--bt-ok) / 0.14);
+}
+.bt-diff__row--add .bt-diff__mark,
+.bt-diff__row--add .bt-diff__code {
+  color: rgb(var(--bt-ok));
+}
+.bt-diff__row--del {
+  background: rgb(var(--bt-err) / 0.14);
+}
+.bt-diff__row--del .bt-diff__mark,
+.bt-diff__row--del .bt-diff__code {
+  color: rgb(var(--bt-err));
+}
+.bt-diff__hunk {
+  background: rgb(var(--bt-accent-soft));
+  color: rgb(var(--bt-accent-text));
+}
+.bt-diff__hunk .bt-diff__gutter {
+  min-width: 7.35rem;
+}
+.bt-diff__hunk .bt-diff__code {
+  color: rgb(var(--bt-accent-text));
+  font-weight: 600;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.bt-diff__meta {
+  background: rgb(var(--bt-bg-term));
+}
+.bt-diff__meta .bt-diff__gutter {
+  min-width: 7.35rem;
+}
+.bt-diff__meta .bt-diff__code {
+  color: rgb(var(--bt-text-3));
+  font-style: italic;
+}
+html:not(.dark) .bt-diff__row--add {
+  background: rgb(16 185 129 / 0.14);
+}
+html:not(.dark) .bt-diff__row--add .bt-diff__mark,
+html:not(.dark) .bt-diff__row--add .bt-diff__code {
+  color: rgb(4 120 87);
+}
+html:not(.dark) .bt-diff__row--del {
+  background: rgb(239 68 68 / 0.12);
+}
+html:not(.dark) .bt-diff__row--del .bt-diff__mark,
+html:not(.dark) .bt-diff__row--del .bt-diff__code {
+  color: rgb(153 27 27);
+}
+
+/* Pré-visualização de imagem a colar no terminal (estilo Ghostty). */
+.bt-img-paste {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  corner-shape: superellipse(1.6);
+  border: 1px solid rgb(var(--bt-border-strong));
+  background: rgb(var(--bt-bg-card) / 0.92);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 0.35);
+}
+.bt-img-paste__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.bt-img-paste__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--bt-text-1));
+}
+.bt-img-paste__hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: rgb(var(--bt-text-3));
+}
+.bt-img-paste__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+.bt-img-paste__thumbs {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.bt-img-paste__thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 148px;
+  height: 110px;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--bt-border));
+  background: rgb(0 0 0 / 0.45);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+}
+.bt-img-paste__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: rgb(0 0 0 / 0.35);
+}
+.bt-img-paste__num {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.65);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.bt-img-paste__x {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.7);
+  color: #fff;
+}
+.bt-img-paste__x:hover {
+  background: rgb(var(--bt-err));
+  color: #111;
+}
+.bt-img-paste__x:disabled {
+  opacity: 0.4;
+}
+.bt-img-paste__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+.bt-img-paste__btn {
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: rgb(var(--bt-text-2));
+  background: rgb(var(--bt-bg-hover));
+}
+.bt-img-paste__btn:hover:not(:disabled) {
+  color: rgb(var(--bt-text-1));
+  background: rgb(var(--bt-border-strong));
+}
+.bt-img-paste__btn--go {
+  color: #fff;
+  background: rgb(var(--bt-accent));
+}
+.bt-img-paste__btn--go:hover:not(:disabled) {
+  color: #fff;
+  background: rgb(var(--bt-accent-hover));
+}
+.bt-img-paste__btn:disabled {
+  opacity: 0.5;
+}
 .bt-menu {
   border-radius: 10px;
   corner-shape: superellipse(1.6);
@@ -279,6 +653,9 @@ body {
   border-radius: 10px;
   background: rgb(255 255 255 / 0.06);
 }
+html:not(.dark) .bt-termbar {
+  background: rgb(15 23 41 / 0.05);
+}
 .bt-termbar > span {
   padding: 0 6px;
   font-variant-numeric: tabular-nums;
@@ -296,6 +673,9 @@ body {
   background: rgb(255 255 255 / 0.12);
   color: rgb(var(--bt-text-1));
 }
+html:not(.dark) .bt-termbar > button:hover:not(:disabled) {
+  background: rgb(15 23 41 / 0.1);
+}
 .bt-termbar > button:disabled {
   opacity: 0.35;
 }
@@ -303,16 +683,20 @@ body {
   background: rgb(255 255 255 / 0.18);
   color: white;
 }
+/* Tema claro: ativo com tinta escura (branco no branco sumia). */
+html:not(.dark) .bt-termbar > button.bt-on {
+  background: rgb(var(--bt-accent-soft));
+  color: rgb(var(--bt-accent-text));
+}
 
-/* Abas no formato de navegador, com o raio da Apple: 8 pt no controle
-   grande (a aba) e círculo de 22 pt no botão de ícone (o + do Safari).
-   A curva invertida usa o mesmo 8 pt, para as duas curvas ficarem paralelas.
+/* Abas no formato de navegador: raio no topo da aba ativa, e curva
+   invertida de 20 px embaixo (quase encosta na guia ao lado).
    corner-shape é o canto contínuo do AppKit; o WebView2 ignora e fica no arco. */
 .bt-tabstrip-mac,
 .bt-tabstrip {
   --bt-tab-on: var(--bt-bg-term);
   background: var(--bt-topbar);
-  /* a curva invertida da aba ativa sai 8 px para cada lado; sem isso a
+  /* a curva invertida da aba ativa sai ~16 px para cada lado; sem isso a
      lista corta a da esquerda */
   overflow: visible;
 }
@@ -320,28 +704,51 @@ body {
   position: relative;
   z-index: 1;
   height: 26px;
-  align-self: flex-end;
+  /* Mesmo centro vertical dos botões RAM/CPU (+, grade…). A ativa sobe
+     sozinha (flex-end) para encostar no terminal. */
+  align-self: center;
   min-width: 112px;
   max-width: 240px;
-  margin: 0 2px 2px;
+  margin: 0 2px;
   padding: 0 12px;
-  border-radius: 10px;
-  corner-shape: superellipse(1.6);
+  border-radius: 12px;
+  corner-shape: superellipse(1.8);
   color: rgb(var(--bt-text-2));
   background: rgb(var(--bt-bg-card));
 }
 /* O texto desses controles é o do vidro nativo. O da página some, senão
    fica duplicado e por baixo do efeito. Ícones continuam. */
-/* O vidro nativo fica atrás do texto. A cor não segue o tema do app:
-   no vidro escuro o texto claro continua legível. */
-html.bt-vibrancy .bt-sidebar,
-html.bt-vibrancy .bt-tabstrip {
+/* Tokens claros fixos só no tema escuro + vidro. No claro o vão/fundo
+   usam --bt-topbar clara e o texto do tema (escuro) fica legível. */
+html.dark.bt-vibrancy .bt-sidebar,
+html.dark.bt-vibrancy .bt-tabstrip,
+html.dark.bt-acrylic .bt-sidebar,
+html.dark.bt-acrylic .bt-tabstrip {
   color-scheme: dark;
+  --bt-text-1: 220 220 220;
+  --bt-text-2: 180 180 180;
+  --bt-text-3: 140 140 140;
+  --bt-bg-hover: 55 58 60;
+  --bt-bg-card: 42 45 46;
+  --bt-border: 70 70 70;
+  --bt-border-strong: 90 90 90;
+  --bt-accent-text: 140 200 255;
+  color: rgb(220 220 220);
+}
+html:not(.dark).bt-vibrancy .bt-sidebar,
+html:not(.dark).bt-vibrancy .bt-tabstrip,
+html:not(.dark).bt-acrylic .bt-sidebar,
+html:not(.dark).bt-acrylic .bt-tabstrip {
+  color-scheme: light;
 }
 html.bt-vibrancy .bt-sidebar,
 html.bt-vibrancy .bt-sidebar .text-text-1,
 html.bt-vibrancy .bt-sidebar .text-text-2,
-html.bt-vibrancy .bt-sidebar .text-text-3 {
+html.bt-vibrancy .bt-sidebar .text-text-3,
+html.bt-acrylic .bt-sidebar,
+html.bt-acrylic .bt-sidebar .text-text-1,
+html.bt-acrylic .bt-sidebar .text-text-2,
+html.bt-acrylic .bt-sidebar .text-text-3 {
   color: rgb(var(--bt-text-1));
 }
 /* A página desenha a lista. O cartão pode ser o material nativo; o vão
@@ -358,18 +765,27 @@ html.bt-vibrancy .bt-sidebar .overflow-y-auto {
   background-image: none !important;
 }
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode {
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode,
+html.bt-acrylic .bt-sidebar button.h-7,
+html.bt-acrylic .bt-sidebar .bt-mode {
   color: rgb(var(--bt-text-1));
 }
-/* Só a busca e os botões de modo escondem o fundo: o texto deles é o
-   da placa nativa. Lista, cabeçalho e chip continuam opacos na página. */
+html.bt-vibrancy .bt-sidebar .bt-mode.bt-glass-on,
+html.bt-vibrancy .bt-sidebar .bt-mode.bt-glass-on *,
+html.bt-acrylic .bt-sidebar .bt-mode.bt-glass-on,
+html.bt-acrylic .bt-sidebar .bt-mode.bt-glass-on * {
+  color: #fff !important;
+}
+/* Busca, modo e chip selecionado: fundo transparente — tinta só na placa nativa. */
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search input,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chip,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7 {
   background: transparent !important;
   background-color: transparent !important;
   box-shadow: none !important;
+  border-color: transparent !important;
 }
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search svg {
   color: rgb(var(--bt-text-2));
@@ -382,30 +798,60 @@ html.bt-vibrancy .bt-sidebar .bt-folder.bt-glass-on {
   background-color: transparent !important;
   color: rgb(var(--bt-text-1));
 }
-/* O chat não esconde o nome e não pinta fundo. O vidro nativo é só a
-   placa (seleção/hover); o rótulo, o ponto de status e o cwd ficam na
-   página — opacity 0 aqui sumia com o indicador de posição do texto. */
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat:hover,
+/* Chat: texto na página. Fundo CSS no hover/seleção (placa nativa na
+   frente tapava o nome; atrás do WebView o fundo sumia). */
+.bt-chat {
+  border-radius: 16px;
+  corner-shape: superellipse(1.7);
+}
+html.dark.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat {
+  background: rgb(var(--bt-bg-hover) / 0.55) !important;
+  background-color: rgb(var(--bt-bg-hover) / 0.55) !important;
+  opacity: 1;
+  color: rgb(var(--bt-text-1));
+}
+html.dark.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat:hover {
+  background: rgb(var(--bt-bg-card) / 0.72) !important;
+  background-color: rgb(var(--bt-bg-card) / 0.72) !important;
+}
+/* Tema claro: véu leve — o vibrancy do fundo tem de aparecer entre os chats. */
+html:not(.dark).bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat {
+  background: rgb(255 255 255 / 0.42) !important;
+  background-color: rgb(255 255 255 / 0.42) !important;
+  box-shadow: inset 0 0 0 1px rgb(15 23 41 / 0.1);
+  opacity: 1;
+  color: rgb(var(--bt-text-1));
+}
+html:not(.dark).bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat:hover {
+  background: rgb(255 255 255 / 0.62) !important;
+  background-color: rgb(255 255 255 / 0.62) !important;
+  box-shadow: inset 0 0 0 1px rgb(15 23 41 / 0.14);
+}
+/* Selecionado: fundo transparente — o liquid glass (igual ao Ver) fica
+   atrás do WebView; nome / na aba / badge pintam por cima. */
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on:hover {
   background: transparent !important;
   background-color: transparent !important;
-  opacity: 1;
-  color: rgb(var(--bt-text-1));
+  box-shadow: none !important;
+  color: white;
 }
-/* Categorias (chip/pasta): só texto, sem placa. Fundo fica nos chats. */
-html.bt-vibrancy .bt-sidebar .bt-chip,
-html.bt-vibrancy .bt-sidebar .bt-chip.bt-glass-on,
-html.bt-vibrancy .bt-sidebar .bt-chip:hover {
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on .text-text-1,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on .text-text-3,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on .text-accent-text {
+  color: #fff !important;
+}
+/* Chip idle: texto na página. Chip selecionado: some (placa nativa desenha). */
+html.bt-vibrancy .bt-sidebar .bt-chip:not(.bt-glass-on),
+html.bt-vibrancy .bt-sidebar .bt-chip:not(.bt-glass-on):hover {
   background: transparent !important;
   background-color: transparent !important;
   color: rgb(var(--bt-text-1));
   opacity: 1;
 }
-html.bt-vibrancy .bt-sidebar .bt-chip.bt-glass-on {
-  color: rgb(var(--bt-accent-text));
-  font-weight: 600;
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chip.bt-glass-on,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chip.bt-glass-on * {
+  opacity: 0;
 }
 .bt-tip,
 .bt-tip * {
@@ -446,7 +892,9 @@ html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode *,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7 *,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search * {
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search *,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chip.bt-glass-on,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chip.bt-glass-on * {
   opacity: 0;
 }
 /* O X de fechar fica na página, mesmo com a aba inativa virando placa nativa. */
@@ -457,25 +905,48 @@ html.bt-vibrancy .bt-tab-close * {
 /* Sem vibrancy a lista é conteúdo, não vidro: cada chat tem fundo e o
    selecionado se destaca. Com vibrancy a página continua desenhando a
    lista; só busca, modo e ícone viram placa nativa. */
-html:not(.bt-vibrancy) .bt-sidebar .bt-chat {
+html.dark:not(.bt-vibrancy):not(.bt-acrylic) .bt-sidebar .bt-chat {
   background: rgb(var(--bt-bg-hover));
 }
-html:not(.bt-vibrancy) .bt-sidebar .bt-chat:hover {
+html.dark:not(.bt-vibrancy):not(.bt-acrylic) .bt-sidebar .bt-chat:hover {
   background: rgb(var(--bt-bg-card));
 }
-html:not(.bt-vibrancy) .bt-sidebar .bt-chat.bt-glass-on,
-html:not(.bt-vibrancy) .bt-sidebar .bt-chat.bt-glass-on:hover {
+html:not(.dark):not(.bt-vibrancy):not(.bt-acrylic) .bt-sidebar .bt-chat {
+  background: rgb(var(--bt-bg-card));
+  box-shadow: inset 0 0 0 1px rgb(var(--bt-border));
+}
+html:not(.dark):not(.bt-vibrancy):not(.bt-acrylic) .bt-sidebar .bt-chat:hover {
+  background: rgb(var(--bt-bg-hover));
+  box-shadow: inset 0 0 0 1px rgb(var(--bt-border-strong));
+}
+html.dark:not(.bt-vibrancy):not(.bt-acrylic) .bt-sidebar .bt-chat.bt-glass-on,
+html.dark:not(.bt-vibrancy):not(.bt-acrylic) .bt-sidebar .bt-chat.bt-glass-on:hover {
   background: rgb(var(--bt-accent));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.14), inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  color: white;
+  overflow: hidden;
+}
+html:not(.dark):not(.bt-vibrancy):not(.bt-acrylic) .bt-sidebar .bt-chat.bt-glass-on,
+html:not(.dark):not(.bt-vibrancy):not(.bt-acrylic) .bt-sidebar .bt-chat.bt-glass-on:hover {
+  background: rgb(48 52 60);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.14);
   color: white;
   overflow: hidden;
 }
 html:not(.bt-vibrancy) .bt-sidebar .bt-chat.bt-glass-on .text-text-1,
-html:not(.bt-vibrancy) .bt-sidebar .bt-chat.bt-glass-on .text-text-3 {
-  color: white;
+html:not(.bt-vibrancy) .bt-sidebar .bt-chat.bt-glass-on .text-text-3,
+html:not(.bt-vibrancy) .bt-sidebar .bt-chat.bt-glass-on .text-accent-text {
+  color: rgb(255 255 255 / 0.92) !important;
 }
+/* Sem vibrancy: uma tinta só (accent) no modo/chip selecionado. */
+html:not(.bt-vibrancy) .bt-sidebar .bt-mode.bt-glass-on,
+html:not(.bt-vibrancy) .bt-sidebar .bt-chip.bt-glass-on,
 html:not(.bt-vibrancy) .bt-sidebar .bt-glass.bt-glass-on {
   background: rgb(var(--bt-accent));
   color: white;
+}
+html:not(.bt-vibrancy) .bt-sidebar .bt-mode:not(.bt-glass-on) {
+  background: rgb(var(--bt-bg-hover));
 }
 html:not(.bt-vibrancy) .bt-sidebar .bt-folder,
 html:not(.bt-vibrancy) .bt-sidebar .bt-folder:hover,
@@ -515,27 +986,54 @@ html:not(.bt-vibrancy) .bt-sidebar .bt-search svg {
   z-index: 2;
   align-self: flex-end;
   margin-bottom: -1px;
-  height: 32px;
-  border-radius: 8px 8px 0 0;
+  height: 36px;
+  /* Topo bem arredondado (estilo Safari/Chrome moderno). */
+  border-radius: 14px 14px 0 0;
+  corner-shape: superellipse(1.9);
   background: rgb(var(--bt-tab-on));
   color: rgb(var(--bt-text-1));
+}
+/* Tema claro: aba ativa é clara (--bt-tab-on). Com Vibrancy a faixa força
+   texto claro (vidro); na aba selecionada isso some — volta texto escuro. */
+html:not(.dark) .bt-tab-active,
+html:not(.dark) .bt-tab-active > span,
+html:not(.dark) .bt-tab-active .bt-tab-close {
+  color: #0f1729 !important;
+}
+html:not(.dark) .bt-tab-active svg,
+html:not(.dark) .bt-tab-active .bt-tool-icon,
+html:not(.dark) .bt-tab:not(.bt-tab-active) svg,
+html:not(.dark) .bt-tab:not(.bt-tab-active) .bt-tool-icon,
+html:not(.dark) .bt-tab-tool svg {
+  color: #0f1729 !important;
+}
+html:not(.dark) .bt-tab-tool-over svg {
+  color: #fff !important;
+}
+html:not(.dark) .bt-tab-active .text-text-3 {
+  color: #64748b !important;
+}
+html:not(.dark) .bt-tab-active .bt-tab-close:hover {
+  background: rgb(15 23 41 / 0.12);
+  color: #0f1729 !important;
 }
 .bt-tab-active::before,
 .bt-tab-active::after {
   content: "";
   position: absolute;
   bottom: 0;
-  width: 8px;
-  height: 8px;
-
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
 }
 .bt-tab-active::before {
-  left: -8px;
-  background: radial-gradient(circle at 0 0, transparent 7.5px, rgb(var(--bt-tab-on)) 8px);
+  left: -16px;
+  background: radial-gradient(circle at 0 0, transparent 15.5px, rgb(var(--bt-tab-on)) 16px);
 }
 .bt-tab-active::after {
-  right: -8px;
-  background: radial-gradient(circle at 100% 0, transparent 7.5px, rgb(var(--bt-tab-on)) 8px);
+  right: -16px;
+  background: radial-gradient(circle at 100% 0, transparent 15.5px, rgb(var(--bt-tab-on)) 16px);
 }
 
 .bt-tab-over {
@@ -568,7 +1066,7 @@ html:not(.bt-vibrancy) .bt-sidebar .bt-search svg {
   color: rgb(var(--bt-text-1));
 }
 /* Nova aba e ver tudo: quadrado de 28 px com o raio de 8 pt da Apple,
-   na linha das abas. O mais acende no acento; a grade abre a visão de todos. */
+   na linha das abas. Hover igual em todos; accent só ao soltar no +. */
 .bt-tab-tool {
   position: relative;
   z-index: 6;
@@ -578,8 +1076,8 @@ html:not(.bt-vibrancy) .bt-sidebar .bt-search svg {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  align-self: flex-end;
-  margin: 0 1px 2px;
+  align-self: center;
+  margin: 0 1px;
   border-radius: 8px;
   corner-shape: superellipse(1.6);
   color: rgb(var(--bt-text-2));
@@ -589,10 +1087,19 @@ html:not(.bt-vibrancy) .bt-sidebar .bt-search svg {
   background: rgb(var(--bt-bg-hover));
   color: rgb(var(--bt-text-1));
 }
-.bt-tab-tool-plus:hover,
+html:not(.dark) .bt-tab-tool:hover:not(.bt-tab-tool-over) {
+  background: rgb(15 23 41 / 0.1);
+}
+/* Só o alvo de soltar (arraste) usa o accent — o hover do + é igual aos outros. */
 .bt-tab-tool-over {
   background: rgb(var(--bt-accent));
   color: white;
+}
+/* Tema claro: hover dos botões de ícone (cabeçalho, sidebar) bem visível. */
+html:not(.dark) .bt-glass:hover:not(.bt-glass-on):not(.bt-mode):not(.bt-chat):not(.bt-chip):not(.bt-folder),
+html:not(.dark) .bt-termbar > button:hover:not(:disabled) {
+  background: rgb(15 23 41 / 0.1);
+  color: rgb(var(--bt-text-1));
 }
 
 
@@ -732,3 +1239,409 @@ html.bt-vibrancy .bt-preview-interacting {
 }
 .md-view .md-remote-img { cursor: pointer; }
 .md-view .md-remote-img:hover { color: rgb(var(--bt-accent-text)); border-color: rgb(var(--bt-accent-text)); }
+
+/* —— Folhas modais (Nova aba, etc.) —— */
+.bt-sheet__chrome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgb(var(--bt-border) / 0.7);
+  background: rgb(var(--bt-bg-panel) / 0.55);
+}
+.bt-sheet__title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: rgb(var(--bt-text-1));
+}
+.bt-sheet__close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: rgb(var(--bt-text-2));
+}
+.bt-sheet__close:hover {
+  background: rgb(var(--bt-bg-hover));
+  color: rgb(var(--bt-text-1));
+}
+.bt-sheet__body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px 18px;
+  background: rgb(var(--bt-bg-body));
+}
+.bt-sheet__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgb(var(--bt-border) / 0.7);
+  background: rgb(var(--bt-bg-panel) / 0.45);
+}
+.bt-sheet__footer .bt-settings-btn {
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+/* —— Configurações (estilo System Settings) —— */
+.bt-settings {
+  display: flex;
+  height: min(88vh, 820px);
+  width: min(1080px, 96vw);
+  flex-direction: column;
+  overflow: hidden;
+}
+.bt-settings__chrome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgb(var(--bt-border) / 0.7);
+  background: rgb(var(--bt-bg-panel) / 0.65);
+}
+.bt-settings__chrome-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: rgb(var(--bt-text-1));
+}
+.bt-settings__chrome-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: rgb(var(--bt-text-2));
+}
+.bt-settings__chrome-close:hover {
+  background: rgb(var(--bt-bg-hover));
+  color: rgb(var(--bt-text-1));
+}
+.bt-settings__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  background: rgb(var(--bt-bg-body));
+}
+.bt-settings-nav {
+  display: flex;
+  width: 212px;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 10px;
+  overflow-y: auto;
+  border-right: 1px solid rgb(var(--bt-border) / 0.65);
+  background: rgb(var(--bt-bg-panel) / 0.55);
+}
+.bt-settings-nav__group-label {
+  padding: 0 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgb(var(--bt-text-3));
+}
+.bt-settings-nav__group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.bt-settings-nav__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  corner-shape: superellipse(1.6);
+  text-align: left;
+  font-size: 13px;
+  color: rgb(var(--bt-text-2));
+}
+.bt-settings-nav__item:hover {
+  background: rgb(var(--bt-bg-hover) / 0.7);
+  color: rgb(var(--bt-text-1));
+}
+.bt-settings-nav__item--on {
+  background: rgb(var(--bt-accent) / 0.22);
+  color: rgb(var(--bt-text-1));
+  font-weight: 600;
+}
+.bt-settings-nav__item--on:hover {
+  background: rgb(var(--bt-accent) / 0.28);
+}
+.bt-settings-nav__icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: rgb(var(--bt-bg-hover) / 0.8);
+  color: rgb(var(--bt-accent-text));
+}
+.bt-settings-nav__item--on .bt-settings-nav__icon {
+  background: rgb(var(--bt-accent) / 0.35);
+  color: rgb(var(--bt-accent-text));
+}
+.bt-settings-nav__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bt-settings__content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  background: rgb(var(--bt-bg-body));
+}
+.bt-settings-page__head {
+  padding: 22px 28px 8px;
+}
+.bt-settings-page__title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: rgb(var(--bt-text-1));
+}
+.bt-settings-page__sub {
+  margin-top: 4px;
+  max-width: 52ch;
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgb(var(--bt-text-2));
+}
+.bt-settings-page__body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 8px 28px 28px;
+}
+.bt-settings-label {
+  margin: 0 0 6px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--bt-text-2));
+}
+.bt-settings-hint {
+  margin: 6px 4px 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgb(var(--bt-text-3));
+}
+.bt-settings-group {
+  overflow: hidden;
+  border-radius: 12px;
+  corner-shape: superellipse(1.6);
+  border: 1px solid rgb(var(--bt-border) / 0.85);
+  background: rgb(var(--bt-bg-card));
+}
+.bt-settings-group > * + * {
+  border-top: 1px solid rgb(var(--bt-border) / 0.7);
+}
+.bt-settings-panel {
+  border-radius: 12px;
+  corner-shape: superellipse(1.6);
+  border: 1px solid rgb(var(--bt-border) / 0.85);
+  background: rgb(var(--bt-bg-card));
+  padding: 12px;
+}
+.bt-settings-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  text-align: left;
+}
+.bt-settings-row--click:hover {
+  background: rgb(var(--bt-bg-hover) / 0.45);
+}
+.bt-settings-row__text {
+  min-width: 0;
+  flex: 1;
+}
+.bt-settings-row__label {
+  font-size: 13px;
+  color: rgb(var(--bt-text-1));
+}
+.bt-settings-row__hint {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgb(var(--bt-text-3));
+}
+.bt-settings-row__trail {
+  display: flex;
+  min-width: 0;
+  max-width: min(420px, 64%);
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.bt-settings-row__trail > select,
+.bt-settings-row__trail > input.bt-field {
+  min-width: 0;
+}
+
+/* Grade “Todos os terminais”: filtros segmentados + cartões no padrão sheet */
+.bt-term-grid-seg {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  padding: 3px;
+  border-radius: 10px;
+  corner-shape: superellipse(1.6);
+  background: rgb(var(--bt-bg-term));
+  border: 1px solid rgb(var(--bt-border) / 0.85);
+}
+.bt-term-grid-seg__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 8px;
+  corner-shape: superellipse(1.6);
+  font-size: 12px;
+  color: rgb(var(--bt-text-2));
+}
+.bt-term-grid-seg__btn:hover {
+  color: rgb(var(--bt-text-1));
+  background: rgb(var(--bt-bg-hover) / 0.55);
+}
+.bt-term-grid-seg__btn--on {
+  color: rgb(var(--bt-text-1));
+  font-weight: 600;
+  background: rgb(var(--bt-bg-card));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+}
+.bt-term-grid-seg__n {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--bt-text-3));
+}
+.bt-term-grid-seg__btn--on .bt-term-grid-seg__n {
+  color: rgb(var(--bt-text-2));
+}
+.bt-term-grid-card {
+  border-radius: 12px;
+  corner-shape: superellipse(1.6);
+  border: 1px solid rgb(var(--bt-border) / 0.85);
+  background: rgb(var(--bt-bg-card));
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.bt-term-grid-card:hover {
+  border-color: rgb(var(--bt-accent) / 0.55);
+}
+.bt-term-grid-card--focus {
+  border-color: rgb(var(--bt-accent));
+  box-shadow: 0 0 0 1px rgb(var(--bt-accent) / 0.45);
+}
+.bt-settings-switch {
+  position: relative;
+  width: 42px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgb(var(--bt-border-strong));
+  transition: background 160ms ease;
+}
+.bt-settings-switch--on {
+  background: rgb(var(--bt-accent));
+}
+.bt-settings-switch:disabled {
+  opacity: 0.45;
+}
+.bt-settings-switch__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.28);
+  transition: transform 160ms ease;
+}
+.bt-settings-switch--on .bt-settings-switch__knob {
+  transform: translateX(16px);
+}
+.bt-settings-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  border-radius: 8px;
+  corner-shape: superellipse(1.6);
+  padding: 5px 11px;
+  font-size: 12px;
+  color: rgb(var(--bt-text-1));
+  background: rgb(var(--bt-bg-hover));
+}
+.bt-settings-btn:hover:not(:disabled) {
+  background: rgb(var(--bt-border-strong));
+}
+.bt-settings-btn:disabled {
+  opacity: 0.4;
+}
+.bt-settings-btn--accent {
+  color: #fff;
+  background: rgb(var(--bt-accent));
+}
+.bt-settings-btn--accent:hover:not(:disabled) {
+  background: rgb(var(--bt-accent-hover));
+}
+.bt-settings-btn--danger {
+  color: rgb(var(--bt-err));
+  background: rgb(var(--bt-err) / 0.12);
+}
+.bt-settings-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  border-radius: 10px;
+  corner-shape: superellipse(1.6);
+  border: 1px solid rgb(var(--bt-border));
+  background: rgb(var(--bt-bg-panel));
+  padding: 10px 12px;
+  text-align: left;
+}
+.bt-settings-choice:hover {
+  background: rgb(var(--bt-bg-hover) / 0.55);
+}
+.bt-settings-choice--on {
+  border-color: rgb(var(--bt-accent) / 0.7);
+  background: rgb(var(--bt-accent) / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(var(--bt-accent) / 0.25);
+}
+.bt-settings-choice__icon {
+  color: rgb(var(--bt-text-1));
+}
+.bt-settings-choice__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgb(var(--bt-text-1));
+}
+.bt-settings-choice__sub {
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgb(var(--bt-text-3));
+}
+.bt-settings-choice-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}

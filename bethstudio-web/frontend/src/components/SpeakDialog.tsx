@@ -37,6 +37,7 @@ import {
   type MicTuning,
 } from "@/lib/micTuning";
 import { RecClock } from "@/lib/recClock";
+import { defaultMicLabel } from "@/lib/windowFrame";
 import { MicInlineSelect, MicPicker } from "./MicPicker";
 import { LevelScope, type ScopeHandle } from "./LevelScope";
 import { VoiceError, correctStreaming, correctTimeoutMs, errorRecovery, formatSeconds, formatUSD, transcribe, type VoiceErrorKind } from "@/lib/voicePipeline";
@@ -374,7 +375,7 @@ export function SpeakDialog({ conn, pane, info, onClose, onOpenSettings, onSent 
         deviceId = r.deviceId;
         if (!r.found) log(`microfone salvo "${choice.label}" não encontrado; usando o padrão`);
       }
-      log(`getUserMedia (${deviceId ? `"${choice.label}"` : "padrão do Windows"})`);
+      log(`getUserMedia (${deviceId ? `"${choice.label}"` : defaultMicLabel().toLowerCase()})`);
       const tn = tuningRef.current;
       const stream = await openMic({ audio: audioConstraints(deviceId, tn) });
       if (closed.current) {
@@ -662,7 +663,7 @@ export function SpeakDialog({ conn, pane, info, onClose, onOpenSettings, onSent 
   /** Troca de microfone: salva e, se estiver gravando, recomeça com o novo. */
   const changeMic = (c: MicChoice) => {
     setMic(c);
-    log(`microfone escolhido: ${c.id ? `"${c.label}"` : "padrão do Windows"}`);
+    log(`microfone escolhido: ${c.id ? `"${c.label}"` : defaultMicLabel().toLowerCase()}`);
     if (!snap) return;
     const next = { ...snap.settings, mic_device_id: c.id, mic_label: c.label };
     const s2 = { ...snap, settings: next };

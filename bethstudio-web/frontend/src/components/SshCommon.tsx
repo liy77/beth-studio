@@ -74,7 +74,7 @@ export function SshConfirm({
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => cancelRef.current?.focus(), []);
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[16vh]" onMouseDown={onCancel}>
+    <div className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[16vh] backdrop-blur-xl" onMouseDown={onCancel}>
       <div
         role="alertdialog"
         aria-modal="true"
@@ -164,7 +164,7 @@ export function SshAskSecret({
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => ref.current?.focus(), []);
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[16vh]" onMouseDown={onCancel}>
+    <div className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[16vh] backdrop-blur-xl" onMouseDown={onCancel}>
       <form
         className="w-[min(420px,92vw)] bt-dialog p-4"
         onMouseDown={(e) => e.stopPropagation()}

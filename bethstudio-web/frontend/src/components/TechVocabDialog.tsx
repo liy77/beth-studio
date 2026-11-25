@@ -17,7 +17,7 @@ export function TechVocabDialog({ conn, onClose }: { conn: Connection; onClose: 
   const top = useMemo(() => new Set(data?.top ?? []), [data]);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/50 pt-[5vh]" onMouseDown={onClose}>
+    <div className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[5vh] backdrop-blur-xl" onMouseDown={onClose}>
       <div
         className="flex h-[85vh] w-[min(820px,96vw)] flex-col overflow-hidden bt-dialog"
         onMouseDown={(e) => e.stopPropagation()}

@@ -9,11 +9,13 @@ import { GlassTip } from "@/components/GlassTip";
  * passada do mouse, para nao aparecer duas vezes. Aparece apos ~350 ms de
  * hover e na hora ao focar pelo teclado; some ao sair, clicar, rolar ou Esc.
  * So' ouve eventos (nao cobre nada): nao atrapalha arraste nem cliques.
+ * No macOS o balão é o mesmo NSPopover do menu de contexto.
  */
 export function TooltipLayer() {
   const [tip, setTip] = useState<{ text: TipText; anchor: Element } | null>(null);
   const [place, setPlace] = useState<TipPlace | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const mac = isMacTitlebar();
 
   useEffect(() => {
     let timer: number | undefined;
@@ -96,35 +98,31 @@ export function TooltipLayer() {
     };
   }, []);
 
-  // mede o tooltip ja' renderizado e posiciona dentro da janela
+  // Windows / fallback: mede o tooltip e posiciona na página.
   useLayoutEffect(() => {
-    if (!tip || !boxRef.current) return;
+    if (mac || !tip || !boxRef.current) return;
     const a = tip.anchor.getBoundingClientRect();
     const b = boxRef.current.getBoundingClientRect();
     setPlace(placeTip({ left: a.left, top: a.top, width: a.width, height: a.height }, b.width, b.height, window.innerWidth, window.innerHeight));
-  }, [tip]);
+  }, [tip, mac]);
 
   if (!tip) return null;
-  if (isMacTitlebar() && place) {
-    return <GlassTip title={tip.text.title} desc={tip.text.desc} x={place.left} y={place.top} above={place.above} arrowX={place.arrowX} />;
+  if (mac) {
+    const a = tip.anchor.getBoundingClientRect();
+    // Preferir abaixo do botão (como o menu); o AppKit vira se não couber.
+    return <GlassTip title={tip.text.title} desc={tip.text.desc} ax={a.left} ay={a.top} aw={a.width} ah={a.height} above={false} />;
   }
   return (
     <div
       ref={boxRef}
       role="tooltip"
-      className={
-        "pointer-events-none fixed z-[10000] max-w-[280px] rounded-lg px-3 py-2 text-[12px] leading-snug text-white " +
-        (isMacTitlebar() ? "bt-tip" : "bt-menu text-text-1")
-      }
+      className="pointer-events-none fixed z-[10000] max-w-[280px] rounded-lg px-3 py-2 text-[12px] leading-snug bt-menu text-text-1"
       data-tip-side={place?.side ?? "below"}
       data-tip-arrow={place?.arrowX ?? 0}
       style={{ left: place?.left ?? -9999, top: place?.top ?? -9999, visibility: place ? "visible" : "hidden" }}
     >
       <span
-        className={
-          "absolute h-2 w-2 rotate-45 " +
-          (isMacTitlebar() ? "hidden" : "border border-border-strong bg-bg-card")
-        }
+        className="absolute h-2 w-2 rotate-45 border border-border-strong bg-bg-card"
         style={
           place?.above
             ? { left: (place?.arrowX ?? 0) - 4, bottom: -4 }
@@ -132,7 +130,7 @@ export function TooltipLayer() {
         }
       />
       <div className="font-medium">{tip.text.title}</div>
-      {tip.text.desc && <div className={isMacTitlebar() ? "mt-0.5 text-white/70" : "mt-0.5 text-text-2"}>{tip.text.desc}</div>}
+      {tip.text.desc && <div className="mt-0.5 text-text-2">{tip.text.desc}</div>}
     </div>
   );
 }

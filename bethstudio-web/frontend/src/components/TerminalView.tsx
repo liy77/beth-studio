@@ -1,5 +1,6 @@
 import { download, downloadName, isRemote } from "@/lib/remote";
 import { wheelGoesToApp } from "@/lib/termWheel";
+import { pinTermBoxScroll, shouldForceScrollResend } from "@/lib/termScroll";
 import { useCallback, useEffect, useRef, useState, type DragEvent as RDragEvent, type ReactNode } from "react";
 import { Terminal } from "@xterm/xterm";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
@@ -35,10 +36,12 @@ const DIAG = new URLSearchParams(window.location.search).get("diag") === "1";
 const REMOTE = isRemote();
 import { AppearancePanel, type Preview } from "./AppearancePanel";
 import { cwdPath, paneLabel, shortCwd } from "@/lib/panes";
+import { applyTabComplete, expandHome, joinDirName, pathSep, splitDirPrefix } from "@/lib/pathComplete";
 import { copyText, readClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./IconButton";
 import { PasteDialog } from "./PasteDialog";
+import { ImagePastePreview, type PendingPasteImage } from "./ImagePastePreview";
 import { ScrollBar } from "./ScrollBar";
 import { createScreenWriter } from "@/lib/screen";
 import { attachRenderer, preloadRenderer, type RendererHandle } from "@/lib/termWebgl";
@@ -49,7 +52,7 @@ import { resolveLinkPath, type PaneLinkCtx } from "@/lib/localFile";
 import { markScreen } from "@/lib/startup";
 import { fallbackLinksTouching, linkHoverHint, routeActions, routeSelection, routeTermLink, shouldActivateLink, suppressAppMouseDown, type CellLike, type LinkRoute, type LinkRow } from "@/lib/termLinks";
 import { reasonLabel, type AgentInfo } from "@/lib/agents";
-import { IMAGE_TYPES, filesFromTransfer, planUpload, uploadURL } from "@/lib/pasteMedia";
+import { IMAGE_TYPES, MAX_PENDING_IMAGES, filesFromTransfer, isImageFile, planUpload, uploadURL } from "@/lib/pasteMedia";
 import { PANE_MIME } from "@/lib/dnd";
 import { fixedFontFor, fontSizeLabel, nextFontSize, smallGridHint } from "@/lib/fontStep";
 import { FitGovernor, effectiveSizeMode, fontForWidth, gridFor, resizeRefusedPane } from "@/lib/hostFit";
@@ -115,54 +118,181 @@ interface Props {
 
 // Fora do TerminalView de propósito: um componente declarado lá dentro ganha
 // outro tipo a cada render e o campo de pasta desmonta no clique.
-function LocationBar({ cwd, shown, onGo }: { cwd: string; shown: string; onGo: (dest: string) => void }) {
+function LocationBar({
+  conn,
+  cwd,
+  shown,
+  onGo,
+}: {
+  conn: Connection;
+  cwd: string;
+  shown: string;
+  onGo: (dest: string) => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(cwd);
+  const [matches, setMatches] = useState<string[]>([]);
+  const [home, setHome] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
   const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
+
+  const close = () => {
+    setEditing(false);
+    setMatches([]);
+  };
+
+  const commit = (raw: string) => {
+    const dest = raw.trim().replace(/[\\/]+$/, "") || raw.trim();
+    close();
+    if (dest && dest !== cwd) onGo(dest);
+  };
+
+  const listDir = async (dir: string) => {
+    const r = await conn.api<{ path: string; entries: { name: string; is_dir: boolean }[]; home?: string }>("/api/local-fs/list", {
+      path: dir === "." ? cwd : dir,
+    });
+    if (r.home) setHome(r.home);
+    return r;
+  };
+
+  const complete = async () => {
+    try {
+      const expanded = expandHome(value, home);
+      const sep = pathSep(expanded);
+      const { dir } = splitDirPrefix(expanded, sep);
+      const r = await listDir(dir);
+      const names = r.entries.filter((e) => e.is_dir).map((e) => e.name);
+      const got = applyTabComplete(value, names, { home: home || r.home || "" });
+      if (!got) {
+        setMatches([]);
+        return;
+      }
+      setValue(got.next);
+      setMatches(got.matches.length > 1 ? got.matches.slice(0, 8) : []);
+      requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        el.focus();
+        const n = got.next.length;
+        el.setSelectionRange(n, n);
+      });
+    } catch {
+      setMatches([]);
+    }
+  };
+
+  const pickMatch = (name: string) => {
+    const expanded = expandHome(value, home);
+    const sep = pathSep(expanded);
+    const { dir } = splitDirPrefix(expanded, sep);
+    let next = joinDirName(dir, name, sep, true);
+    if (value.startsWith("~") && home) {
+      const h = home.replace(/[\\/]+$/, "");
+      if (next === h || next.startsWith(h + "/") || next.startsWith(h + "\\")) {
+        next = "~" + next.slice(h.length);
+      }
+    }
+    setValue(next);
+    setMatches([]);
+    inputRef.current?.focus();
+  };
+
   if (!editing) {
     return (
       <button
         type="button"
         data-no-drag
         draggable={false}
-        className="ml-1 hidden h-6 min-w-0 max-w-[46%] shrink items-center truncate rounded-full bg-bg-hover/60 px-3 text-left font-mono text-[12px] text-text-2 hover:bg-bg-hover hover:text-text-1 xl:flex"
+        className="group ml-1.5 hidden h-7 min-w-0 max-w-[min(46%,28rem)] shrink items-center gap-1.5 rounded-lg border border-border/70 bg-bg-hover/40 px-2 text-left text-text-2 transition-colors hover:border-border-strong hover:bg-bg-hover hover:text-text-1 xl:flex"
         title="Clique para ir a outra pasta"
         onMouseDown={stop}
         onClick={(e) => {
           stop(e);
           setValue(cwd);
+          setMatches([]);
           setEditing(true);
+          void listDir(cwd).catch(() => undefined);
         }}
       >
-        {shown}
+        <FolderOpen size={13} className="shrink-0 text-text-3 group-hover:text-accent" aria-hidden />
+        <span className="min-w-0 truncate font-mono text-[12px] tracking-tight">{shown}</span>
       </button>
     );
   }
+
   return (
-    <input
-      data-no-drag
-      draggable={false}
-      autoFocus
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onMouseDown={stop}
-      onKeyDown={(e) => {
-        stop(e);
-        if (e.key === "Escape") {
-          setEditing(false);
-          return;
-        }
-        if (e.key !== "Enter") return;
-        e.preventDefault();
-        const dest = value.trim();
-        setEditing(false);
-        if (dest && dest !== cwd) onGo(dest);
-      }}
-      onBlur={() => setEditing(false)}
-      className="ml-1 hidden h-6 min-w-[140px] max-w-[46%] flex-1 select-text rounded-full bg-bg-card px-3 font-mono text-[12px] text-text-1 outline-none ring-1 ring-accent xl:block"
-      style={{ userSelect: "text" }}
-      title="Enter vai para esta pasta; Esc cancela"
-    />
+    <div className="relative ml-1.5 hidden min-w-[12rem] max-w-[min(52%,36rem)] flex-1 xl:block" data-no-drag onMouseDown={stop}>
+      <div className="flex h-7 items-center gap-1.5 rounded-lg border border-accent/70 bg-bg-card px-2 shadow-[0_0_0_3px_rgb(var(--bt-accent)/0.18)]">
+        <FolderOpen size={13} className="shrink-0 text-accent" aria-hidden />
+        <input
+          ref={inputRef}
+          data-no-drag
+          draggable={false}
+          autoFocus
+          spellCheck={false}
+          autoComplete="off"
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setMatches([]);
+          }}
+          onMouseDown={stop}
+          onKeyDown={(e) => {
+            stop(e);
+            if (e.key === "Escape") {
+              e.preventDefault();
+              close();
+              return;
+            }
+            if (e.key === "Tab") {
+              e.preventDefault();
+              void complete();
+              return;
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit(value);
+            }
+          }}
+          onBlur={() => {
+            // Clique numa sugestão: o mousedown preventDefault evita o blur.
+            window.setTimeout(() => {
+              if (document.activeElement !== inputRef.current) close();
+            }, 120);
+          }}
+          className="min-w-0 flex-1 select-text bg-transparent font-mono text-[12px] text-text-1 outline-none placeholder:text-text-3"
+          style={{ userSelect: "text" }}
+          placeholder="Pasta…"
+          title="Tab completa a pasta · Enter vai · Esc cancela"
+          aria-label="Pasta do terminal"
+          aria-autocomplete="list"
+          aria-expanded={matches.length > 1}
+        />
+        <kbd className="hidden shrink-0 rounded border border-border/80 bg-bg-hover/80 px-1 font-sans text-[9px] font-medium uppercase tracking-wide text-text-3 sm:inline">
+          tab
+        </kbd>
+      </div>
+      {matches.length > 1 && (
+        <ul
+          role="listbox"
+          className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 max-h-48 overflow-auto rounded-lg border border-border bg-bg-card py-1 shadow-lg"
+        >
+          {matches.map((name) => (
+            <li key={name} role="option">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-2.5 py-1 text-left font-mono text-[12px] text-text-1 hover:bg-bg-hover"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pickMatch(name)}
+              >
+                <FolderOpen size={12} className="shrink-0 text-text-3" aria-hidden />
+                {name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -263,6 +393,14 @@ export function TerminalView({
   // o que a seleção é, se for link, pasta ou arquivo (calculado ao abrir o menu)
   const [menuRoute, setMenuRoute] = useState<LinkRoute | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
+  const [pendingImages, setPendingImages] = useState<PendingPasteImage[]>([]);
+  const [pasteBusy, setPasteBusy] = useState(false);
+  // Ausente / true = pré-visualiza (padrão); só false cola na hora.
+  const pastePreviewOn = settings?.paste_image_preview !== false;
+  const pastePreviewRef = useRef(pastePreviewOn);
+  pastePreviewRef.current = pastePreviewOn;
+  const pendingImagesRef = useRef(pendingImages);
+  pendingImagesRef.current = pendingImages;
   const [toast, setToast] = useState<string | null>(null);
   const [gotScreen, setGotScreen] = useState(false);
   const [noFit, setNoFitState] = useState<{
@@ -359,6 +497,75 @@ export function TerminalView({
   const sendFileRef = useRef(sendFile);
   sendFileRef.current = sendFile;
 
+  const clearPendingImages = useCallback(() => {
+    for (const img of pendingImagesRef.current) URL.revokeObjectURL(img.url);
+    setPendingImages([]);
+    termRef.current?.focus();
+  }, []);
+
+  const queueImages = useCallback(
+    (files: File[]) => {
+      const imgs = files.filter(isImageFile);
+      if (!imgs.length) return;
+      // Foco vai pro diálogo; Enter confirma em vez de ir pro agente.
+      termRef.current?.blur();
+      setPendingImages((prev) => {
+        const room = Math.max(0, MAX_PENDING_IMAGES - prev.length);
+        if (room === 0) {
+          flash(`Já tem ${MAX_PENDING_IMAGES} imagens na fila`);
+          return prev;
+        }
+        const next = [...prev];
+        const add = imgs.slice(0, room);
+        if (add.length < imgs.length) flash(`Fila cheia: só mais ${room} imagem(ns)`);
+        for (const file of add) {
+          next.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file, url: URL.createObjectURL(file) });
+        }
+        return next;
+      });
+    },
+    [flash],
+  );
+
+  /** Imagens: pré-visualiza (se ligado) ou cola na hora. Outros arquivos vão direto. */
+  const offerOrSendFiles = useCallback(
+    async (files: File[]) => {
+      if (readOnlyRef.current || !files.length) return;
+      const images = files.filter(isImageFile);
+      const others = files.filter((f) => !isImageFile(f));
+      for (const f of others) await sendFile(f);
+      if (!images.length) return;
+      if (pastePreviewRef.current) queueImages(images);
+      else for (const f of images) await sendFile(f);
+    },
+    [sendFile, queueImages],
+  );
+  const offerOrSendFilesRef = useRef(offerOrSendFiles);
+  offerOrSendFilesRef.current = offerOrSendFiles;
+
+  const confirmPendingImages = useCallback(async () => {
+    const batch = pendingImagesRef.current;
+    if (!batch.length || pasteBusy) return;
+    setPasteBusy(true);
+    try {
+      for (const img of batch) await sendFile(img.file);
+      clearPendingImages();
+    } finally {
+      setPasteBusy(false);
+      termRef.current?.focus();
+    }
+  }, [sendFile, clearPendingImages, pasteBusy]);
+
+  const removePendingImage = useCallback((id: string) => {
+    setPendingImages((prev) => {
+      const gone = prev.find((p) => p.id === id);
+      if (gone) URL.revokeObjectURL(gone.url);
+      const next = prev.filter((p) => p.id !== id);
+      if (!next.length) queueMicrotask(() => termRef.current?.focus());
+      return next;
+    });
+  }, []);
+
   /** Arquivo copiado no Explorer: copia para tmp e cola o caminho. "empty" = nao havia arquivo. */
   const pasteExplorer = useCallback(async (): Promise<"pasted" | "empty" | "error"> => {
     if (REMOTE || readOnlyRef.current) return "empty";
@@ -380,6 +587,10 @@ export function TerminalView({
   const pasteExplorerRef = useRef(pasteExplorer);
   pasteExplorerRef.current = pasteExplorer;
 
+  useEffect(() => () => {
+    for (const img of pendingImagesRef.current) URL.revokeObjectURL(img.url);
+  }, []);
+
   const doPaste = useCallback(async () => {
     if (readOnlyRef.current) return;
     const hit = await pasteExplorer();
@@ -390,14 +601,19 @@ export function TerminalView({
     // Imagem na area de transferencia (Print Screen, "copiar imagem")?
     try {
       const items = await navigator.clipboard.read();
+      const imgs: File[] = [];
       for (const it of items) {
         const t = it.types.find((x) => IMAGE_TYPES.includes(x));
         if (t) {
           const blob = await it.getType(t);
-          await sendFile(new File([blob], "clipboard", { type: t }));
-          termRef.current?.focus();
-          return;
+          imgs.push(new File([blob], "clipboard", { type: t }));
         }
+      }
+      if (imgs.length) {
+        await offerOrSendFiles(imgs);
+        // Com pré-visualização o diálogo toma o foco; sem ela, volta ao terminal.
+        if (!pastePreviewRef.current) termRef.current?.focus();
+        return;
       }
     } catch {
       /* sem permissao para ler imagens: tenta texto */
@@ -407,7 +623,7 @@ export function TerminalView({
     else if (text) sendPaste(text);
     else flash("A área de transferência está vazia");
     termRef.current?.focus();
-  }, [sendPaste, sendFile, flash, pasteExplorer]);
+  }, [sendPaste, offerOrSendFiles, flash, pasteExplorer]);
 
   const doCopyHistory = useCallback(async () => {
     try {
@@ -723,13 +939,13 @@ export function TerminalView({
       // await; depois do await getData() devolve "" e o Ctrl+V nao cola nada
       // (regressao de 2026-10-01, commit abcf4db).
       const data = e.clipboardData;
-      const files = data ? filesFromTransfer(data).slice(0, 8) : [];
+      const files = data ? filesFromTransfer(data).slice(0, MAX_PENDING_IMAGES) : [];
       const text = data?.getData("text/plain") ?? "";
       void (async () => {
         const hit = await pasteExplorerRef.current();
         if (hit !== "empty") return;
         if (files.length) {
-          for (const f of files) await sendFileRef.current(f);
+          await offerOrSendFilesRef.current(files);
           return;
         }
         sendPaste(text);
@@ -759,7 +975,23 @@ export function TerminalView({
     };
     const scrollTo = (o: number) => {
       const max = cur.scrollback > 0 ? cur.scrollback : 1_000_000;
-      desired = Math.max(0, Math.min(max, Math.round(o)));
+      const next = Math.max(0, Math.min(max, Math.round(o)));
+      desired = next;
+      // "Voltar ao fim" (e re-cliques) depois de um scroll 0 perdido: o flush
+      // antigo descartava porque desired === lastSent === 0.
+      if (shouldForceScrollResend(next, lastSent, cur.offset)) lastSent = -1;
+      // Ir ao vivo: manda na hora (sem esperar o throttle de 30 ms) e some o
+      // botão enquanto a ponte confirma.
+      if (next === 0) {
+        window.clearTimeout(timer);
+        timer = undefined;
+        if (cur.offset !== 0) {
+          cur.offset = 0;
+          setScroll((s) => (s.offset === 0 ? s : { ...s, offset: 0 }));
+        }
+        flush();
+        return;
+      }
       if (timer === undefined) timer = window.setTimeout(flush, Math.max(0, 30 - (Date.now() - lastSentAt)));
     };
     scrollToRef.current = scrollTo;
@@ -929,14 +1161,18 @@ export function TerminalView({
     fit();
 
     // Full-screen apps can produce frames faster than xterm.js parses them.
-    // Keep only the newest complete snapshot while one write is in flight.
-    // This also lets the toolbar rebuild the browser view without sending
-    // reset, clear or resize commands to the host or the running application.
+    // Keep only the newest complete snapshot while one write is in flight,
+    // and schedule paints on rAF so agent TUIs (Cursor, Claude) stay ≤ display
+    // refresh instead of flooding the main thread at the bridge poll rate.
     let latestScreen: ScreenEvent | null = null;
     let lastScreen: ScreenEvent | null = null;
     let writing = false;
     let repairPending = false;
     let disposed = false;
+    let screenRaf = 0;
+    let divergentNow = false;
+    let fightingNow = false;
+    let gotScreenOnce = false;
     const pumpScreen = () => {
       if (disposed || writing) return;
       if (repairPending) {
@@ -955,6 +1191,18 @@ export function TerminalView({
       // So' as linhas que mudaram (o xterm refaz menos; ver lib/screen.ts)
       term.write(mode + screenWriter.write(next), () => {
         writing = false;
+        if (latestScreen && !screenRaf) {
+          screenRaf = requestAnimationFrame(() => {
+            screenRaf = 0;
+            pumpScreen();
+          });
+        }
+      });
+    };
+    const scheduleScreen = () => {
+      if (disposed || screenRaf) return;
+      screenRaf = requestAnimationFrame(() => {
+        screenRaf = 0;
         pumpScreen();
       });
     };
@@ -962,7 +1210,7 @@ export function TerminalView({
       if (!lastScreen) return;
       repairPending = true;
       latestScreen = lastScreen;
-      pumpScreen();
+      scheduleScreen();
       conn.refreshScreen(paneId);
     };
 
@@ -981,8 +1229,15 @@ export function TerminalView({
       // Com o web em foco, reajusta sozinho (1x a cada 3 s; 3x em 30 s = briga
       // com a GUI: para e mostra o botao).
       if (sizeModeRef.current === "fit" && gov.divergent && gov.autoRefit(Date.now(), document.hasFocus())) hostFit("auto");
-      setDivergent(sizeModeRef.current === "fit" && gov.divergent);
-      setFighting(gov.fighting);
+      const nextDiv = sizeModeRef.current === "fit" && gov.divergent;
+      if (nextDiv !== divergentNow) {
+        divergentNow = nextDiv;
+        setDivergent(nextDiv);
+      }
+      if (gov.fighting !== fightingNow) {
+        fightingNow = gov.fighting;
+        setFighting(gov.fighting);
+      }
       if (!opened) {
         opened = true;
         hostFit("open");
@@ -999,14 +1254,20 @@ export function TerminalView({
       rawRowsRef.current = ev.text.split("\r\n");
       lastScreen = ev;
       latestScreen = ev;
-      pumpScreen();
-      // So' recentra horizontalmente quando o grid cabe. Se nao cabe, manter
-      // scrollLeft deixa ver a direita (antes zerava a cada frame e cortava).
-      if (fitsRef.current && scrollBoxRef.current && scrollBoxRef.current.scrollLeft !== 0) {
-        scrollBoxRef.current.scrollLeft = 0;
+      scheduleScreen();
+      // Histórico vertical = host. O xterm (Cursor) faz scrollIntoView no
+      // textarea a cada frame; sem pin a caixa DOM sobe/desce sozinha.
+      const box = scrollBoxRef.current;
+      if (box) {
+        const next = pinTermBoxScroll(box, fitsRef.current);
+        if (box.scrollTop !== next.scrollTop) box.scrollTop = next.scrollTop;
+        if (box.scrollLeft !== next.scrollLeft) box.scrollLeft = next.scrollLeft;
       }
-      setGotScreen(true);
-      markScreen(paneId); // tela de abertura: este terminal já apareceu
+      if (!gotScreenOnce) {
+        gotScreenOnce = true;
+        setGotScreen(true);
+        markScreen(paneId); // tela de abertura: este terminal já apareceu
+      }
     });
 
     return () => {
@@ -1018,6 +1279,7 @@ export function TerminalView({
       window.clearTimeout(hostTimer);
       area.removeEventListener("wheel", onWheel, true);
       ro.disconnect();
+      if (screenRaf) cancelAnimationFrame(screenRaf);
       if (raf) cancelAnimationFrame(raf);
       el.removeEventListener("compositionend", markInput, true);
       el.removeEventListener("beforeinput", markTrustedInput, true);
@@ -1123,16 +1385,9 @@ export function TerminalView({
     };
   }, [colors, family, fixedFont, paneId, sizeMode, eff.bold]);
 
-  useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    window.addEventListener("mousedown", close);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("blur", close);
-    };
-  }, [menu]);
+  // Fechar o menu: só o GlassMenu (clique fora / Esc / item). Não ouvir
+  // blur/mousedown aqui — no Mac o NSPopover do menu tira o foco do WebView
+  // e o menu abria e sumia no mesmo instante.
 
   const gone = listLoaded && !pane;
 
@@ -1179,6 +1434,7 @@ Arraste para outra aba ou para a borda de outro terminal`
           </div>
           {pane?.cwd && !readOnly && (
             <LocationBar
+              conn={conn}
               cwd={cwdPath(pane.cwd).path}
               shown={cwd}
               onGo={(dest) => {
@@ -1372,20 +1628,37 @@ Arraste para outra aba ou para a borda de outro terminal`
           if (!e.dataTransfer.types.includes("Files") || e.dataTransfer.types.includes(PANE_MIME)) return;
           e.preventDefault();
           setFileOver(false);
-          const files = Array.from(e.dataTransfer.files).slice(0, 5);
-          void (async () => {
-            for (const f of files) await sendFile(f);
-          })();
+          const files = Array.from(e.dataTransfer.files).slice(0, MAX_PENDING_IMAGES);
+          void offerOrSendFiles(files);
         }}
       >
         {fileOver && (
           <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-md border-2 border-dashed border-accent bg-accent/20">
             <span className="rounded bg-bg-card px-3 py-1.5 text-[12px] text-text-1 shadow">
-              Solte para colar: imagem vira PNG como na GUI; outro arquivo vira uma cópia — o caminho vai para o terminal
+              Solte para colar: imagem entra na pré-visualização (várias); outro arquivo vira cópia — o caminho vai ao terminal
             </span>
           </div>
         )}
-        <div ref={scrollBoxRef} className="absolute inset-0 flex overflow-auto">
+        {pendingImages.length > 0 && (
+          <ImagePastePreview
+            images={pendingImages}
+            busy={pasteBusy}
+            onRemove={removePendingImage}
+            onCancel={clearPendingImages}
+            onSend={() => void confirmPendingImages()}
+            onAddFiles={(files) => void offerOrSendFiles(files)}
+          />
+        )}
+        <div
+          ref={scrollBoxRef}
+          className="absolute inset-0 flex overflow-x-auto overflow-y-hidden"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const next = pinTermBoxScroll(el, fitsRef.current);
+            if (el.scrollTop !== next.scrollTop) el.scrollTop = next.scrollTop;
+            if (el.scrollLeft !== next.scrollLeft) el.scrollLeft = next.scrollLeft;
+          }}
+        >
           <div ref={termElRef} className="select-text p-1.5" />
         </div>
         {!gotScreen && !gone && (
@@ -1406,7 +1679,8 @@ Arraste para outra aba ou para a borda de outro terminal`
         )}
         {scroll.offset > 0 && (
           <button
-            className="absolute bottom-3 right-6 flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[12px] text-white shadow-lg hover:bg-accent-hover"
+            type="button"
+            className="absolute bottom-3 right-6 z-30 flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[12px] text-white shadow-lg hover:bg-accent-hover"
             onClick={() => scrollToRef.current(0)}
             title="Voltar para a tela ao vivo"
           >

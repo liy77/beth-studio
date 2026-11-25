@@ -3,6 +3,15 @@ import type { Connection } from "@/lib/connection";
 import { isRemote } from "@/lib/remote";
 import { readRendererPref, writeRendererPref, type RendererPref } from "@/lib/termRenderer";
 import { cn } from "@/lib/utils";
+import {
+  SettingsBtn,
+  SettingsChoice,
+  SettingsGroup,
+  SettingsHint,
+  SettingsPanel,
+  SettingsRow,
+  SettingsSectionLabel,
+} from "./settings/SettingsUI";
 
 interface DefenderPath {
   label: string;
@@ -22,25 +31,6 @@ const RENDERERS: { id: RendererPref; title: string; sub: string }[] = [
   { id: "dom", title: "Modo compatível", sub: "o desenho mais lento, mas funciona em qualquer PC; use se o WebGL causar falhas na tela" },
 ];
 
-function Radio({ on, onClick, title, sub }: { on: boolean; onClick: () => void; title: string; sub: string }) {
-  return (
-    <button
-      type="button"
-      className={cn("flex w-full items-start gap-2 rounded-md border p-2.5 text-left", on ? "border-accent bg-accent-soft" : "border-border bg-bg-panel hover:bg-bg-hover")}
-      onClick={onClick}
-    >
-      <span className={cn("mt-1 h-3 w-3 shrink-0 rounded-full border-2", on ? "border-accent bg-accent" : "border-border-strong")} />
-      <span>
-        <span className="block text-[13px] text-text-1">{title}</span>
-        <span className="block text-[11px] text-text-3">{sub}</span>
-      </span>
-    </button>
-  );
-}
-
-const btn = "rounded-md border border-border bg-bg-panel px-3 py-1.5 text-[12px] text-text-1 hover:bg-bg-hover disabled:opacity-50";
-const btnMain = "rounded-md border border-accent bg-accent px-3 py-1.5 text-[12px] text-white hover:bg-accent-hover disabled:opacity-50";
-
 /** Configurações > Terminais > Desempenho: desenho do terminal e exclusões do Windows Defender. */
 export function PerformanceSection({ conn, onMessage }: { conn: Connection; onMessage: (m: string) => void }) {
   const [pref, setPref] = useState<RendererPref>(() => readRendererPref());
@@ -53,18 +43,18 @@ export function PerformanceSection({ conn, onMessage }: { conn: Connection; onMe
   };
 
   return (
-    <div className="space-y-5 px-4 pt-5">
-      <section>
-        <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-text-2">Desempenho: desenho do terminal</div>
-        <p className="mb-2 text-[12px] text-text-2">
+    <div className="space-y-5">
+      <div>
+        <SettingsSectionLabel>Desempenho: desenho do terminal</SettingsSectionLabel>
+        <SettingsHint className="mb-2">
           Se o Beth Studio está lento neste computador, o desenho do terminal é o primeiro lugar para olhar. Esta escolha vale só para esta tela.
-        </p>
-        <div className="grid gap-2 md:grid-cols-3">
+        </SettingsHint>
+        <div className="bt-settings-choice-grid">
           {RENDERERS.map((r) => (
-            <Radio key={r.id} on={pref === r.id} onClick={() => choose(r.id)} title={r.title} sub={r.sub} />
+            <SettingsChoice key={r.id} on={pref === r.id} onClick={() => choose(r.id)} title={r.title} sub={r.sub} />
           ))}
         </div>
-      </section>
+      </div>
       {!remote && <DefenderBlock conn={conn} onMessage={onMessage} />}
     </div>
   );
@@ -116,59 +106,49 @@ function DefenderBlock({ conn, onMessage }: { conn: Connection; onMessage: (m: s
   const av = view.antivirus.length ? view.antivirus.join(", ") : "não identificado";
 
   return (
-    <section>
-      <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-text-2">Desempenho: antivírus</div>
-      <p className="mb-2 text-[12px] text-text-2">
+    <div>
+      <SettingsSectionLabel>Desempenho: antivírus</SettingsSectionLabel>
+      <SettingsHint className="mb-2">
         O antivírus examina cada arquivo que o Beth Studio e o WebView2 gravam, e isso pesa em notebook lento. Você pode tirar só as pastas abaixo do exame em
         tempo real. <strong>Isso reduz a proteção dessas pastas</strong>: faça apenas se você confia nesta instalação. Antivírus detectado: {av}.
-      </p>
-      <ul className="mb-3 space-y-1.5">
+      </SettingsHint>
+      <SettingsGroup className="mb-3">
         {view.paths.map((p) => (
-          <li key={p.path} className="flex items-center gap-2 rounded-md border border-border bg-bg-panel px-2.5 py-1.5">
-            <span className="min-w-0 flex-1">
-              <span className="block text-[11px] text-text-3">{p.label}</span>
-              <span className="block break-all font-mono text-[12px] text-text-1">{p.path}</span>
-            </span>
-            <button type="button" className={btn} onClick={() => copy(p.path)}>
-              Copiar
-            </button>
-          </li>
+          <SettingsRow key={p.path} label={p.label} hint={<span className="break-all font-mono text-[11px]">{p.path}</span>}>
+            <SettingsBtn onClick={() => copy(p.path)}>Copiar</SettingsBtn>
+          </SettingsRow>
         ))}
-      </ul>
+      </SettingsGroup>
 
       {confirming ? (
-        <div className="space-y-2 rounded-md border border-warn p-3 text-[12px] text-text-1">
+        <SettingsPanel className="space-y-2 border border-warn text-[12px] text-text-1">
           <p>
             {confirming === "apply"
               ? "O Windows vai pedir permissão de administrador (a janela azul do UAC). O Beth Studio não roda como administrador: só um comando do PowerShell, com as duas pastas acima, é executado com essa permissão."
               : "O Windows vai pedir permissão de administrador. As duas pastas acima voltam a ser examinadas pelo Defender."}
           </p>
           <div className="flex gap-2">
-            <button type="button" className={btnMain} disabled={busy} onClick={() => void run(confirming)}>
+            <SettingsBtn tone="accent" disabled={busy} onClick={() => void run(confirming)}>
               {busy ? "Aguardando o Windows…" : "Continuar e pedir permissão"}
-            </button>
-            <button type="button" className={btn} disabled={busy} onClick={() => setConfirming(null)}>
+            </SettingsBtn>
+            <SettingsBtn disabled={busy} onClick={() => setConfirming(null)}>
               Cancelar
-            </button>
+            </SettingsBtn>
           </div>
-        </div>
+        </SettingsPanel>
       ) : (
         <div className="flex flex-wrap gap-2">
           {view.defender ? (
             <>
-              <button type="button" className={btnMain} onClick={() => setConfirming("apply")}>
+              <SettingsBtn tone="accent" onClick={() => setConfirming("apply")}>
                 Adicionar exclusões (pede permissão)
-              </button>
-              <button type="button" className={btn} onClick={() => setConfirming("remove")}>
-                Remover exclusões
-              </button>
+              </SettingsBtn>
+              <SettingsBtn onClick={() => setConfirming("remove")}>Remover exclusões</SettingsBtn>
             </>
           ) : (
             <p className="text-[12px] text-text-2">O botão automático só funciona com o Windows Defender. No seu antivírus, adicione as pastas acima como exclusão.</p>
           )}
-          <button type="button" className={btn} onClick={openSecurity}>
-            Abrir a Segurança do Windows
-          </button>
+          <SettingsBtn onClick={openSecurity}>Abrir a Segurança do Windows</SettingsBtn>
         </div>
       )}
 
@@ -188,6 +168,6 @@ function DefenderBlock({ conn, onMessage }: { conn: Connection; onMessage: (m: s
           <li>Para desfazer, volte aqui e remova a exclusão da mesma tela.</li>
         </ol>
       </details>
-    </section>
+    </div>
   );
 }

@@ -7,7 +7,8 @@ package main
 // diz se essa pasta está num repositório e quais arquivos estão diferentes
 // do HEAD, sem sair da pasta pedida.
 //
-//	POST /api/worktree  {path}  -> {path, repo, root, branch, changes}
+//	POST /api/worktree       {path}           -> {path, repo, root, branch, changes}
+//	POST /api/worktree/diff  {path, folder?}  -> {path, root, status, binary, patch}
 
 import (
 	"bytes"
@@ -17,9 +18,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
+
+const worktreeDiffMax = 800_000 // bytes de patch na resposta
 
 type worktreeChange struct {
 	Path   string `json:"path"`
@@ -180,3 +184,128 @@ func worktreeParsePorcelain(porcelain string) []worktreeChange {
 
 // errWorktreeGit é o erro que o teste injeta quando o git "falha".
 var errWorktreeGit = errors.New("git")
+
+// serveWorktreeDiff: diff do arquivo vs HEAD (ou arquivo inteiro se for novo).
+func serveWorktreeDiff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "use POST", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Path   string `json:"path"`
+		Folder string `json:"folder"`
+	}
+	if !sshDecodePOST(w, r, &body) {
+		return
+	}
+	clean, err := localFSClean(body.Path)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	startDir := filepath.Dir(clean)
+	if body.Folder != "" {
+		if f, err := localFSClean(body.Folder); err == nil {
+			startDir = f
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+	defer cancel()
+	rootOut, err := worktreeGit(ctx, startDir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "esta pasta não está num repositório git"})
+		return
+	}
+	root := strings.TrimSpace(string(rootOut))
+	if root == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repositório git não encontrado"})
+		return
+	}
+	rel, err := filepath.Rel(root, clean)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "arquivo fora do repositório"})
+		return
+	}
+	relSlash := filepath.ToSlash(rel)
+	status := worktreeFileStatus(ctx, root, relSlash, clean)
+	patch, binary, err := worktreeFileDiff(ctx, root, relSlash, clean, status)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	truncated := false
+	if len(patch) > worktreeDiffMax {
+		patch = patch[:worktreeDiffMax]
+		truncated = true
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path":      clean,
+		"root":      root,
+		"rel":       relSlash,
+		"status":    status,
+		"binary":    binary,
+		"patch":     patch,
+		"truncated": truncated,
+	})
+}
+
+func worktreeFileStatus(ctx context.Context, root, rel, abs string) string {
+	porcelain, err := worktreeGit(ctx, root, "status", "--porcelain", "-uall", "--", rel)
+	if err == nil {
+		for _, line := range strings.Split(string(porcelain), "\n") {
+			line = strings.TrimRight(line, "\r")
+			if len(line) < 4 {
+				continue
+			}
+			return worktreeStatusLabel(strings.TrimSpace(line[:2]))
+		}
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return "apagado"
+	}
+	return "alterado"
+}
+
+func worktreeFileDiff(ctx context.Context, root, rel, abs, status string) (patch string, binary bool, err error) {
+	var out []byte
+	switch status {
+	case "novo":
+		null := "/dev/null"
+		if runtime.GOOS == "windows" {
+			null = "NUL"
+		}
+		out, err = worktreeGitDiffOK(ctx, root, "diff", "--no-index", "--", null, rel)
+		if err != nil {
+			// --no-index às vezes quer caminho absoluto
+			out, err = worktreeGitDiffOK(ctx, root, "diff", "--no-index", "--", null, abs)
+		}
+	default:
+		out, err = worktreeGitDiffOK(ctx, root, "diff", "HEAD", "--", rel)
+	}
+	if err != nil {
+		return "", false, err
+	}
+	patch = string(out)
+	if strings.Contains(patch, "Binary files") || strings.Contains(patch, "GIT binary patch") {
+		return patch, true, nil
+	}
+	// Sem saída e arquivo existe: pode ser só mode change; ou diff vazio.
+	return patch, false, nil
+}
+
+// worktreeGitDiffOK: git diff devolve exit 1 quando há mudanças — isso é ok.
+func worktreeGitDiffOK(ctx context.Context, dir string, args ...string) ([]byte, error) {
+	out, err := worktreeGit(ctx, dir, args...)
+	if err == nil {
+		return out, nil
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && ee.ExitCode() == 1 {
+		return out, nil
+	}
+	msg := strings.TrimSpace(string(out))
+	if msg == "" {
+		msg = err.Error()
+	}
+	return nil, errors.New(msg)
+}

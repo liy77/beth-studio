@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { framesMatch, glassCoversGutter, parseGlassLine, sideFrame, toggleFolderPanel, vibrancyCardRect } from "../src/lib/sidebarFrame.ts";
 import { setTabFilesOpen, type Layout } from "../src/lib/layout.ts";
 
-test("a faixa começa abaixo das abas e acaba 8 px acima do fundo", () => {
+test("a faixa começa na base das abas e acaba 8 px acima do fundo", () => {
   const f = sideFrame(900, "rgb(19, 19, 19)");
-  assert.equal(f.top, 48);
+  assert.equal(f.top, 40);
   assert.equal(f.bottom, 892);
-  assert.equal(f.height, 844);
+  assert.equal(f.height, 852);
   assert.equal(f.gutter, "rgb(19, 19, 19)");
 });
 
@@ -27,17 +27,17 @@ test("o vidro no vão da coluna faz o teste falhar", () => {
   const card = vibrancyCardRect(true, 900, 288);
   assert.equal(card.x, 8);
   assert.equal(card.w, 272);
-  assert.equal(card.h, 844);
+  assert.equal(card.h, 852);
   assert.equal(glassCoversGutter(card, 288), false);
-  const logged = parseGlassLine("glass x 8 y 8 w 272 h 844 windowH 900");
+  const logged = parseGlassLine("glass x 8 y 8 w 272 h 852 windowH 900");
   assert.ok(logged);
   assert.equal(glassCoversGutter(logged, 288), false);
-  const atEdge = parseGlassLine("glass x 0 y 8 w 296 h 844 windowH 900");
+  const atEdge = parseGlassLine("glass x 0 y 8 w 296 h 852 windowH 900");
   assert.ok(atEdge);
   assert.equal(glassCoversGutter(atEdge, 288), true);
   assert.equal(vibrancyCardRect(false, 900, 288).w, 0);
-  assert.equal(parseGlassLine("measured top 48 bottomInset 8 height 844 width 288 gutter topbar on 0"), null);
-  assert.equal(parseGlassLine("measured top 48 bottomInset 8 height 844 width 288 gutter topbar on 1"), null);
+  assert.equal(parseGlassLine("measured top 40 bottomInset 8 height 852 width 288 gutter topbar on 0"), null);
+  assert.equal(parseGlassLine("measured top 40 bottomInset 8 height 852 width 288 gutter topbar on 1"), null);
 });
 
 test("esquerda e direita usam a mesma faixa e a mesma cor da topbar", () => {

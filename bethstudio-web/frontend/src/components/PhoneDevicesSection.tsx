@@ -9,6 +9,14 @@ import {
   type Pairing,
   type PhoneDevice,
 } from "@/lib/phoneDevices";
+import {
+  SettingsBtn,
+  SettingsGroup,
+  SettingsHint,
+  SettingsPanel,
+  SettingsRow,
+  SettingsSectionLabel,
+} from "./settings/SettingsUI";
 
 /**
  * Configurações → Celular → Aparelhos conectados: QR code de uso único e a lista
@@ -95,25 +103,23 @@ export function PhoneDevicesSection({ conn, onMessage }: { conn: Connection; onM
   const configured = view?.configured ?? false;
 
   return (
-    <section className="mt-6" aria-label="Aparelhos conectados">
-      <h2 className="text-[15px] font-semibold text-text-1">Aparelhos conectados</h2>
-      <p className="mt-1 max-w-xl text-[13px] text-text-2">
-        Abra o QR code com a câmera do celular: ele entra já logado, sem digitar domínio nem senha. O link vale uma vez e por 5 minutos. A senha continua
-        existindo como alternativa.
-      </p>
-
-      <button
-        type="button"
-        disabled={busy || !configured}
-        className="mt-3 rounded bg-accent px-3 py-1.5 text-[13px] text-white disabled:opacity-50"
-        onClick={() => void generate()}
-      >
-        {state === "idle" ? "Conectar um celular" : "Gerar outro QR code"}
-      </button>
-      {!configured && <span className="ml-2 text-[12px] text-text-3">Salve a linha do servidor e a senha primeiro.</span>}
+    <div className="space-y-5" aria-label="Aparelhos conectados">
+      <div>
+        <SettingsSectionLabel>Aparelhos conectados</SettingsSectionLabel>
+        <SettingsHint className="mb-2">
+          Abra o QR code com a câmera do celular: ele entra já logado, sem digitar domínio nem senha. O link vale uma vez e por 5 minutos. A senha continua
+          existindo como alternativa.
+        </SettingsHint>
+        <div className="flex flex-wrap items-center gap-2">
+          <SettingsBtn tone="accent" disabled={busy || !configured} onClick={() => void generate()}>
+            {state === "idle" ? "Conectar um celular" : "Gerar outro QR code"}
+          </SettingsBtn>
+          {!configured && <span className="text-[12px] text-text-3">Salve a linha do servidor e a senha primeiro.</span>}
+        </div>
+      </div>
 
       {pairing && state === "waiting" && (
-        <div className="mt-3 flex max-w-xl flex-wrap items-start gap-4">
+        <SettingsPanel className="flex max-w-xl flex-wrap items-start gap-4">
           <img src={pairing.qr} alt="QR code para conectar o celular" width={200} height={200} className="rounded bg-white p-2" />
           <div className="min-w-0 flex-1 text-[13px] text-text-2">
             <p>Vence em {left}. Só vale uma vez.</p>
@@ -125,39 +131,26 @@ export function PhoneDevicesSection({ conn, onMessage }: { conn: Connection; onM
               onFocus={(e) => e.currentTarget.select()}
             />
             <div className="mt-2 flex gap-2">
-              <button type="button" className="bt-field px-2.5 py-1 text-[12px] text-text-1" onClick={() => void copyLink()}>
-                Copiar link
-              </button>
-              <button
-                type="button"
-                className="bt-field px-2.5 py-1 text-[12px] text-text-1"
-                onClick={() => void post("/api/phone/devices/pairing/cancel").then((ok) => ok && setPairing(null))}
-              >
-                Cancelar
-              </button>
+              <SettingsBtn onClick={() => void copyLink()}>Copiar link</SettingsBtn>
+              <SettingsBtn onClick={() => void post("/api/phone/devices/pairing/cancel").then((ok) => ok && setPairing(null))}>Cancelar</SettingsBtn>
             </div>
           </div>
-        </div>
+        </SettingsPanel>
       )}
-      {state === "used" && <p className="mt-3 text-[13px] text-status-ok">Celular conectado.</p>}
-      {state === "expired" && <p className="mt-3 text-[13px] text-text-3">O QR code venceu. Gere outro.</p>}
+      {state === "used" && <p className="text-[13px] text-status-ok">Celular conectado.</p>}
+      {state === "expired" && <SettingsHint>O QR code venceu. Gere outro.</SettingsHint>}
 
-      <div className="mt-5 max-w-2xl">
+      <div>
         {devices.length === 0 ? (
-          <p className="text-[13px] text-text-3">Nenhum celular conectado ainda.</p>
+          <SettingsHint>Nenhum celular conectado ainda.</SettingsHint>
         ) : (
-          <ul className="divide-y divide-border bt-field">
+          <SettingsGroup>
             {devices.map((d) => (
-              <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  {editing?.id === d.id ? (
-                    <form
-                      className="flex gap-2"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void post("/api/phone/devices/rename", { id: d.id, name: editing.name }).then((ok) => ok && setEditing(null));
-                      }}
-                    >
+              <SettingsRow
+                key={d.id}
+                label={
+                  editing?.id === d.id ? (
+                    <span className="flex gap-2">
                       <input
                         autoFocus
                         value={editing.name}
@@ -165,62 +158,68 @@ export function PhoneDevicesSection({ conn, onMessage }: { conn: Connection; onM
                         aria-label="Nome do aparelho"
                         className="w-48 bt-field bg-bg-term px-2 py-1 text-[13px] text-text-1"
                         onChange={(e) => setEditing({ id: d.id, name: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void post("/api/phone/devices/rename", { id: d.id, name: editing.name }).then((ok) => ok && setEditing(null));
+                          }
+                        }}
                       />
-                      <button type="submit" className="rounded bg-accent px-2.5 py-1 text-[12px] text-white">
+                      <SettingsBtn
+                        tone="accent"
+                        onClick={() => void post("/api/phone/devices/rename", { id: d.id, name: editing.name }).then((ok) => ok && setEditing(null))}
+                      >
                         Salvar
-                      </button>
-                      <button type="button" className="px-1 text-[12px] text-text-2" onClick={() => setEditing(null)}>
-                        Cancelar
-                      </button>
-                    </form>
+                      </SettingsBtn>
+                      <SettingsBtn onClick={() => setEditing(null)}>Cancelar</SettingsBtn>
+                    </span>
                   ) : (
-                    <p className="truncate text-[13px] text-text-1">{deviceTitle(d)}</p>
-                  )}
-                  <p className="text-[12px] text-text-3">
+                    deviceTitle(d)
+                  )
+                }
+                hint={
+                  <>
                     Conectado em {new Date(d.created).toLocaleDateString("pt-BR")} · último uso {agoLabel(d.last_used, now)}
                     {d.last_ip ? ` · IP ${d.last_ip}` : ""}
-                  </p>
-                </div>
+                  </>
+                }
+              >
                 {editing?.id !== d.id && (
-                  <div className="flex gap-2">
-                    <button type="button" className="text-[12px] text-text-2 hover:text-text-1" onClick={() => setEditing({ id: d.id, name: deviceTitle(d) })}>
-                      Renomear
-                    </button>
-                    <button
-                      type="button"
-                      className="text-[12px] text-status-err"
+                  <>
+                    <SettingsBtn onClick={() => setEditing({ id: d.id, name: deviceTitle(d) })}>Renomear</SettingsBtn>
+                    <SettingsBtn
+                      tone="danger"
                       onClick={() => void post("/api/phone/devices/revoke", { id: d.id }).then((ok) => ok && onMessage(`${deviceTitle(d)} desconectado`))}
                     >
                       Revogar
-                    </button>
-                  </div>
+                    </SettingsBtn>
+                  </>
                 )}
-              </li>
+              </SettingsRow>
             ))}
-          </ul>
+          </SettingsGroup>
         )}
         {devices.length > 0 &&
           (confirmAll ? (
             <p className="mt-2 text-[13px] text-text-1">
               Desconectar todos os celulares agora?{" "}
-              <button
-                type="button"
-                className="text-status-err"
+              <SettingsBtn
+                tone="danger"
                 onClick={() => void post("/api/phone/devices/revoke-all").then((ok) => ok && setConfirmAll(false))}
               >
                 Sim, revogar todos
-              </button>{" "}
-              <button type="button" className="text-text-2" onClick={() => setConfirmAll(false)}>
-                Não
-              </button>
+              </SettingsBtn>{" "}
+              <SettingsBtn onClick={() => setConfirmAll(false)}>Não</SettingsBtn>
             </p>
           ) : (
-            <button type="button" className="mt-2 text-[12px] text-status-err" onClick={() => setConfirmAll(true)}>
-              Revogar todos
-            </button>
+            <div className="mt-2">
+              <SettingsBtn tone="danger" onClick={() => setConfirmAll(true)}>
+                Revogar todos
+              </SettingsBtn>
+            </div>
           ))}
-        <p className="mt-2 text-[12px] text-text-3">Trocar a senha do celular não desconecta os aparelhos já conectados. Use Revogar.</p>
+        <SettingsHint className="mt-2">Trocar a senha do celular não desconecta os aparelhos já conectados. Use Revogar.</SettingsHint>
       </div>
-    </section>
+    </div>
   );
 }

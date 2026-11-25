@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Activity, Database, FilePlus, FileText, LogOut, Mic, Search, Server, Settings } from "lucide-react";
+import { Activity, Database, FilePlus, LogOut, Mic, Search, Server, Settings } from "lucide-react";
 import { isRemote, remoteLogout } from "@/lib/remote";
 
 /** Botao de ferramenta do Studio (barra lateral; na faixa de icones quando a lateral esta recolhida). */
@@ -21,7 +21,6 @@ export interface StudioActionHandlers {
   onTaskManager?: () => void;
   onDatabase?: () => void;
   onTools?: () => void;
-  onOpenFile?: () => void;
   onNewFile?: () => void;
   onSpeak?: () => void;
 }
@@ -37,16 +36,6 @@ export function buildStudioActions(h: StudioActionHandlers): StudioAction[] {
       symbol: "macwindow",
       onClick: h.onTools,
       priority: 2,
-    });
-  if (h.onOpenFile)
-    acts.push({
-      id: "file",
-      label: "Abrir arquivo",
-      title: "Abrir arquivo: ver e editar texto e Markdown (.md, .txt, .log) ou ver imagem",
-      icon: <FileText size={16} />,
-      symbol: "doc.on.doc",
-      onClick: h.onOpenFile,
-      priority: 3,
     });
   if (h.onNewFile)
     acts.push({
@@ -81,7 +70,10 @@ export function buildStudioActions(h: StudioActionHandlers): StudioAction[] {
     acts.push({
       id: "tasks",
       label: "Tarefas",
-      title: "Gerenciador de tarefas: memória, CPU, GPU, disco, consumo de cada terminal e do WSL",
+      title:
+        typeof navigator !== "undefined" && /Mac/.test(navigator.platform)
+          ? "Gerenciador de tarefas: memória, CPU, disco e consumo de cada terminal"
+          : "Gerenciador de tarefas: memória, CPU, GPU, disco, consumo de cada terminal e do WSL",
       icon: <Activity size={16} />,
       symbol: "chart.bar",
       onClick: h.onTaskManager,

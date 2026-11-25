@@ -4,6 +4,31 @@
 
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"];
 export const MAX_PASTE_BYTES = 25 * 1024 * 1024;
+/** Quantas imagens podem ficar na pré-visualização antes de Colar. */
+export const MAX_PENDING_IMAGES = 8;
+
+const EXT_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  bmp: "image/bmp",
+};
+
+/** MIME de imagem a partir do type ou, se vazio, da extensão do nome. */
+export function imageContentType(file: { type: string; name?: string }): string | null {
+  const t = (file.type || "").toLowerCase();
+  if (IMAGE_TYPES.includes(t)) return t;
+  const m = /\.([a-z0-9]+)$/i.exec(file.name || "");
+  if (!m) return null;
+  return EXT_MIME[m[1].toLowerCase()] ?? null;
+}
+
+/** true se o arquivo é uma imagem que o Studio cola via paste-image. */
+export function isImageFile(file: { type: string; name?: string }): boolean {
+  return imageContentType(file) != null;
+}
 
 export interface UploadPlan {
   endpoint: "/api/paste-image" | "/api/paste-file";
@@ -15,8 +40,8 @@ export interface UploadPlan {
 export function planUpload(file: { type: string; name: string; size: number }): UploadPlan | { error: string } {
   if (file.size > MAX_PASTE_BYTES) return { error: `${file.name || "arquivo"} passa de 25 MB` };
   if (file.size === 0) return { error: `${file.name || "arquivo"} está vazio` };
-  const t = (file.type || "").toLowerCase();
-  if (IMAGE_TYPES.includes(t)) return { endpoint: "/api/paste-image", contentType: t, name: file.name };
+  const img = imageContentType(file);
+  if (img) return { endpoint: "/api/paste-image", contentType: img, name: file.name };
   return { endpoint: "/api/paste-file", contentType: "application/octet-stream", name: file.name || "arquivo" };
 }
 

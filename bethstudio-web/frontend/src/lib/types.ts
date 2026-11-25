@@ -114,6 +114,8 @@ export interface SettingsEvent {
   search_shortcut?: string;
   shortcuts?: Record<string, string>;
   sidebar?: { collapsed: boolean; width: number; view?: "web" | "host" | "kind" | "folder"; kinds?: string[]; kind_order?: string[]; split_by_kind?: boolean; files_width?: number };
+  /** Pré-visualizar imagem antes de colar no terminal (padrão: ligado). */
+  paste_image_preview?: boolean;
 }
 
 export interface XtermColors {
@@ -200,6 +202,7 @@ export type ServerEvent =
   | import("./agentResume").AgentResumeEvent
   | import("./agentProcs").AgentProcsEvent
   | import("./cpuLimit").CpuLimitEvent
+  | import("./ramLimit").RamLimitEvent
   | { ev: "pane_agents"; agents: Record<string, string> }
   | { ev: "term_drag"; pane: number; x: number; y: number; end: boolean; attach?: boolean }
   | import("./agents").AgentEvent;

@@ -19,7 +19,10 @@ const (
 	trayRestart   = 6
 	trayCPUOff    = 7
 	trayCPUMore   = 8
+	trayRAMOff    = 9
+	trayRAMMore   = 10
 	trayCPUBase   = 200 // + índice em trayCPUChoices
+	trayRAMBase   = 300 // + índice em trayRAMChoices
 	trayShellBase = 100 // + índice do shell
 )
 
@@ -44,6 +47,9 @@ type trayItem struct {
 
 // trayCPUChoices: os tetos rápidos do submenu "Limitar CPU dos terminais".
 var trayCPUChoices = []int{30, 50, 70}
+
+// trayRAMChoices: tetos rápidos do submenu "Limitar RAM dos terminais".
+var trayRAMChoices = []int{25, 40, 60}
 
 // trayCPUSub: o submenu do limite. Com limite ligado, "Voltar ao normal" vem
 // primeiro; o prazo dos tetos rápidos é o último usado (2 h se nunca usou).
@@ -71,8 +77,32 @@ func trayCPUSub(st CPULimitState) (string, []trayItem) {
 	return label, sub
 }
 
+func trayRAMSub(st RAMLimitState) (string, []trayItem) {
+	label := "Limitar RAM dos terminais"
+	var sub []trayItem
+	if st.Percent > 0 {
+		label = "RAM dos terminais: " + ramLimitText(st)
+		sub = append(sub, trayItem{ID: trayRAMOff, Label: "Voltar ao normal"}, trayItem{Sep: true})
+	}
+	min := st.LastMinutes
+	if st.LastPercent == 0 {
+		min = ramDefaultMinutes
+	}
+	for i, p := range trayRAMChoices {
+		l := fmt.Sprintf("No máximo %d%% da RAM", p)
+		if min > 0 {
+			l += " por " + durText(min)
+		} else {
+			l += " (até eu remover)"
+		}
+		sub = append(sub, trayItem{ID: trayRAMBase + i, Label: l})
+	}
+	sub = append(sub, trayItem{ID: trayRAMMore, Label: "Escolher porcentagem e prazo…"})
+	return label, sub
+}
+
 // trayMenu: Beth Studio primeiro (negrito), Novo terminal, Sistema, Limitar CPU, Reiniciar Beth Studio e as duas saídas.
-func trayMenu(shells []trayShell, hostRunning bool, cpu CPULimitState) []trayItem {
+func trayMenu(shells []trayShell, hostRunning bool, cpu CPULimitState, ram RAMLimitState) []trayItem {
 	var sub []trayItem
 	for i, s := range shells {
 		sub = append(sub, trayItem{ID: trayShellBase + i, Label: s.Label})
@@ -82,11 +112,14 @@ func trayMenu(shells []trayShell, hostRunning bool, cpu CPULimitState) []trayIte
 	}
 	cpuLabel, cpuSub := trayCPUSub(cpu)
 	cpuItem := trayItem{Label: cpuLabel, Sub: cpuSub}
+	ramLabel, ramSub := trayRAMSub(ram)
+	ramItem := trayItem{Label: ramLabel, Sub: ramSub}
 	items := []trayItem{
 		{ID: trayOpen, Label: "Beth Studio", Default: true},
 		{Label: "Novo terminal", Sub: sub, Grayed: !hostRunning},
 		{ID: trayTasks, Label: "Sistema (CPU, memória, disco)"},
 		cpuItem,
+		ramItem,
 		{ID: trayRestart, Label: "Reiniciar Beth Studio (terminais continuam)"},
 		{Sep: true},
 		{ID: trayQuitTray, Label: "Sair da bandeja (terminais continuam)"},

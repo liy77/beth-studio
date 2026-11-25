@@ -329,7 +329,7 @@ func buildTrayMenu(items []trayItem) (menu uintptr, defID int) {
 }
 
 func showTrayMenu() {
-	items := trayMenu(trayCtx.hub.trayShellList(), trayCtx.ctl.Running(), cpuLimit.view().CPULimitState)
+	items := trayMenu(trayCtx.hub.trayShellList(), trayCtx.ctl.Running(), cpuLimit.view().CPULimitState, ramLimit.view().RAMLimitState)
 	menu, _ := buildTrayMenu(items)
 	if menu == 0 {
 		return
@@ -373,6 +373,20 @@ func handleTrayCommand(id int) {
 		wsl := v.WSL || v.LastPercent == 0
 		if err := trayCtx.hub.cpuLimitSet(trayCPUChoices[id-trayCPUBase], min, wsl); err != nil {
 			log.Printf("tray: limite de CPU: %v", err)
+		}
+	case id == trayRAMOff:
+		trayCtx.hub.ramLimitOff()
+	case id == trayRAMMore:
+		showStudioWindow()
+		trayCtx.hub.broadcast(map[string]any{"ev": "ui_open", "what": "ramlimit"})
+	case id >= trayRAMBase && id < trayRAMBase+len(trayRAMChoices):
+		v := ramLimit.view()
+		min := v.LastMinutes
+		if v.LastPercent == 0 {
+			min = ramDefaultMinutes
+		}
+		if err := trayCtx.hub.ramLimitSet(trayRAMChoices[id-trayRAMBase], min); err != nil {
+			log.Printf("tray: limite de RAM: %v", err)
 		}
 	case id == trayQuitTray:
 		lifeLog("saindo da bandeja; o host e os terminais continuam")

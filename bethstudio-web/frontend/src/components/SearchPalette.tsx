@@ -27,7 +27,7 @@ export function SearchPalette({ s, panes, where, actions, onClose }: Props) {
     },
   };
   return (
-    <div className="fixed inset-0 z-50 flex justify-center bg-black/40 pt-[10vh]" onMouseDown={onClose}>
+    <div className="bt-modal fixed inset-0 z-[80] flex justify-center bg-black/50 pt-[10vh] backdrop-blur-xl" onMouseDown={onClose}>
       <div
         className="flex max-h-[70vh] w-[min(640px,92vw)] flex-col overflow-hidden bt-dialog"
         onMouseDown={(e) => e.stopPropagation()}

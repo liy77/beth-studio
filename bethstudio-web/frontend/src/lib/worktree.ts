@@ -98,3 +98,124 @@ export function changeCounts(changes: WorktreeChange[]): { status: string; n: nu
   for (const c of changes) n.set(c.status, (n.get(c.status) ?? 0) + 1);
   return order.filter((s) => n.has(s)).map((status) => ({ status, n: n.get(status)! }));
 }
+
+/** Rótulo completo do status (tooltip / acessibilidade). */
+export function statusLabel(status: string): string {
+  switch (status) {
+    case "alterado":
+      return "Alterado";
+    case "novo":
+      return "Novo (não rastreado)";
+    case "adicionado":
+      return "Adicionado";
+    case "apagado":
+      return "Apagado";
+    case "renomeado":
+      return "Renomeado";
+    case "ignorado":
+      return "Ignorado";
+    default:
+      return status;
+  }
+}
+
+/**
+ * Marca curta do status (estilo VS Code): M / U / A / D / R.
+ * A sidebar mostra só isto; o nome completo fica no title.
+ */
+export function statusMark(status: string): string {
+  switch (status) {
+    case "alterado":
+      return "M";
+    case "novo":
+      return "U";
+    case "adicionado":
+      return "A";
+    case "apagado":
+      return "D";
+    case "renomeado":
+      return "R";
+    default:
+      return "?";
+  }
+}
+
+export type DiffLineKind = "add" | "del" | "ctx" | "hunk" | "meta";
+
+export interface DiffLine {
+  kind: DiffLineKind;
+  text: string;
+  /** Número no arquivo antigo (del/ctx). */
+  oldNo?: number;
+  /** Número no arquivo novo (add/ctx). */
+  newNo?: number;
+}
+
+/** Quebra um patch unificado em linhas coloríveis, com números de linha. */
+export function parseUnifiedDiff(patch: string): DiffLine[] {
+  const out: DiffLine[] = [];
+  let oldNo = 0;
+  let newNo = 0;
+  for (const raw of patch.replace(/\r\n/g, "\n").split("\n")) {
+    if (raw === "" && out.length === 0) continue;
+    if (
+      raw.startsWith("diff --git") ||
+      raw.startsWith("index ") ||
+      raw.startsWith("similarity ") ||
+      raw.startsWith("new file") ||
+      raw.startsWith("deleted file") ||
+      raw.startsWith("old mode") ||
+      raw.startsWith("new mode")
+    ) {
+      // Cabeçalho git — não ocupa a grade (polui a leitura).
+      continue;
+    }
+    if (raw.startsWith("--- ") || raw.startsWith("+++ ")) {
+      continue;
+    }
+    if (raw.startsWith("@@")) {
+      const m = /^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s*@@(.*)$/.exec(raw);
+      if (m) {
+        oldNo = Number(m[1]);
+        newNo = Number(m[2]);
+      }
+      const rest = (m?.[3] || "").trim();
+      out.push({ kind: "hunk", text: rest ? `@@ … ${rest}` : raw.replace(/\s+@@.*/, " @@") });
+      continue;
+    }
+    if (raw.startsWith("+")) {
+      out.push({ kind: "add", text: raw.slice(1), newNo });
+      newNo++;
+      continue;
+    }
+    if (raw.startsWith("-")) {
+      out.push({ kind: "del", text: raw.slice(1), oldNo });
+      oldNo++;
+      continue;
+    }
+    if (raw.startsWith("\\")) {
+      out.push({ kind: "meta", text: raw });
+      continue;
+    }
+    if (raw.startsWith(" ") || raw === "") {
+      out.push({ kind: "ctx", text: raw.startsWith(" ") ? raw.slice(1) : "", oldNo, newNo });
+      oldNo++;
+      newNo++;
+      continue;
+    }
+    out.push({ kind: "ctx", text: raw, oldNo, newNo });
+    oldNo++;
+    newNo++;
+  }
+  return out;
+}
+
+export function diffStats(lines: DiffLine[]): { adds: number; dels: number } {
+  let adds = 0;
+  let dels = 0;
+  for (const l of lines) {
+    if (l.kind === "add") adds++;
+    if (l.kind === "del") dels++;
+  }
+  return { adds, dels };
+}

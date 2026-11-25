@@ -44,10 +44,21 @@ func (s *server) serveLocalFS(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/api/local-fs/list":
 		dir := str("path")
-		if dir == "" {
-			dir = os.Getenv("USERPROFILE")
-			if dir == "" {
-				dir = "C:\\"
+		if dir == "" || dir == "~" || strings.HasPrefix(dir, "~/") || strings.HasPrefix(dir, `~\`) {
+			home, err := os.UserHomeDir()
+			if err != nil || home == "" {
+				home = os.Getenv("USERPROFILE")
+			}
+			if home == "" && runtime.GOOS == "windows" {
+				home = `C:\`
+			}
+			if home == "" {
+				home = "/"
+			}
+			if dir == "" || dir == "~" {
+				dir = home
+			} else {
+				dir = filepath.Join(home, dir[2:])
 			}
 		}
 		clean, err := localFSClean(dir)
@@ -84,9 +95,13 @@ func (s *server) serveLocalFS(w http.ResponseWriter, r *http.Request) {
 		if parent == clean {
 			parent = ""
 		}
+		home, _ := os.UserHomeDir()
+		if home == "" {
+			home = os.Getenv("USERPROFILE")
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"path": clean, "parent": parent, "entries": out, "roots": localFSRoots(),
-			"home": os.Getenv("USERPROFILE"), "wsl": localFSWSLRoots(),
+			"home": home, "wsl": localFSWSLRoots(),
 		})
 	case "/api/local-fs/mkdir":
 		p, err := localFSClean(str("path"))

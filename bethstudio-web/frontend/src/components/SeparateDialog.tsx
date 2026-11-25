@@ -4,6 +4,7 @@ import type { Connection } from "@/lib/connection";
 import type { PaneInfo } from "@/lib/types";
 import { paneLabel } from "@/lib/panes";
 import { setPane } from "@/lib/appearance";
+import { AppSheet, SettingsBtn, SettingsGroup, SettingsHint, SettingsRow } from "./settings/SettingsUI";
 
 /** "Separar no Beth Studio": o pane sai do split do host (nada e' encerrado). */
 export function SeparateDialog({
@@ -24,29 +25,19 @@ export function SeparateDialog({
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => cancelRef.current?.focus(), []);
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/50 pt-[14vh]" onMouseDown={onClose}>
-      <div
-        className="w-[min(480px,92vw)] bt-dialog p-4"
-        onMouseDown={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.key === "Escape" && onClose()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="mb-2 flex items-center gap-2 text-[15px] font-semibold text-text-1">
-          <SplitSquareHorizontal size={16} className="text-accent-text" /> Separar no Beth Studio?
-        </div>
-        <p className="mb-2 text-[13px] text-text-1">{info ? paneLabel(info) : `Terminal ${pane}`}</p>
-        <p className="mb-3 text-[12px] text-text-2">
-          Na GUI, este terminal sai do split e vira uma aba separada na mesma janela. Nada é encerrado. Depois disso o web pode ajustar o tamanho
-          dele à janela.
-        </p>
-        {error && <div className="mb-2 rounded bg-status-err/10 p-2 text-[12px] text-status-err">{error}</div>}
-        <div className="flex justify-end gap-2">
-          <button ref={cancelRef} className="rounded bg-bg-hover px-4 py-1.5 text-text-1 hover:bg-border" onClick={onClose}>
+    <AppSheet
+      title="Separar no Beth Studio?"
+      icon={<SplitSquareHorizontal size={15} className="text-accent-text" />}
+      onClose={onClose}
+      width="sm"
+      footer={
+        <>
+          <div className="flex-1" />
+          <button ref={cancelRef} type="button" className="bt-settings-btn" onClick={onClose}>
             Cancelar
           </button>
-          <button
-            className="rounded bg-accent px-4 py-1.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+          <SettingsBtn
+            tone="accent"
             disabled={busy}
             onClick={() => {
               setBusy(true);
@@ -64,9 +55,19 @@ export function SeparateDialog({
             }}
           >
             Separar
-          </button>
-        </div>
+          </SettingsBtn>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <SettingsGroup>
+          <SettingsRow label={info ? paneLabel(info) : `Terminal ${pane}`} hint="Nada é encerrado — só sai do split na GUI." />
+        </SettingsGroup>
+        <SettingsHint>
+          Na GUI, este terminal sai do split e vira uma aba separada na mesma janela. Depois o web pode ajustar o tamanho dele à janela.
+        </SettingsHint>
+        {error && <div className="rounded-lg bg-status-err/10 px-3 py-2 text-[12px] text-status-err">{error}</div>}
       </div>
-    </div>
+    </AppSheet>
   );
 }

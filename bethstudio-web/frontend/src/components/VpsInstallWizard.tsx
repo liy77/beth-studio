@@ -22,6 +22,7 @@ import {
   type VpsServer,
   type WizardForm,
 } from "@/lib/vpsInstall";
+import { SettingsBtn, SettingsHint, SettingsPanel, SettingsSectionLabel } from "./settings/SettingsUI";
 
 type Zone = { id: string; name: string; status: string };
 type Probe = { fingerprint: string; key_type: string; status: ProbeStatus; known_fingerprint?: string };
@@ -201,14 +202,14 @@ export function VpsInstallWizard({ conn, onMessage }: { conn: Connection; onMess
 
   if (stage === "home") {
     return (
-      <div className="mt-6 border-t border-border pt-4">
-        <h3 className="text-[14px] font-semibold text-text-1">Servidor para o celular</h3>
+      <div className="space-y-3">
+        <SettingsSectionLabel>Servidor para o celular</SettingsSectionLabel>
         {srv ? (
           <>
-            <p className="mt-1 max-w-xl text-[13px] text-text-2">
+            <SettingsHint>
               Instalado em <b>{srv.host}</b> como <b>{srv.domain}</b> ({srv.proxied ? "com proxy da Cloudflare (instalação antiga)" : srv.zone_name ? "DNS criado pelo assistente na Cloudflare" : "DNS feito por você"}).
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            </SettingsHint>
+            <div className="flex flex-wrap gap-2">
               {(
                 [
                   ["update", "Atualizar o servidor"],
@@ -218,18 +219,20 @@ export function VpsInstallWizard({ conn, onMessage }: { conn: Connection; onMess
                   ["remove", "Remover o servidor"],
                 ] as const
               ).map(([k, t]) => (
-                <button key={k} type="button" className={k === "remove" ? btn2 + " text-status-err" : btn2} onClick={() => { setAction(k); setErr(""); }}>
+                <SettingsBtn key={k} tone={k === "remove" ? "danger" : "neutral"} onClick={() => { setAction(k); setErr(""); }}>
                   {t}
-                </button>
+                </SettingsBtn>
               ))}
             </div>
             {action === "password" && (
               <div className="mt-3">
                 <label className={label} htmlFor="vps-newpw">Nova senha do celular (mínimo de 8 caracteres)</label>
                 <input id="vps-newpw" type="password" autoComplete="new-password" className={input} value={newPhonePw} onChange={(e) => setNewPhonePw(e.target.value)} />
-                <button type="button" className={btn + " mt-3"} disabled={busy || newPhonePw.trim().length < 8} onClick={() => void changePhonePw()}>
-                  Trocar senha
-                </button>
+                <div className="mt-3">
+                  <SettingsBtn tone="accent" disabled={busy || newPhonePw.trim().length < 8} onClick={() => void changePhonePw()}>
+                    Trocar senha
+                  </SettingsBtn>
+                </div>
               </div>
             )}
             {(action === "update" || action === "status" || action === "logs" || action === "remove") && (
@@ -250,49 +253,50 @@ export function VpsInstallWizard({ conn, onMessage }: { conn: Connection; onMess
                     </p>
                   </>
                 )}
-                <button
-                  type="button"
-                  className={btn + " mt-3"}
-                  disabled={busy || (f.authKind === "password" ? f.password === "" : !f.privateKey.includes("PRIVATE KEY"))}
-                  onClick={() => void startAction(action)}
-                >
-                  {action === "remove" ? "Remover agora" : "Continuar"}
-                </button>
+                <div className="mt-3">
+                  <SettingsBtn
+                    tone="accent"
+                    disabled={busy || (f.authKind === "password" ? f.password === "" : !f.privateKey.includes("PRIVATE KEY"))}
+                    onClick={() => void startAction(action)}
+                  >
+                    {action === "remove" ? "Remover agora" : "Continuar"}
+                  </SettingsBtn>
+                </div>
               </div>
             )}
           </>
         ) : (
           <>
-            <p className="mt-1 max-w-xl text-[13px] text-text-2">
+            <SettingsHint>
               Para usar o celular fora de casa, o Studio precisa de um servidor (VPS Linux limpo e dedicado, Debian ou Ubuntu) com um endereço na internet. São duas partes independentes; faça só a que precisar. Nenhum outro programa é instalado no servidor: o próprio bethstudio-proxy obtém o certificado HTTPS.
-            </p>
+            </SettingsHint>
             {state && !state.bins_embedded && (
-              <p className="mt-2 text-[12px] text-status-err">Este Studio foi compilado sem o programa do servidor; o assistente não vai conseguir instalar.</p>
+              <p className="text-[12px] text-status-err">Este Studio foi compilado sem o programa do servidor; o assistente não vai conseguir instalar.</p>
             )}
-            <div className="mt-3 max-w-xl bt-field p-3">
+            <SettingsPanel className="max-w-xl space-y-2">
               <h4 className="text-[13px] font-semibold text-text-1">1. Endereço (DNS) <span className="font-normal text-text-3">— opcional</span></h4>
-              <p className="mt-1 text-[12px] text-text-2">
+              <p className="text-[12px] text-text-2">
                 Cria o nome (ex.: agentes.exemplo.com) na sua zona da Cloudflare, apontando para o IP do servidor. Pule se o seu DNS é de outro provedor ou se o nome já existe: na parte 2 você só informa o nome.
               </p>
               {f.recordIds.length > 0 ? (
-                <p className="mt-2 text-[12px] text-text-1">✓ Pronto: <b>{f.domain}</b> {dnsNote.join(" ")}</p>
+                <p className="text-[12px] text-text-1">✓ Pronto: <b>{f.domain}</b> {dnsNote.join(" ")}</p>
               ) : null}
-              <button type="button" className={btn2 + " mt-2"} onClick={() => { setStage("dns"); setErr(""); setDnsNote([]); }}>
+              <SettingsBtn onClick={() => { setStage("dns"); setErr(""); setDnsNote([]); }}>
                 {f.recordIds.length > 0 ? "Refazer o DNS" : "Configurar DNS na Cloudflare"}
-              </button>
-            </div>
-            <div className="mt-3 max-w-xl bt-field p-3">
+              </SettingsBtn>
+            </SettingsPanel>
+            <SettingsPanel className="max-w-xl space-y-2">
               <h4 className="text-[13px] font-semibold text-text-1">2. Servidor (VPS)</h4>
-              <p className="mt-1 text-[12px] text-text-2">
+              <p className="text-[12px] text-text-2">
                 Conecta por SSH (senha ou chave), confere a impressão digital, instala o bethstudio-proxy, o firewall e espera o certificado. <b>Não apaga nada</b>: se o servidor não estiver limpo, para e explica.
               </p>
-              <button type="button" className={btn + " mt-2"} onClick={() => { setStage("server"); setErr(""); }}>
+              <SettingsBtn tone="accent" onClick={() => { setStage("server"); setErr(""); }}>
                 Instalar servidor
-              </button>
-            </div>
+              </SettingsBtn>
+            </SettingsPanel>
           </>
         )}
-        {err && <p className="mt-2 text-[13px] text-status-err">{err}</p>}
+        {err && <p className="text-[13px] text-status-err">{err}</p>}
       </div>
     );
   }

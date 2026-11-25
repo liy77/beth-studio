@@ -51,6 +51,60 @@ export function reasonLabel(a: AgentInfo): string {
   return a.detail ? `${base}: ${a.detail}` : base;
 }
 
+/** Fase do chat na lista: rodando (spinner no título), aguardando você, ou pronto. */
+export type AgentChatPhase = "none" | "running" | "waiting" | "ready";
+
+// Claude / braille no começo do título; Cursor (com /status-indicators) põe
+// emoji + rótulo em qualquer lugar: ⏳ Working, ⌨️ Running shell…
+const WORKING_TITLE_START = /^[⠀-⣿◐-◓✢-✽⏺●○·✳✻✶*]+/u;
+const WORKING_TITLE_CURSOR =
+  /(?:⏳\s*Working|⌨️\s*Running|🧭\s*Planning|📋\s*Queued|\bWorking…|\bWorking\.\.\.)/i;
+const WAITING_TITLE_CURSOR = /(?:❓\s*Waiting|🔐\s*Waiting|\bWaiting for you|\bWaiting for confirmation)/i;
+const READY_TITLE_CURSOR = /✅\s*Ready/i;
+// Cursor TUI (Ink): enquanto o turno roda, a caixa de input mostra isto.
+const WORKING_SCREEN = /ctrl\+c to stop/i;
+
+/** Título com spinner / status de “trabalhando” (Claude ou Cursor). */
+export function titleLooksWorking(title: string): boolean {
+  const t = title ?? "";
+  return WORKING_TITLE_START.test(t.trimStart()) || WORKING_TITLE_CURSOR.test(t);
+}
+
+/** Título com status de espera do Cursor (❓ / 🔐), além do mapa de agentes. */
+export function titleLooksWaiting(title: string): boolean {
+  return WAITING_TITLE_CURSOR.test(title ?? "");
+}
+
+/** Tela do terminal indica turno em andamento (Cursor TUI). */
+export function screenLooksWorking(screen: string | undefined): boolean {
+  if (!screen) return false;
+  // Só o final: texto antigo de um turno anterior não conta.
+  const tail = screen.length > 2400 ? screen.slice(-2400) : screen;
+  return WORKING_SCREEN.test(tail);
+}
+
+/** Agente no meio do turno: título e/ou tela. */
+export function agentLooksWorking(title: string | undefined, screen?: string): boolean {
+  if (titleLooksWorking(title ?? "")) return true;
+  if (READY_TITLE_CURSOR.test(title ?? "")) return false;
+  return screenLooksWorking(screen);
+}
+
+/** Fase do chat a partir do título, da tela, do nome do agente e do mapa de espera. */
+export function agentChatPhase(opts: {
+  title?: string;
+  screen?: string;
+  agentName?: string;
+  agentFlag?: boolean | string;
+  waiting?: boolean;
+}): AgentChatPhase {
+  if (opts.waiting || titleLooksWaiting(opts.title ?? "")) return "waiting";
+  const isAgent = !!(opts.agentName || opts.agentFlag);
+  if (!isAgent) return "none";
+  if (agentLooksWorking(opts.title, opts.screen)) return "running";
+  return "ready";
+}
+
 /** Tira o request_id de um erro da ponte: "spawn x (request r1): ...". */
 export function requestIdFromError(message: string): string | null {
   const m = /\(request ([A-Za-z0-9_-]+)\)/.exec(message);

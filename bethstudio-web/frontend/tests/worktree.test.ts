@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { changeAbsPath, changeCounts, folderKey, folderSep, joinFolder, paneFolder, pruneTabSidebar, setTabSidebarOpen, splitRel, tabSidebarOpen } from "../src/lib/worktree.ts";
+import { changeAbsPath, changeCounts, diffStats, folderKey, folderSep, joinFolder, paneFolder, parseUnifiedDiff, pruneTabSidebar, setTabSidebarOpen, splitRel, statusLabel, statusMark, tabSidebarOpen } from "../src/lib/worktree.ts";
 
 test("a sidebar de uma guia não abre a da outra", () => {
   let open = {};
@@ -56,4 +56,45 @@ test("splitRel e changeCounts", () => {
       { status: "novo", n: 1 },
     ],
   );
+});
+
+test("statusMark e statusLabel", () => {
+  assert.equal(statusMark("alterado"), "M");
+  assert.equal(statusMark("novo"), "U");
+  assert.equal(statusMark("adicionado"), "A");
+  assert.equal(statusMark("apagado"), "D");
+  assert.equal(statusMark("renomeado"), "R");
+  assert.equal(statusLabel("alterado"), "Alterado");
+  assert.equal(statusLabel("novo"), "Novo (não rastreado)");
+});
+
+test("parseUnifiedDiff e diffStats", () => {
+  const rows = parseUnifiedDiff(
+    [
+      "diff --git a/a.ts b/a.ts",
+      "--- a/a.ts",
+      "+++ b/a.ts",
+      "@@ -1,3 +1,4 @@ function",
+      " keep",
+      "-old",
+      "+new",
+      "+extra",
+      " keep2",
+    ].join("\n"),
+  );
+  // Cabeçalhos diff/---/+++ omitidos; só hunk + linhas.
+  assert.equal(rows.length, 6);
+  assert.equal(rows[0].kind, "hunk");
+  assert.match(rows[0].text, /function|@@/);
+  assert.equal(rows[1].kind, "ctx");
+  assert.equal(rows[1].oldNo, 1);
+  assert.equal(rows[1].newNo, 1);
+  assert.equal(rows[2].kind, "del");
+  assert.equal(rows[2].text, "old");
+  assert.equal(rows[2].oldNo, 2);
+  assert.equal(rows[3].kind, "add");
+  assert.equal(rows[3].text, "new");
+  assert.equal(rows[3].newNo, 2);
+  assert.equal(rows[4].newNo, 3);
+  assert.deepEqual(diffStats(rows), { adds: 2, dels: 1 });
 });

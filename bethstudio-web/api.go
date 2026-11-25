@@ -65,6 +65,7 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		Vibrancy    *bool      `json:"vibrancy"`
 		Glass       *int       `json:"glass"`
 		GlassAlpha  *int       `json:"glass_alpha"`
+		Enabled     *bool      `json:"enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON inválido"})
@@ -119,6 +120,12 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"cleared": n, "settings": snap})
 			return
 		}
+	case "/api/settings/paste-image-preview":
+		if req.Enabled == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "enabled obrigatório"})
+			return
+		}
+		snap, err = settings.setPasteImagePreview(*req.Enabled)
 	default:
 		http.Error(w, "método não permitido", http.StatusMethodNotAllowed)
 		return

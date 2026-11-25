@@ -77,7 +77,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Content-Security-Policy", fmt.Sprintf(
-		"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "+
+		"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "+
 			"font-src 'self' data:; connect-src 'self' ws://127.0.0.1:%d ws://localhost:%d; frame-ancestors 'none'",
 		s.port, s.port))
 
@@ -192,12 +192,16 @@ func (s *server) route(w http.ResponseWriter, r *http.Request, remoteKey string)
 		s.serveLocalFS(w, r)
 	case "/api/worktree":
 		serveWorktree(w, r)
+	case "/api/worktree/diff":
+		serveWorktreeDiff(w, r)
 	case "/api/pane/scrollback", "/api/pane/scrollback/save":
 		s.servePaneScrollback(w, r)
 	case "/api/pane/screenshot/save":
 		s.servePaneScreenshotSave(w, r)
 	case "/api/sysmon":
 		s.serveSysmon(w, r)
+	case "/api/sysmon/window":
+		s.serveSysmonWindow(w, r)
 	case "/api/about":
 		s.serveAbout(w, r)
 	case "/api/update/check":
@@ -219,6 +223,8 @@ func (s *server) route(w http.ResponseWriter, r *http.Request, remoteKey string)
 		serveWSLRunning(w, r)
 	case "/api/cpu-limit", "/api/cpu-limit/set", "/api/cpu-limit/off":
 		s.serveCPULimit(w, r)
+	case "/api/ram-limit", "/api/ram-limit/set", "/api/ram-limit/off":
+		s.serveRAMLimit(w, r)
 	case "/api/launchers":
 		s.serveLaunchers(w, r)
 	case "/api/agent-procs", "/api/agent-procs/kill", "/api/agent-procs/ignore", "/api/agent-procs/snooze", "/api/agent-procs/settings":
@@ -242,7 +248,7 @@ func (s *server) route(w http.ResponseWriter, r *http.Request, remoteKey string)
 	case "/api/content":
 		s.serveContent(w, r)
 	case "/api/themes", "/api/fonts", "/api/settings", "/api/settings/default", "/api/settings/pane",
-		"/api/favorites/theme", "/api/favorites/font", "/api/layout", "/api/settings/ui", "/api/settings/clear-panes", "/api/settings/sidebar", "/api/settings/pane-names", "/api/settings/search-shortcut":
+		"/api/favorites/theme", "/api/favorites/font", "/api/layout", "/api/settings/ui", "/api/settings/clear-panes", "/api/settings/sidebar", "/api/settings/pane-names", "/api/settings/search-shortcut", "/api/settings/paste-image-preview":
 		s.serveAPI(w, r)
 	default:
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -275,7 +281,7 @@ func (s *server) serveAsset(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "no-store")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Content-Security-Policy", fmt.Sprintf(
-		"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "+
+		"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "+
 			"font-src 'self' data:; connect-src 'self' ws://127.0.0.1:%d ws://localhost:%d; frame-ancestors 'none'",
 		s.port, s.port))
 	if r.URL.Path == "/" || r.URL.Path == "/index.html" {

@@ -124,16 +124,7 @@ export function DbResultGrid({
     return () => ro.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    window.addEventListener("mousedown", close);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("blur", close);
-    };
-  }, [menu]);
+  // Fechar: GlassMenu. blur do WebView no Mac (popover nativo) não deve matar o menu.
 
   const view = useMemo(() => {
     if (onSort || !localSort) return rows;

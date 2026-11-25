@@ -1,5 +1,25 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Cable, CircleDollarSign, Eraser, Database, FolderOpen, History, Info, Keyboard, KeyRound, LayoutGrid, Mic, Monitor, PanelLeft, Settings, Smartphone, TerminalSquare, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Cable,
+  CircleDollarSign,
+  Eraser,
+  Database,
+  FolderOpen,
+  History,
+  Info,
+  Keyboard,
+  KeyRound,
+  LayoutGrid,
+  Mic,
+  Monitor,
+  PanelLeft,
+  Settings,
+  Smartphone,
+  TerminalSquare,
+  X,
+} from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import type { PaneInfo, SettingsEvent } from "@/lib/types";
 import { setDefault, type Catalog } from "@/lib/appearance";
@@ -25,8 +45,33 @@ import { LaunchersSection } from "./LaunchersSection";
 import { AgentResumeSection } from "./AgentResumeSection";
 import { isRemote } from "@/lib/remote";
 import { isMacOS } from "@/lib/windowFrame";
+import {
+  SettingsBtn,
+  SettingsChoice,
+  SettingsGroup,
+  SettingsHint,
+  SettingsNavGroup,
+  SettingsNavItem,
+  SettingsPage,
+  SettingsRow,
+  SettingsSectionLabel,
+  SettingsSwitch,
+} from "./settings/SettingsUI";
 
-export type SettingsSection = "aparencia" | "atalhos" | "terminais" | "celular" | "voz" | "provedores" | "ponte" | "retomar" | "temp" | "banco" | "uso" | "barra" | "sobre";
+export type SettingsSection =
+  | "aparencia"
+  | "atalhos"
+  | "terminais"
+  | "celular"
+  | "voz"
+  | "provedores"
+  | "ponte"
+  | "retomar"
+  | "temp"
+  | "banco"
+  | "uso"
+  | "barra"
+  | "sobre";
 
 interface SidebarPrefs {
   collapsed: boolean;
@@ -53,29 +98,75 @@ interface Props {
   onClose: () => void;
 }
 
-const NAV_ALL: { id: SettingsSection; label: string; icon: ReactNode; macHide?: boolean }[] = [
-  { id: "aparencia", label: "Aparência", icon: <Monitor size={15} /> },
-  { id: "atalhos", label: "Atalhos", icon: <Keyboard size={15} /> },
-  { id: "terminais", label: "Terminais", icon: <TerminalSquare size={15} /> },
-  { id: "celular", label: "Celular", icon: <Smartphone size={15} /> },
-  { id: "voz", label: "Voz e IA", icon: <Mic size={15} /> },
-  { id: "provedores", label: "Provedores de IA", icon: <KeyRound size={15} /> },
-  { id: "ponte", label: "Ponte de agentes", icon: <Cable size={15} />, macHide: true },
-  { id: "retomar", label: "Sessões e processos", icon: <History size={15} /> },
-  { id: "temp", label: "Arquivos temporários", icon: <Eraser size={15} /> },
-  { id: "banco", label: "Banco de dados", icon: <Database size={15} /> },
-  { id: "uso", label: "Uso e custos de IA", icon: <CircleDollarSign size={15} /> },
-  { id: "barra", label: "Barra lateral", icon: <PanelLeft size={15} /> },
-  { id: "sobre", label: "Sobre", icon: <Info size={15} /> },
+type NavItem = { id: SettingsSection; label: string; icon: ReactNode; macHide?: boolean };
+
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Geral",
+    items: [
+      { id: "aparencia", label: "Aparência", icon: <Monitor size={14} /> },
+      { id: "atalhos", label: "Atalhos", icon: <Keyboard size={14} /> },
+      { id: "barra", label: "Barra lateral", icon: <PanelLeft size={14} /> },
+    ],
+  },
+  {
+    label: "Terminais",
+    items: [
+      { id: "terminais", label: "Terminais", icon: <TerminalSquare size={14} /> },
+      { id: "retomar", label: "Sessões e processos", icon: <History size={14} /> },
+      { id: "temp", label: "Arquivos temporários", icon: <Eraser size={14} /> },
+    ],
+  },
+  {
+    label: "IA e voz",
+    items: [
+      { id: "voz", label: "Voz e IA", icon: <Mic size={14} /> },
+      { id: "provedores", label: "Provedores de IA", icon: <KeyRound size={14} /> },
+      { id: "ponte", label: "Ponte de agentes", icon: <Cable size={14} />, macHide: true },
+      { id: "uso", label: "Uso e custos", icon: <CircleDollarSign size={14} /> },
+    ],
+  },
+  {
+    label: "Conexões",
+    items: [
+      { id: "celular", label: "Celular", icon: <Smartphone size={14} /> },
+      { id: "banco", label: "Banco de dados", icon: <Database size={14} /> },
+    ],
+  },
+  {
+    label: "Sobre",
+    items: [{ id: "sobre", label: "Sobre", icon: <Info size={14} /> }],
+  },
 ];
 
-function settingsNav() {
-  return isMacOS() ? NAV_ALL.filter((n) => !n.macHide) : NAV_ALL;
+const PAGE_TITLE: Record<SettingsSection, { title: string; subtitle?: string }> = {
+  aparencia: { title: "Aparência", subtitle: "Tema da interface, material da barra e padrões dos terminais." },
+  atalhos: { title: "Atalhos", subtitle: "Teclas do Studio neste computador." },
+  terminais: { title: "Terminais", subtitle: "Tamanho, colar imagem, avisos e desempenho." },
+  celular: { title: "Celular", subtitle: "Acesso remoto pelo telefone e Studio no navegador." },
+  voz: { title: "Voz e IA", subtitle: "Microfone, transcrição e correção." },
+  provedores: { title: "Provedores de IA", subtitle: "Chaves e contas usadas pelo Studio." },
+  ponte: { title: "Ponte de agentes", subtitle: "Como o Studio fala com os agentes neste PC." },
+  retomar: { title: "Sessões e processos", subtitle: "Retomar o que ficou aberto depois de uma queda." },
+  temp: { title: "Arquivos temporários", subtitle: "Limpeza automática de colagens e ditados." },
+  banco: { title: "Banco de dados", subtitle: "Assistente e opções das conexões." },
+  uso: { title: "Uso e custos", subtitle: "Histórico e gasto das chamadas de IA." },
+  barra: { title: "Barra lateral", subtitle: "Visão, filtros e ordem dos tipos de terminal." },
+  sobre: { title: "Sobre", subtitle: "Versão, atualizações e pastas deste Studio." },
+};
+
+function settingsNavGroups() {
+  const mac = isMacOS();
+  return NAV_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((n) => !(mac && n.macHide)),
+  })).filter((g) => g.items.length > 0);
 }
 
 /** Tela unica de Configuracoes, com navegacao lateral por secoes. */
 export function SettingsDialog(p: Props) {
   const [sec, setSec] = useState<SettingsSection>(p.initialSection ?? "aparencia");
+  const page = PAGE_TITLE[sec];
   const common = {
     conn: p.conn,
     catalog: p.catalog,
@@ -87,103 +178,136 @@ export function SettingsDialog(p: Props) {
     onMessage: p.onMessage,
     notify: p.notify,
     onNotify: p.onNotify,
-    embedded: true,
+    embedded: true as const,
   };
+  const remoteOnly = (msg: string) => (
+    <SettingsPage title={page.title} subtitle={page.subtitle}>
+      <SettingsGroup>
+        <SettingsRow label={msg} />
+      </SettingsGroup>
+    </SettingsPage>
+  );
+
   return (
-    <div className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[6vh] backdrop-blur-xl" onMouseDown={p.onClose}>
+    <div className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[5vh] backdrop-blur-xl" onMouseDown={p.onClose}>
       <div
-        className="flex h-[88vh] w-[min(1040px,96vw)] flex-col overflow-hidden bt-dialog"
+        className="bt-settings bt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Configurações"
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.key === "Escape" && p.onClose()}
       >
-        <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-          <Settings size={16} className="text-accent-text" />
-          <div className="flex-1 text-[15px] font-semibold text-text-1">Configurações</div>
-          <button className="rounded-lg p-1 text-text-2 hover:bg-bg-hover hover:text-text-1" title="Fechar" onClick={p.onClose}>
-            <X size={16} />
+        <div className="bt-settings__chrome">
+          <Settings size={15} className="text-accent-text" />
+          <div className="bt-settings__chrome-title">Configurações</div>
+          <button type="button" className="bt-settings__chrome-close" title="Fechar" aria-label="Fechar" onClick={p.onClose}>
+            <X size={15} />
           </button>
         </div>
-        <div className="flex min-h-0 flex-1">
-          <nav className="w-48 shrink-0 space-y-0.5 border-r border-border bg-bg-panel p-2">
-            {settingsNav().map((n) => (
-              <button
-                key={n.id}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px]",
-                  sec === n.id ? "bg-accent-soft font-semibold text-text-1" : "text-text-2 hover:bg-bg-hover hover:text-text-1",
-                )}
-                onClick={() => setSec(n.id)}
-              >
-                {n.icon}
-                {n.label}
-              </button>
+        <div className="bt-settings__body">
+          <nav className="bt-settings-nav" aria-label="Seções">
+            {settingsNavGroups().map((g) => (
+              <SettingsNavGroup key={g.label} label={g.label}>
+                {g.items.map((n) => (
+                  <SettingsNavItem key={n.id} active={sec === n.id} icon={n.icon} label={n.label} onClick={() => setSec(n.id)} />
+                ))}
+              </SettingsNavGroup>
             ))}
           </nav>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {sec === "aparencia" && <GeneralAppearance {...common} sections={["ui", "terminals"]} />}
-            {sec === "atalhos" && <ShortcutsSection conn={p.conn} saved={p.settings?.shortcuts} onMessage={p.onMessage} />}
+          <div className="bt-settings__content">
+            {sec === "aparencia" && <GeneralAppearance {...common} sections={["ui", "terminals"]} pageTitle={page.title} pageSubtitle={page.subtitle} />}
+            {sec === "atalhos" && (
+              <SettingsPage title={page.title} subtitle={page.subtitle}>
+                <ShortcutsSection conn={p.conn} saved={p.settings?.shortcuts} onMessage={p.onMessage} />
+              </SettingsPage>
+            )}
             {sec === "terminais" && (
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <SettingsPage title={page.title} subtitle={page.subtitle}>
                 <TerminalsSection conn={p.conn} settings={p.settings} onMessage={p.onMessage} />
                 <PerformanceSection conn={p.conn} onMessage={p.onMessage} />
                 {!isRemote() && !isMacOS() && <WslInitSettings conn={p.conn} onMessage={p.onMessage} />}
                 {!isRemote() && isMacOS() && (
-                  <div className="space-y-2 border-t border-border px-5 py-4">
-                    <h3 className="text-[13px] font-semibold text-text-1">Apple Container</h3>
-                    <p className="text-[12px] text-text-2">
-                      No Mac o Studio usa{" "}
-                      <a className="underline" href="https://github.com/apple/container" target="_blank" rel="noreferrer">
-                        Apple Container
-                      </a>{" "}
-                      no lugar do WSL. Em <strong>Novo terminal</strong> aparecem os containers em execução (
-                      <code>container exec</code>) ou as imagens (<code>container run</code>). Se o serviço estiver parado:{" "}
-                      <code>container system start</code>.
-                    </p>
+                  <div>
+                    <SettingsSectionLabel>Apple Container</SettingsSectionLabel>
+                    <SettingsGroup>
+                      <SettingsRow
+                        label="Containers no Mac"
+                        hint={
+                          <>
+                            No Mac o Studio usa{" "}
+                            <a className="underline" href="https://github.com/apple/container" target="_blank" rel="noreferrer">
+                              Apple Container
+                            </a>{" "}
+                            no lugar do WSL. Em Novo terminal aparecem os containers em execução ou as imagens. Se o serviço estiver parado:{" "}
+                            <code>container system start</code>.
+                          </>
+                        }
+                      />
+                    </SettingsGroup>
                   </div>
                 )}
                 <GeneralAppearance {...common} sections={["notify"]} />
-              </div>
+              </SettingsPage>
             )}
             {sec === "celular" &&
               (isRemote() ? (
-                <div className="px-5 py-4 text-[13px] text-text-2">O celular e o acesso remoto se configuram só no Studio do PC.</div>
+                remoteOnly("O celular e o acesso remoto se configuram só no Studio do PC.")
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto">
+                <SettingsPage title={page.title} subtitle={page.subtitle}>
                   <PhoneRemoteSection conn={p.conn} onMessage={p.onMessage} />
                   <LaunchersSection conn={p.conn} onMessage={p.onMessage} />
-                  <div className="px-5">
-                    <VpsInstallWizard conn={p.conn} onMessage={p.onMessage} />
-                  </div>
-                  <div className="px-5 pb-6">
-                    <PhoneDevicesSection conn={p.conn} onMessage={p.onMessage} />
-                    <RemoteStudioSection conn={p.conn} onMessage={p.onMessage} />
-                  </div>
-                </div>
+                  <VpsInstallWizard conn={p.conn} onMessage={p.onMessage} />
+                  <PhoneDevicesSection conn={p.conn} onMessage={p.onMessage} />
+                  <RemoteStudioSection conn={p.conn} onMessage={p.onMessage} />
+                </SettingsPage>
               ))}
-            {sec === "voz" && <VoiceSettingsDialog key="voz" conn={p.conn} onClose={p.onClose} initialTab="voz" embedded />}
-            {sec === "provedores" && <VoiceSettingsDialog key="prov" conn={p.conn} onClose={p.onClose} initialTab="provedores" embedded />}
+            {sec === "voz" && (
+              <SettingsPage title={page.title} subtitle={page.subtitle}>
+                <VoiceSettingsDialog key="voz" conn={p.conn} onClose={p.onClose} initialTab="voz" embedded />
+              </SettingsPage>
+            )}
+            {sec === "provedores" && (
+              <SettingsPage title={page.title} subtitle={page.subtitle}>
+                <VoiceSettingsDialog key="prov" conn={p.conn} onClose={p.onClose} initialTab="provedores" embedded />
+              </SettingsPage>
+            )}
             {sec === "ponte" &&
               (isRemote() ? (
-                <div className="px-5 py-4 text-[13px] text-text-2">A ponte de agentes se configura só no Studio do PC.</div>
+                remoteOnly("A ponte de agentes se configura só no Studio do PC.")
               ) : (
-                <PonteSection conn={p.conn} onMessage={p.onMessage} />
+                <SettingsPage title={page.title} subtitle={page.subtitle}>
+                  <PonteSection conn={p.conn} onMessage={p.onMessage} />
+                </SettingsPage>
               ))}
             {sec === "retomar" &&
               (isRemote() ? (
-                <div className="px-5 py-4 text-[13px] text-text-2">Retomar sessões se configura só no Studio do PC.</div>
+                remoteOnly("Retomar sessões se configura só no Studio do PC.")
               ) : (
-                <AgentResumeSection conn={p.conn} onMessage={p.onMessage} />
+                <SettingsPage title={page.title} subtitle={page.subtitle}>
+                  <AgentResumeSection conn={p.conn} onMessage={p.onMessage} />
+                </SettingsPage>
               ))}
             {sec === "temp" &&
               (isRemote() ? (
-                <div className="px-5 py-4 text-[13px] text-text-2">A limpeza de temporários se configura só no Studio do PC.</div>
+                remoteOnly("A limpeza de temporários se configura só no Studio do PC.")
               ) : (
-                <TempCleanSection conn={p.conn} onMessage={p.onMessage} />
+                <SettingsPage title={page.title} subtitle={page.subtitle}>
+                  <TempCleanSection conn={p.conn} onMessage={p.onMessage} />
+                </SettingsPage>
               ))}
-            {sec === "banco" &&<DbAssistSettings conn={p.conn} onProviders={() => setSec("provedores")} />}
-            {sec === "uso" && <AIUsageSection conn={p.conn} onMessage={p.onMessage} />}
-            {sec === "barra" && <SidebarSection sidebar={p.sidebar} save={p.saveSidebar} />}
-            {sec === "sobre" && <AboutSection conn={p.conn} onMessage={p.onMessage} />}
+            {sec === "banco" && (
+              <SettingsPage title={page.title} subtitle={page.subtitle}>
+                <DbAssistSettings conn={p.conn} onProviders={() => setSec("provedores")} />
+              </SettingsPage>
+            )}
+            {sec === "uso" && (
+              <SettingsPage title={page.title} subtitle={page.subtitle}>
+                <AIUsageSection conn={p.conn} onMessage={p.onMessage} />
+              </SettingsPage>
+            )}
+            {sec === "barra" && <SidebarSection sidebar={p.sidebar} save={p.saveSidebar} title={page.title} subtitle={page.subtitle} />}
+            {sec === "sobre" && <AboutSection conn={p.conn} onMessage={p.onMessage} title={page.title} subtitle={page.subtitle} />}
           </div>
         </div>
       </div>
@@ -191,158 +315,157 @@ export function SettingsDialog(p: Props) {
   );
 }
 
-function H({ children }: { children: ReactNode }) {
-  return <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-text-2">{children}</div>;
-}
-
-function Choice({ on, onClick, title, sub }: { on: boolean; onClick: () => void; title: string; sub?: string }) {
-  return (
-    <button
-      className={cn(
-        "flex w-full items-start gap-2 rounded-md border p-2.5 text-left",
-        on ? "border-accent bg-accent-soft" : "border-border bg-bg-panel hover:bg-bg-hover",
-      )}
-      onClick={onClick}
-    >
-      <span className={cn("mt-1 h-3 w-3 shrink-0 rounded-full border-2", on ? "border-accent bg-accent" : "border-border-strong")} />
-      <span>
-        <span className="block text-[13px] text-text-1">{title}</span>
-        {sub && <span className="block text-[11px] text-text-3">{sub}</span>}
-      </span>
-    </button>
-  );
-}
-
 function TerminalsSection({ conn, settings, onMessage }: { conn: Connection; settings: SettingsEvent | null; onMessage: (m: string) => void }) {
   const mode = settings?.default?.size_mode || "fit";
+  const pastePreview = settings?.paste_image_preview !== false;
   const set = (m: "fit" | "host") =>
     void setDefault(conn, { size_mode: m })
       .then(() => onMessage("Padrão de tamanho salvo"))
       .catch((e: Error) => onMessage(`Erro: ${e.message}`));
+  const setPastePreview = (on: boolean) =>
+    void conn
+      .api<SettingsEvent>("/api/settings/paste-image-preview", { enabled: on })
+      .then((s) => {
+        conn.setSettings(s);
+        onMessage(on ? "Pré-visualização de imagem ligada" : "Pré-visualização de imagem desligada");
+      })
+      .catch((e: Error) => onMessage(`Erro: ${e.message}`));
   return (
-    <div className="space-y-5 p-4 pb-0">
-      <section>
-        <H>Tamanho dos terminais</H>
-        <p className="mb-2 text-[12px] text-text-2">
-          Padrão para terminais sozinhos na aba do Beth Studio (cada terminal pode mudar no ⤢/🖥 do cabeçalho). Terminais em split no Beth Studio usam “Igual
-          ao Beth Studio” — ou “Separar no Beth Studio” para ajustar.
-        </p>
-        <div className="grid gap-2 md:grid-cols-2">
-          <Choice
+    <>
+      <div>
+        <SettingsSectionLabel>Colar imagem</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow
+            label="Pré-visualizar antes de colar"
+            hint="Ao colar ou soltar uma imagem no terminal, mostra a miniatura — como no Ghostty. Desligado cola na hora."
+          >
+            <SettingsSwitch on={pastePreview} onChange={setPastePreview} label="Pré-visualizar imagem antes de colar" />
+          </SettingsRow>
+        </SettingsGroup>
+      </div>
+      <div>
+        <SettingsSectionLabel>Tamanho dos terminais</SettingsSectionLabel>
+        <SettingsHint className="mb-2">
+          Padrão para terminais sozinhos na aba. Cada um pode mudar no cabeçalho. Em split usam “Igual ao Beth Studio”.
+        </SettingsHint>
+        <div className="bt-settings-choice-grid">
+          <SettingsChoice
             on={mode === "fit"}
             onClick={() => set("fit")}
             title="Ajustar à janela"
-            sub="o terminal muda de colunas×linhas para caber aqui (também no Beth Studio)"
+            sub="muda colunas×linhas para caber aqui"
           />
-          <Choice
+          <SettingsChoice
             on={mode === "host"}
             onClick={() => set("host")}
             title="Igual ao Beth Studio"
-            sub="mostra o tamanho que o terminal tem na GUI; a fonte se ajusta"
+            sub="mantém o tamanho da GUI; a fonte se ajusta"
           />
         </div>
-      </section>
-      <section>
-        <H>Fonte</H>
-        <p className="text-[12px] text-text-2">
-          Em “Igual ao Beth Studio” a fonte é automática (preenche a área), a não ser que você fixe o tamanho naquele terminal com A−/A+. A família, o
-          tamanho padrão e o negrito ficam em Aparência → Terminais em geral.
-        </p>
-      </section>
-      <section>
-        <H>Clique num terminal</H>
-        <p className="text-[12px] text-text-2">
-          Se o terminal já está numa aba do web, abre essa aba; senão abre numa aba nova só com ele (nunca substitui o terminal em foco). “Abrir ao
-          lado” continua no ícone de colunas. Fechar uma aba nunca encerra o terminal.
-        </p>
-      </section>
-    </div>
+      </div>
+      <div>
+        <SettingsSectionLabel>Fonte e clique</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow
+            label="Fonte"
+            hint="Em “Igual ao Beth Studio” a fonte é automática, a não ser que você fixe o tamanho com A−/A+. Família e tamanho padrão ficam em Aparência."
+          />
+          <SettingsRow
+            label="Clique num terminal"
+            hint="Se já está numa aba, abre essa aba; senão abre numa aba nova. Fechar uma aba nunca encerra o terminal."
+          />
+        </SettingsGroup>
+      </div>
+    </>
   );
 }
 
-function SidebarSection({ sidebar, save }: { sidebar: SidebarPrefs; save: (p: Partial<SidebarPrefs>) => void }) {
+function SidebarSection({
+  sidebar,
+  save,
+  title,
+  subtitle,
+}: {
+  sidebar: SidebarPrefs;
+  save: (p: Partial<SidebarPrefs>) => void;
+  title: string;
+  subtitle?: string;
+}) {
   const view = sidebar.view || "web";
   return (
-    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
-      <section>
-        <H>Visão</H>
-        <div className="grid gap-2 md:grid-cols-4">
-          <Choice on={view === "web"} onClick={() => save({ view: "web" })} title="Minha organização" sub="abas do web e não organizados" />
-          <Choice on={view === "host"} onClick={() => save({ view: "host" })} title="Como no Beth Studio" sub="janela → aba → terminal" />
-          <Choice
+    <SettingsPage title={title} subtitle={subtitle}>
+      <div>
+        <SettingsSectionLabel>Visão</SettingsSectionLabel>
+        <div className="bt-settings-choice-grid">
+          <SettingsChoice on={view === "web"} onClick={() => save({ view: "web" })} title="Minha organização" sub="abas do web e não organizados" />
+          <SettingsChoice on={view === "host"} onClick={() => save({ view: "host" })} title="Como no Beth Studio" sub="janela → aba → terminal" />
+          <SettingsChoice
             on={view === "kind"}
             onClick={() => save({ view: "kind" })}
             title="Por tipo"
             sub={isMacOS() ? "Container, SSH…" : "WSL, PowerShell, cmd…"}
           />
-          <Choice on={view === "folder"} onClick={() => save({ view: "folder" })} title="Por pasta" sub="agrupa pela pasta atual de cada terminal" />
+          <SettingsChoice on={view === "folder"} onClick={() => save({ view: "folder" })} title="Por pasta" sub="agrupa pela pasta atual" />
         </div>
-      </section>
-      <section>
-        <H>Filtro por tipo</H>
-        <p className="mb-2 text-[12px] text-text-2">
-          {sidebar.kinds?.length ? `Filtrando: ${sidebar.kinds.join(", ")}` : "Sem filtro (todos os tipos)."} Os filtros ficam nos botões abaixo da
-          busca, na barra lateral.
-        </p>
-        {!!sidebar.kinds?.length && (
-          <button className="rounded bg-bg-hover px-3 py-1 text-[12px] text-text-1 hover:bg-border" onClick={() => save({ kinds: [] })}>
-            Limpar filtro
-          </button>
-        )}
-      </section>
-      <section>
-        <H>Tipos de terminal</H>
-        <label className="mb-2 flex items-center gap-2 text-[12px] text-text-1">
-          <input type="checkbox" checked={sidebar.split_by_kind !== false} onChange={(e) => save({ split_by_kind: e.target.checked })} />
-          Separar por tipo em “Não organizados” e “Como no Beth Studio”
-        </label>
-        <p className="mb-1 text-[12px] text-text-2">Ordem dos grupos (vale para as listas, “Por tipo” e os filtros):</p>
-        <ol className="max-w-xs space-y-0.5">
+      </div>
+      <div>
+        <SettingsSectionLabel>Filtro por tipo</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow
+            label={sidebar.kinds?.length ? `Filtrando: ${sidebar.kinds.join(", ")}` : "Sem filtro"}
+            hint="Os filtros ficam nos botões abaixo da busca, na barra lateral."
+          >
+            {!!sidebar.kinds?.length && <SettingsBtn onClick={() => save({ kinds: [] })}>Limpar</SettingsBtn>}
+          </SettingsRow>
+        </SettingsGroup>
+      </div>
+      <div>
+        <SettingsSectionLabel>Tipos de terminal</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow label="Separar por tipo" hint="Em “Não organizados” e “Como no Beth Studio”.">
+            <SettingsSwitch
+              on={sidebar.split_by_kind !== false}
+              onChange={(on) => save({ split_by_kind: on })}
+              label="Separar por tipo"
+            />
+          </SettingsRow>
+        </SettingsGroup>
+        <SettingsHint className="mb-2 mt-3">Ordem dos grupos (listas, “Por tipo” e filtros):</SettingsHint>
+        <SettingsGroup>
           {visibleKindOrder(sidebar.kind_order).map((k, i, all) => (
-            <li key={k} className="flex items-center gap-1 rounded bg-bg-panel px-2 py-1 text-[12px] text-text-1">
-              <span className="w-4 text-text-3">{i + 1}.</span>
-              <span className="flex-1">{KIND_LABEL[k]}</span>
-              <button
-                className="rounded p-0.5 text-text-2 hover:bg-bg-hover disabled:opacity-30"
-                disabled={i === 0}
-                title="Subir"
-                onClick={() => save({ kind_order: moveItem(all, i, i - 1) })}
-              >
+            <SettingsRow key={k} label={`${i + 1}. ${KIND_LABEL[k]}`}>
+              <SettingsBtn disabled={i === 0} title="Subir" onClick={() => save({ kind_order: moveItem(all, i, i - 1) })}>
                 <ArrowUp size={13} />
-              </button>
-              <button
-                className="rounded p-0.5 text-text-2 hover:bg-bg-hover disabled:opacity-30"
+              </SettingsBtn>
+              <SettingsBtn
                 disabled={i === all.length - 1}
                 title="Descer"
                 onClick={() => save({ kind_order: moveItem(all, i, i + 1) })}
               >
                 <ArrowDown size={13} />
-              </button>
-            </li>
+              </SettingsBtn>
+            </SettingsRow>
           ))}
-        </ol>
+        </SettingsGroup>
         {!!sidebar.kind_order?.length && (
-          <button className="mt-1 rounded bg-bg-hover px-3 py-1 text-[12px] text-text-1 hover:bg-border" onClick={() => save({ kind_order: [] })}>
-            Ordem padrão
-          </button>
+          <div className="mt-2">
+            <SettingsBtn onClick={() => save({ kind_order: [] })}>Ordem padrão</SettingsBtn>
+          </div>
         )}
-      </section>
-      <section>
-        <H>Largura e visibilidade</H>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="rounded bg-bg-hover px-3 py-1 text-[12px] text-text-1 hover:bg-border"
-            onClick={() => save({ collapsed: !sidebar.collapsed })}
-          >
-            {sidebar.collapsed ? "Mostrar a barra lateral" : "Recolher a barra lateral"}
-          </button>
-          <button className="rounded bg-bg-hover px-3 py-1 text-[12px] text-text-1 hover:bg-border" onClick={() => save({ width: 288 })}>
-            Largura padrão (atual: {sidebar.width}px)
-          </button>
-        </div>
-        <p className="mt-1 text-[11px] text-text-3">Dica: arraste a borda direita da barra lateral para mudar a largura.</p>
-      </section>
-    </div>
+      </div>
+      <div>
+        <SettingsSectionLabel>Largura e visibilidade</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow label="Barra lateral">
+            <SettingsBtn onClick={() => save({ collapsed: !sidebar.collapsed })}>
+              {sidebar.collapsed ? "Mostrar" : "Recolher"}
+            </SettingsBtn>
+            <SettingsBtn onClick={() => save({ width: 288 })}>Padrão ({sidebar.width}px)</SettingsBtn>
+          </SettingsRow>
+        </SettingsGroup>
+        <SettingsHint>Arraste a borda direita da barra para mudar a largura.</SettingsHint>
+      </div>
+    </SettingsPage>
   );
 }
 
@@ -363,7 +486,17 @@ interface About {
   files: { id: string; label: string; path: string; exists: boolean }[];
 }
 
-function AboutSection({ conn, onMessage }: { conn: Connection; onMessage: (m: string) => void }) {
+function AboutSection({
+  conn,
+  onMessage,
+  title,
+  subtitle,
+}: {
+  conn: Connection;
+  onMessage: (m: string) => void;
+  title: string;
+  subtitle?: string;
+}) {
   const [a, setA] = useState<About | null>(null);
   useEffect(() => {
     void conn
@@ -372,66 +505,76 @@ function AboutSection({ conn, onMessage }: { conn: Connection; onMessage: (m: st
       .catch((e: Error) => onMessage(`Erro: ${e.message}`));
   }, [conn, onMessage]);
   const fmt = (t: string) => (t ? new Date(t).toLocaleString("pt-BR") : "—");
-  if (!a) return <div className="p-4 text-text-2">Carregando…</div>;
+  if (!a) {
+    return (
+      <SettingsPage title={title} subtitle={subtitle}>
+        <SettingsHint>Carregando…</SettingsHint>
+      </SettingsPage>
+    );
+  }
   return (
-    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
-      <section>
-        <H>Beth Studio</H>
-        <div className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-1 text-[12px]">
-          <span className="text-text-2">Versão</span>
-          <span className="text-text-1">
-            {a.version} · build {fmt(a.build_time || a.exe_time)} · {a.go}
-            {a.read_only && " · somente leitura"}
-          </span>
-          <span className="text-text-2">Interface</span>
-          <span className="text-text-1">
-            {a.ui_override ? `pacote ${a.ui_version}` : "embutida no executável"}
-            {a.api_level != null && <span className="text-text-3"> · API {a.api_level}</span>}
-            {a.ui_note && <span className="text-text-3"> · pacote ignorado: {a.ui_note}</span>}
-            <button
-              className="ml-3 rounded bg-bg-hover px-2 py-0.5 text-text-1 hover:bg-border"
-              title="Recarrega a interface (aplica um pacote novo, sem reiniciar o Studio nem o host)"
-              onClick={() => window.location.reload()}
-            >
-              Recarregar interface
-            </button>
-          </span>
-          <span className="text-text-2">Executável</span>
-          <span className="break-all font-mono text-[11px] text-text-1">{a.exe}</span>
-          <span className="text-text-2">Ponte (bethstudio.exe)</span>
-          <span className="break-all font-mono text-[11px] text-text-1">
-            {a.bridge_exe} <span className="font-sans text-text-3">· {fmt(a.bridge_time)}</span>
-          </span>
-          <span className="text-text-2">Pasta de dados</span>
-          <span className="break-all font-mono text-[11px] text-text-1">{a.data_dir}</span>
-        </div>
-      </section>
+    <SettingsPage title={title} subtitle={subtitle}>
+      <div>
+        <SettingsSectionLabel>Beth Studio</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow
+            label="Versão"
+            hint={`${a.version} · build ${fmt(a.build_time || a.exe_time)} · ${a.go}${a.read_only ? " · somente leitura" : ""}`}
+          />
+          <SettingsRow
+            label="Interface"
+            hint={
+              <>
+                {a.ui_override ? `pacote ${a.ui_version}` : "embutida no executável"}
+                {a.api_level != null && ` · API ${a.api_level}`}
+                {a.ui_note && ` · pacote ignorado: ${a.ui_note}`}
+              </>
+            }
+          >
+            <SettingsBtn title="Recarrega a interface sem reiniciar o Studio" onClick={() => window.location.reload()}>
+              Recarregar
+            </SettingsBtn>
+          </SettingsRow>
+          <SettingsRow label="Executável" hint={<span className="break-all font-mono text-[11px]">{a.exe}</span>} />
+          <SettingsRow
+            label="Ponte"
+            hint={
+              <span className="break-all font-mono text-[11px]">
+                {a.bridge_exe} · {fmt(a.bridge_time)}
+              </span>
+            }
+          />
+          <SettingsRow label="Pasta de dados" hint={<span className="break-all font-mono text-[11px]">{a.data_dir}</span>} />
+        </SettingsGroup>
+      </div>
       <UpdateSection conn={conn} readOnly={a.read_only} />
-      <section>
-        <H>Arquivos</H>
-        <ul className="space-y-1">
+      <div>
+        <SettingsSectionLabel>Arquivos</SettingsSectionLabel>
+        <SettingsGroup>
           {a.files.map((f) => (
-            <li key={f.id} className="flex items-center gap-2 rounded bg-bg-panel px-2 py-1.5">
-              <div className="min-w-0 flex-1">
-                <div className="text-[12px] text-text-1">{f.label}</div>
-                <div className={cn("truncate font-mono text-[11px]", f.exists ? "text-text-2" : "text-text-3")} title={f.path}>
+            <SettingsRow
+              key={f.id}
+              label={f.label}
+              hint={
+                <span className={cn("break-all font-mono text-[11px]", f.exists ? "" : "opacity-70")} title={f.path}>
                   {f.path}
                   {!f.exists && " (ainda não existe)"}
-                </div>
-              </div>
-              <button
-                className="flex shrink-0 items-center gap-1 rounded bg-bg-hover px-2 py-1 text-[12px] text-text-1 hover:bg-border"
-                onClick={() => void conn.api("/api/about", { id: f.id }).catch((e: Error) => onMessage(`Erro: ${e.message}`))}
-              >
-                <FolderOpen size={12} /> Abrir pasta
-              </button>
-            </li>
+                </span>
+              }
+            >
+              <SettingsBtn onClick={() => void conn.api("/api/about", { id: f.id }).catch((e: Error) => onMessage(`Erro: ${e.message}`))}>
+                <FolderOpen size={12} /> Abrir
+              </SettingsBtn>
+            </SettingsRow>
           ))}
-        </ul>
-      </section>
-      <p className="flex items-center gap-1 text-[11px] text-text-3">
-        <LayoutGrid size={11} /> Chaves de API ficam cifradas pelo Windows (DPAPI) e nunca aparecem aqui.
+        </SettingsGroup>
+      </div>
+      <p className="flex items-center gap-1.5 text-[11px] text-text-3">
+        <LayoutGrid size={11} />{" "}
+        {isMacOS()
+          ? "Chaves de API ficam guardadas só neste Mac e nunca aparecem aqui."
+          : "Chaves de API ficam cifradas pelo Windows (DPAPI) e nunca aparecem aqui."}
       </p>
-    </div>
+    </SettingsPage>
   );
 }

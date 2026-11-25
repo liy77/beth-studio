@@ -302,6 +302,7 @@ func openWindow(pageURL string, devtools bool, width, height int) error {
 		r, g, b = uint8(v>>16), uint8(v>>8), uint8(v)
 	}
 	setSplashColors(r, g, b)
+	rememberHostBackground(r, g, b)
 
 	var inst windows.Handle
 	_ = windows.GetModuleHandleEx(0, nil, &inst)

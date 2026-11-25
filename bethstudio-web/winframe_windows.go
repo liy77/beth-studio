@@ -99,6 +99,9 @@ func windowCommand(msg string) {
 	if zoomCommand(msg) {
 		return
 	}
+	if acrylicCommand(msg) {
+		return
+	}
 	h := hostHwnd
 	if h == 0 {
 		return

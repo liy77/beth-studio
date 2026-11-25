@@ -69,7 +69,7 @@ export function ModelPicker(p: Props) {
   ];
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/50 pt-[4vh]" onMouseDown={p.onClose}>
+    <div className="bt-modal fixed inset-0 z-[80] flex items-start justify-center bg-black/50 pt-[4vh] backdrop-blur-xl" onMouseDown={p.onClose}>
       <div
         className="flex h-[88vh] w-[min(1000px,96vw)] flex-col overflow-hidden bt-dialog"
         onMouseDown={(e) => e.stopPropagation()}

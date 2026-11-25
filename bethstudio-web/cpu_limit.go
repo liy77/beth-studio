@@ -5,8 +5,9 @@ package main
 // No Windows é um job object com teto rígido (os processos novos entram no
 // job sozinhos). Os terminais WSL rodam na VM do WSL, fora do job: lá o teto
 // vira uma quantidade de núcleos (taskset nos processos do usuário da distro).
-// O limite pode ter prazo; ao vencer, tudo volta ao normal.
-// A parte que mexe nos processos está em cpu_limit_windows.go.
+// No macOS o teto é um duty-cycle (SIGCONT/SIGSTOP) na árvore do host
+// (cpu_limit_darwin.go). O limite pode ter prazo; ao vencer, tudo volta ao
+// normal. A parte Windows está em cpu_limit_windows.go.
 
 import (
 	"encoding/json"
@@ -299,6 +300,9 @@ func (h *hub) publishCPULimit() {
 
 // cpuLimitSet / cpuLimitOff: o mesmo caminho para a bandeja e o HTTP.
 func (h *hub) cpuLimitSet(percent, minutes int, wsl bool) error {
+	if runtime.GOOS != "windows" {
+		wsl = false
+	}
 	if err := cpuLimit.set(percent, minutes, wsl, time.Now()); err != nil {
 		return err
 	}

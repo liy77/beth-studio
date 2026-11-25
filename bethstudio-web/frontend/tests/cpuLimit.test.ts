@@ -19,8 +19,9 @@ test("equivalência em núcleos", () => {
 test("estado", () => {
   assert.match(statusText(base), /Sem limite/);
   assert.match(statusText({ ...base, restore: true }), /Voltando/);
-  const s = statusText({ ...base, percent: 50, applied_win: 1, applied_wsl: 40, wsl_cores: 12 });
+  const s = statusText({ ...base, percent: 50, applied_win: 1, applied_wsl: 40, wsl_cores: 12 }, "windows");
   assert.match(s, /No máximo 50% da CPU, até você remover/);
   assert.match(s, /1 processo no Windows, 40 no WSL \(12 núcleos\)/);
-  assert.doesNotMatch(statusText({ ...base, percent: 50, wsl: false }), /WSL/);
+  assert.doesNotMatch(statusText({ ...base, percent: 50, wsl: false }, "windows"), /WSL/);
+  assert.match(statusText({ ...base, percent: 50, applied_win: 3 }, "mac"), /3 processos no Mac/);
 });

@@ -16,7 +16,11 @@ export interface SideFrame {
 }
 
 export function sideFrame(windowHeight: number, topbarColor: string, tabStrip = TAB_STRIP, inset = SIDE_INSET, banner = 0, bottomPad = CARD_BOTTOM_PAD): SideFrame {
-  const top = tabStrip + inset;
+  // Mesma base do terminal (8 px do fundo). O topo alinha com a base da
+  // faixa de abas — sem o vão extra de `inset`, senão o cartão fica mais
+  // baixo que a caixa do terminal.
+  void inset;
+  const top = tabStrip;
   const bottom = Math.max(0, windowHeight - bottomPad);
   return {
     top,
@@ -62,9 +66,10 @@ export function glassCoversGutter(rect: GlassRect, sidebarWidth: number, inset =
 }
 
 /**
- * Com o vibrancy ligado o vidro ocupa o cartão: 8 px da borda, abaixo das
- * abas, 8 px antes do terminal e 8 px acima do fundo. Largura 0 não mostra
- * efeito nenhum. Desligado, o retângulo fica fora da janela.
+ * Com o vibrancy ligado o vidro ocupa o cartão: 8 px da borda, na base das
+ * abas (mesma altura do terminal), 8 px antes do terminal e 8 px acima do
+ * fundo. Largura 0 não mostra efeito nenhum. Desligado, o retângulo fica
+ * fora da janela.
  */
 export function vibrancyCardRect(
   on: boolean,
@@ -77,7 +82,8 @@ export function vibrancyCardRect(
   if (!on || sidebarWidth <= inset * 2) {
     return { x: -8, y: -8, w: 0, h: 0, windowH: windowHeight };
   }
-  const top = tabStrip + inset;
+  // Mesma faixa do cartão CSS / do terminal: sob as abas até bottomPad.
+  const top = tabStrip;
   const bottom = Math.max(top, windowHeight - bottomPad);
   return {
     x: inset,
@@ -109,38 +115,39 @@ export function rightSlot(open: boolean, inset = SIDE_INSET, bottomPad = CARD_BO
 }
 
 /**
- * Controles cujo texto a página esconde de propósito, e o vidro nativo
- * redesenha: busca, botões de modo, botões de ícone, abas inativas.
- * A linha de terminal e o chip de filtro viram placa do mesmo jeito que o
- * botão de modo: o vidro desenha ícone e nome. O cabeçalho de pasta fica
- * sem fundo e sem placa.
+ * Controles que pedem placa nativa: busca, modo, ícone, abas, chip
+ * selecionado e chat selecionado. Pasta/chip idle ficam na página.
+ * Chip/modo selecionados: só a tinta nativa (sem bg-accent na página).
  */
 export function wantsNativeGlassPlate(className: string): boolean {
   const classes = className.split(/\s+/).filter(Boolean);
   const has = (name: string) => classes.includes(name);
-  if (has("bt-folder") || has("bt-chip")) return false;
-  if (has("bt-chat") || has("bt-search") || has("bt-mode") || has("bt-tab") || has("bt-tab-tool") || has("bt-glass-sample")) return true;
-  // Botão só de ícone (h-7). A lista e os chips também levam bt-glass.
+  if (has("bt-folder")) return false;
+  // Chip só quando selecionado — idle é texto simples.
+  if (has("bt-chip")) return has("bt-glass-on");
+  if (has("bt-chat")) return has("bt-glass-on");
+  if (has("bt-search") || has("bt-mode") || has("bt-tab") || has("bt-tab-tool") || has("bt-glass-sample")) return true;
+  // Botão só de ícone (h-7).
   return has("bt-glass") && has("h-7");
 }
 
 export interface GlassPlateFields {
   className: string;
-  /** texto que a placa nativa redesenharia; vazio numa linha de chat */
+  /** texto que a placa nativa redesenha (vazio no chat: HTML por cima) */
   label: string;
   selected: boolean;
-  /** 1 = material da linha, sem rótulo dentro da placa */
+  /** 1 = placa atrás do WebView; texto HTML por cima do vidro */
   row: 0 | 1;
 }
 
-/** O que a página posta para uma linha. Chat = placa sem rótulo (texto na página). */
+/** O que a página posta para uma placa. Chat selecionado = row (texto por cima). */
 export function glassPlateFields(className: string, label: string): GlassPlateFields | null {
   if (!wantsNativeGlassPlate(className)) return null;
-  const classes = className.split(/\s+/).filter(Boolean);
+  const classes = className.split(/\s+/);
   const chat = classes.includes("bt-chat");
   return {
     className,
-    label,
+    label: chat ? "" : label,
     selected: classes.includes("bt-glass-on"),
     row: chat ? 1 : 0,
   };

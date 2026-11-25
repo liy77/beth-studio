@@ -83,8 +83,8 @@ export function CpuLimitButton({ conn, limit }: { conn: Connection; limit: CpuLi
       <button
         className={
           on
-            ? "flex h-6 items-center gap-1 rounded bg-status-warn/20 px-2 text-[12px] font-semibold text-status-warn hover:bg-status-warn/30"
-            : "flex h-6 w-8 items-center justify-center rounded text-text-3 hover:bg-bg-hover hover:text-text-1"
+            ? "bt-tab-tool !w-auto gap-1 px-2 font-semibold text-status-warn"
+            : "bt-tab-tool"
         }
         title={on ? "CPU dos terminais limitada. Clique para mudar ou voltar ao normal." : "Limitar a CPU dos terminais"}
         aria-label="Limitar a CPU dos terminais"
@@ -92,8 +92,8 @@ export function CpuLimitButton({ conn, limit }: { conn: Connection; limit: CpuLi
         onMouseDown={(e) => e.stopPropagation()}
         onClick={() => (open ? setOpen(false) : show())}
       >
-        <Gauge size={15} />
-        {on && <span>{chipText(limit)}</span>}
+        <Gauge size={15} strokeWidth={2} />
+        {on && <span className="text-[11px]">{chipText(limit)}</span>}
       </button>
       {open &&
         at &&
@@ -157,7 +157,20 @@ export function CpuLimitButton({ conn, limit }: { conn: Connection; limit: CpuLi
                   Voltar ao normal
                 </button>
               )}
-              <button className={BTN_ON} disabled={busy} onClick={() => run(() => setCpuLimit(conn, percent, minutes, wsl))}>
+              <button
+                className={BTN_ON}
+                disabled={busy}
+                onClick={() =>
+                  run(() =>
+                    setCpuLimit(
+                      conn,
+                      percent,
+                      minutes,
+                      typeof navigator !== "undefined" && /Mac/.test(navigator.platform) ? false : wsl,
+                    ),
+                  )
+                }
+              >
                 {on ? "Mudar limite" : "Limitar"}
               </button>
             </div>

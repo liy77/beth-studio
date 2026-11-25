@@ -3,6 +3,7 @@ import { Activity, ChevronDown, Loader2, Mic } from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import { audioConstraints, audioInputs, micLabel, micLog, resolveMic, rmsLevel, testVerdict, type MicChoice, type MicDevice } from "@/lib/mic";
 import { micErrorMessage } from "@/lib/voice";
+import { defaultMicLabel } from "@/lib/windowFrame";
 import { cn } from "@/lib/utils";
 
 /** Lista de microfones (os nomes so' aparecem depois de alguma permissao). */
@@ -34,13 +35,14 @@ interface Props {
   disabled?: boolean;
 }
 
-/** Seletor de microfone ("Padrão do Windows" + cada dispositivo) e teste com medidor. */
+/** Seletor de microfone (padrão do sistema + cada dispositivo) e teste com medidor. */
 export function MicPicker({ conn, value, onChange, withTest, disabled }: Props) {
   const { devices, refresh } = useMicDevices();
   const ins = audioInputs(devices);
   const noNames = ins.length > 0 && ins.every((d) => !d.label);
   const resolved = resolveMic(devices, value);
   const selected = value.id ? (resolved.found ? resolved.deviceId : value.id) : "";
+  const defMic = defaultMicLabel();
 
   const askNames = async () => {
     try {
@@ -66,7 +68,7 @@ export function MicPicker({ conn, value, onChange, withTest, disabled }: Props) 
             onChange({ id, label: d?.label ?? "" });
           }}
         >
-          <option value="">Padrão do Windows</option>
+          <option value="">{defMic}</option>
           {ins.map((d, i) => (
             <option key={d.deviceId} value={d.deviceId}>
               {micLabel(d, i)}
@@ -81,7 +83,9 @@ export function MicPicker({ conn, value, onChange, withTest, disabled }: Props) 
         )}
       </div>
       {value.id && !resolved.found && (
-        <div className="text-[11px] text-status-warn">O microfone salvo ({value.label || value.id}) não está conectado: será usado o padrão do Windows.</div>
+        <div className="text-[11px] text-status-warn">
+          O microfone salvo ({value.label || value.id}) não está conectado: será usado o {defMic.toLowerCase()}.
+        </div>
       )}
       {withTest && <MicTest conn={conn} deviceId={value.id ? resolved.deviceId : ""} onDone={refresh} />}
     </div>
@@ -91,13 +95,14 @@ export function MicPicker({ conn, value, onChange, withTest, disabled }: Props) 
 /**
  * O nome do microfone como lista, sem moldura (cabecalho da gravacao do
  * Falar): clicar abre a escolha na hora. `currentName` e' o nome do
- * dispositivo em uso, mostrado no "Padrao do Windows".
+ * dispositivo em uso, mostrado no padrão do sistema.
  */
 export function MicInlineSelect({ value, onChange, currentName, className }: { value: MicChoice; onChange: (c: MicChoice) => void; currentName: string; className?: string }) {
   const { devices } = useMicDevices();
   const ins = audioInputs(devices);
   const resolved = resolveMic(devices, value);
   const selected = value.id ? (resolved.found ? resolved.deviceId : value.id) : "";
+  const defMic = defaultMicLabel();
   return (
     <span className={cn("relative inline-flex min-w-0 items-center", className)}>
       <select
@@ -111,7 +116,7 @@ export function MicInlineSelect({ value, onChange, currentName, className }: { v
           onChange({ id, label: d?.label ?? "" });
         }}
       >
-        <option value="">{currentName && !value.id ? currentName : "Padrão do Windows"}</option>
+        <option value="">{currentName && !value.id ? currentName : defMic}</option>
         {ins.map((d, i) => (
           <option key={d.deviceId} value={d.deviceId}>
             {micLabel(d, i)}
