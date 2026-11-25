@@ -137,15 +137,17 @@ export function CpuLimitButton({ conn, limit }: { conn: Connection; limit: CpuLi
               ))}
             </div>
 
-            <label className="mb-3 flex items-start gap-2 text-[12px]">
-              <input type="checkbox" checked={wsl} onChange={(e) => setWsl(e.target.checked)} className="mt-0.5" />
-              <span>
-                Também nos terminais WSL
-                <span className="block text-text-3">
-                  No WSL o teto vira núcleos ({Math.max(1, Math.round((percent * limit.total) / 100))} de {limit.total}).
+            {typeof navigator !== "undefined" && !/Mac/.test(navigator.platform) && (
+              <label className="mb-3 flex items-start gap-2 text-[12px]">
+                <input type="checkbox" checked={wsl} onChange={(e) => setWsl(e.target.checked)} className="mt-0.5" />
+                <span>
+                  Também nos terminais WSL
+                  <span className="block text-text-3">
+                    No WSL o teto vira núcleos ({Math.max(1, Math.round((percent * limit.total) / 100))} de {limit.total}).
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
+            )}
 
             {(err || limit.error) && <div className="mb-2 text-[12px] text-status-err">{err || limit.error}</div>}
 

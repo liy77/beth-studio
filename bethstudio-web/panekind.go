@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -77,6 +78,27 @@ func classifyArgv(argv []string) PaneKind {
 			k.Label = "WSL · " + k.Distro
 		}
 		return k
+	case exe == "container":
+		// Apple Container (https://github.com/apple/container): exec|run …
+		k := PaneKind{Kind: "container", Label: "Container"}
+		for i := 1; i+1 < len(argv); i++ {
+			if argv[i] == "exec" || argv[i] == "run" {
+				// depois de flags (-it, --rm, --workdir X…), o próximo token sem '-' é o id/imagem
+				for j := i + 1; j < len(argv); j++ {
+					if strings.HasPrefix(argv[j], "-") {
+						if argv[j] == "--workdir" || argv[j] == "-w" || argv[j] == "--cwd" || argv[j] == "--name" {
+							j++
+						}
+						continue
+					}
+					k.Distro = argv[j]
+					k.Label = "Container · " + argv[j]
+					break
+				}
+				break
+			}
+		}
+		return k
 	case exe == "powershell.exe" || exe == "powershell":
 		return PaneKind{Kind: "powershell", Label: "PowerShell 5.1"}
 	case exe == "pwsh.exe" || exe == "pwsh":
@@ -115,6 +137,20 @@ func classifyShellID(id string) PaneKind {
 			k.Label = "WSL · " + k.Distro
 		}
 		return k
+	case strings.HasPrefix(id, "container"):
+		k := PaneKind{Kind: "container", Label: "Container"}
+		rest := strings.TrimPrefix(id, "container.")
+		if rest != "" && rest != "help" && rest != id {
+			name := rest
+			if i := strings.IndexByte(name, '.'); i >= 0 {
+				name = name[i+1:]
+			}
+			if name != "" {
+				k.Distro = name
+				k.Label = "Container · " + name
+			}
+		}
+		return k
 	case strings.HasPrefix(id, "gitbash"):
 		return PaneKind{Kind: "gitbash", Label: "Git Bash"}
 	case strings.HasPrefix(id, "mobaxterm"):
@@ -129,7 +165,8 @@ func classifyShellID(id string) PaneKind {
 func classifyHeuristic(title, cwd string) PaneKind {
 	t := strings.ToLower(title)
 	switch {
-	case cwdLooksWSL(cwd):
+	case runtime.GOOS == "windows" && cwdLooksWSL(cwd):
+		// No Mac um cwd POSIX (/Users/…) não é WSL.
 		return PaneKind{Kind: "wsl", Label: "WSL"}
 	case strings.Contains(t, "pwsh.exe"):
 		return PaneKind{Kind: "pwsh", Label: "PowerShell 7"}

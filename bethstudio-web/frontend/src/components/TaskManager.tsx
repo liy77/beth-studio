@@ -130,7 +130,7 @@ export function TaskManager({ conn, onClose, onGoToPane }: { conn: Connection; o
               <SystemSection s={snap} />
               <BethStudioSection s={snap} />
               <TerminalsSection s={snap} onGoToPane={onGoToPane} />
-              <WSLSection s={snap} />
+              {!/Mac/.test(navigator.platform) && <WSLSection s={snap} />}
             </>
           )}
         </div>

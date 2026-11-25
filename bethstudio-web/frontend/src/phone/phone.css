@@ -818,6 +818,8 @@ button:disabled {
   font-size: 16px;
   line-height: 1.35;
   outline: none;
+  /* caret com a cor do texto — em alguns WebViews some com currentColor fraco */
+  caret-color: var(--ink);
 }
 
 .p-round {

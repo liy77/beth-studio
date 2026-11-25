@@ -104,7 +104,7 @@ export function isShellExeTitle(title: string): boolean {
 /** Nome mostrado na aba e na barra lateral. A ferramenta vence o título
  * do shell (`brian`), para os dois lugares dizerem a mesma coisa. */
 export function paneLabel(p: PaneInfo): string {
-  const id = paneIdentity({ title: p.title, kind_label: p.kind_label, tool: p.tool }, "");
+  const id = paneIdentity({ title: p.title, kind_label: p.kind_label, tool: p.tool, agent: p.agent_name }, "");
   if (id.tool) return id.name;
   // SSH: preferir user@host:port (kind_label / ssh_host) — o titulo do
   // processo Windows às vezes vira "bethstudio-tool.exe" / ".old".

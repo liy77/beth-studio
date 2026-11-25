@@ -1,14 +1,37 @@
-// Tipos de terminal (WSL, PowerShell, cmd...) para filtro e agrupamento.
+// Tipos de terminal (WSL, Container, PowerShell, cmd...) para filtro e agrupamento.
 // O Go manda kind/kind_label/distro/agent em cada pane da lista
 // (panekind.go). Funcoes puras testadas em tests/kinds.test.ts.
 
 import type { PaneInfo } from "./types";
 
+function isMacPlatform(): boolean {
+  return typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+}
+
 /** Grupos da barra lateral (pwsh entra em PowerShell; mobaxterm em Outros). */
-export type KindGroup = "wsl" | "powershell" | "cmd" | "gitbash" | "ssh" | "serial" | "other" | "unknown";
+export type KindGroup =
+  | "wsl"
+  | "container"
+  | "powershell"
+  | "cmd"
+  | "gitbash"
+  | "ssh"
+  | "serial"
+  | "other"
+  | "unknown";
 
 /** Ordem padrao dos grupos (configuravel em Configuracoes -> Barra lateral). */
-export const KIND_ORDER: KindGroup[] = ["wsl", "powershell", "cmd", "gitbash", "ssh", "serial", "other", "unknown"];
+export const KIND_ORDER: KindGroup[] = [
+  "wsl",
+  "container",
+  "powershell",
+  "cmd",
+  "gitbash",
+  "ssh",
+  "serial",
+  "other",
+  "unknown",
+];
 
 /** Move o item i para j (ordem dos grupos). */
 export function moveItem<T>(list: T[], i: number, j: number): T[] {
@@ -26,8 +49,19 @@ export function kindOrder(custom?: string[] | null): KindGroup[] {
   return [...new Set([...valid, ...KIND_ORDER.filter((k) => !seen.has(k))])];
 }
 
+/**
+ * No Mac não há WSL: some o grupo WSL. No Windows some Container
+ * (Apple Container é só macOS).
+ */
+export function visibleKindOrder(custom?: string[] | null): KindGroup[] {
+  const base = kindOrder(custom);
+  if (isMacPlatform()) return base.filter((k) => k !== "wsl");
+  return base.filter((k) => k !== "container");
+}
+
 export const KIND_LABEL: Record<KindGroup, string> = {
   wsl: "WSL",
+  container: "Container",
   powershell: "PowerShell",
   cmd: "cmd",
   gitbash: "Git Bash",
@@ -44,6 +78,8 @@ export function kindGroup(p: Pick<PaneInfo, "kind">): KindGroup {
   switch (p.kind) {
     case "wsl":
       return "wsl";
+    case "container":
+      return "container";
     case "powershell":
     case "pwsh":
       return "powershell";
@@ -82,7 +118,18 @@ export function passesKindFilter(p: PaneInfo, selected: string[]): boolean {
 }
 
 export function countKinds(panes: PaneInfo[]): Record<KindGroup | "agent", number> {
-  const c = { wsl: 0, powershell: 0, cmd: 0, gitbash: 0, ssh: 0, serial: 0, other: 0, unknown: 0, agent: 0 };
+  const c = {
+    wsl: 0,
+    container: 0,
+    powershell: 0,
+    cmd: 0,
+    gitbash: 0,
+    ssh: 0,
+    serial: 0,
+    other: 0,
+    unknown: 0,
+    agent: 0,
+  };
   for (const p of panes) {
     c[kindGroup(p)]++;
     if (p.agent || p.agent_name) c.agent++;
@@ -95,18 +142,20 @@ export interface KindSection {
   group: KindGroup;
   label: string;
   panes: PaneInfo[];
-  /** so' WSL: subgrupos por distro */
+  /** WSL / Container / SSH: subgrupos por distro, nome do container ou host */
   distros?: { distro: string; panes: PaneInfo[] }[];
 }
 
-/** Agrupa por tipo (ordem fixa) e, dentro de WSL, por distro. */
+/** Agrupa por tipo (ordem fixa) e, dentro de WSL/Container/SSH, por subgrupo.
+ *  Usa a ordem completa (não esconde WSL no Mac aqui): o filtro de plataforma
+ *  é só nos chips / Configurações via visibleKindOrder. */
 export function groupByKind(panes: PaneInfo[], order?: string[] | null): KindSection[] {
   const out: KindSection[] = [];
   for (const g of kindOrder(order)) {
     const ps = panes.filter((p) => kindGroup(p) === g).sort((a, b) => a.pane_id - b.pane_id);
     if (ps.length === 0) continue;
     const sec: KindSection = { key: g, group: g, label: KIND_LABEL[g], panes: ps };
-    if (g === "wsl") {
+    if (g === "wsl" || g === "container") {
       const by = new Map<string, PaneInfo[]>();
       for (const p of ps) {
         const d = p.distro || "padrão";

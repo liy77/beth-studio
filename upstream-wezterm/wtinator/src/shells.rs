@@ -5,8 +5,8 @@
 
 /// One shell entry for the "New tab" picker.
 pub struct ShellEntry {
-    pub id: &'static str,
-    pub label: &'static str,
+    pub id: String,
+    pub label: String,
     /// Full command line: program + args. Stored as `Vec<String>` because
     /// `config::keyassignment::SpawnCommand::args` takes `Vec<String>`.
     pub args: Vec<String>,
@@ -21,6 +21,9 @@ pub struct ShellEntry {
 ///   - `wsl.exe` (WSL2 — default distro)
 ///   - `wsl.exe -d <DistroName>` (named WSL distros)
 ///   - Git Bash (if installed)
+///
+/// On macOS: login/zsh/bash, then [Apple Container](https://github.com/apple/container)
+/// entries (running containers via `container exec`, or images via `container run`).
 pub fn default_shells() -> Vec<ShellEntry> {
     #[cfg(windows)]
     let mut shells = windows_shells();
@@ -37,28 +40,28 @@ pub fn default_shells() -> Vec<ShellEntry> {
 fn windows_shells() -> Vec<ShellEntry> {
     let mut shells = vec![
         ShellEntry {
-            id: "cmd",
-            label: "cmd.exe",
+            id: "cmd".into(),
+            label: "cmd.exe".into(),
             args: vec!["cmd.exe".to_string()],
         },
         ShellEntry {
-            id: "powershell",
-            label: "PowerShell 5.1",
+            id: "powershell".into(),
+            label: "PowerShell 5.1".into(),
             args: vec!["powershell.exe".to_string(), "-NoLogo".to_string()],
         },
         ShellEntry {
-            id: "pwsh",
-            label: "PowerShell 7+",
+            id: "pwsh".into(),
+            label: "PowerShell 7+".into(),
             args: vec!["pwsh.exe".to_string(), "-NoLogo".to_string()],
         },
         ShellEntry {
-            id: "wsl.default",
-            label: "WSL (default distro)",
+            id: "wsl.default".into(),
+            label: "WSL (default distro)".into(),
             args: vec!["wsl.exe".to_string()],
         },
         ShellEntry {
-            id: "wsl.ubuntu",
-            label: "WSL — Ubuntu",
+            id: "wsl.ubuntu".into(),
+            label: "WSL — Ubuntu".into(),
             args: vec![
                 "wsl.exe".to_string(),
                 "-d".to_string(),
@@ -66,8 +69,8 @@ fn windows_shells() -> Vec<ShellEntry> {
             ],
         },
         ShellEntry {
-            id: "gitbash",
-            label: "Git Bash",
+            id: "gitbash".into(),
+            label: "Git Bash".into(),
             args: vec![
                 "C:\\Program Files\\Git\\bin\\bash.exe".to_string(),
                 "--login".to_string(),
@@ -77,8 +80,8 @@ fn windows_shells() -> Vec<ShellEntry> {
 
     if let Some(path) = moba_local_bash_path() {
         shells.push(ShellEntry {
-            id: "mobaxterm.local",
-            label: "MobaXterm local bash",
+            id: "mobaxterm.local".into(),
+            label: "MobaXterm local bash".into(),
             args: vec![path, "--login".to_string()],
         });
     }
@@ -86,7 +89,8 @@ fn windows_shells() -> Vec<ShellEntry> {
 }
 
 /// Shells offered on macOS and Linux: the login shell, then zsh and bash
-/// when they exist and are not already the login shell.
+/// when they exist and are not already the login shell. On macOS, Apple
+/// Container (https://github.com/apple/container) replaces WSL.
 #[cfg(not(windows))]
 fn unix_shells() -> Vec<ShellEntry> {
     let mut shells = Vec::new();
@@ -102,8 +106,8 @@ fn unix_shells() -> Vec<ShellEntry> {
             .to_string();
         seen.insert(path.clone());
         shells.push(ShellEntry {
-            id: "login",
-            label: Box::leak(label.into_boxed_str()),
+            id: "login".into(),
+            label,
             // Interactive, not a login shell. On macOS `zsh -l` sources
             // /etc/zprofile, which runs path_helper and holds the prompt
             // for more than a second. ~/.zshrc still runs.
@@ -119,19 +123,153 @@ fn unix_shells() -> Vec<ShellEntry> {
         }
         seen.insert(path.to_string());
         shells.push(ShellEntry {
-            id,
-            label,
+            id: id.into(),
+            label: label.into(),
             args: vec![path.to_string()],
         });
     }
     if shells.is_empty() {
         shells.push(ShellEntry {
-            id: "sh",
-            label: "sh",
+            id: "sh".into(),
+            label: "sh".into(),
             args: vec!["/bin/sh".to_string()],
         });
     }
+    #[cfg(target_os = "macos")]
+    shells.extend(apple_container_shells());
     shells
+}
+
+/// Apple Container CLI shells (macOS only). Running containers first
+/// (`container exec -it`), else images (`container run --rm -it`), else a
+/// helper shell that explains how to start the service.
+#[cfg(target_os = "macos")]
+fn apple_container_shells() -> Vec<ShellEntry> {
+    let Some(bin) = container_bin() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    if let Ok(ids) = container_lines(&bin, &["list", "-q"]) {
+        for id in ids {
+            if id.is_empty() || !seen.insert(id.clone()) {
+                continue;
+            }
+            let safe = shell_id_token(&id);
+            out.push(ShellEntry {
+                id: format!("container.exec.{safe}"),
+                label: format!("Container · {id}"),
+                args: vec![
+                    bin.clone(),
+                    "exec".into(),
+                    "-it".into(),
+                    id,
+                    "/bin/sh".into(),
+                ],
+            });
+        }
+    }
+    if out.is_empty() {
+        if let Ok(images) = container_lines(&bin, &["image", "list", "-q"]) {
+            for img in images.into_iter().take(16) {
+                if img.is_empty() || !seen.insert(img.clone()) {
+                    continue;
+                }
+                let safe = shell_id_token(&img);
+                out.push(ShellEntry {
+                    id: format!("container.run.{safe}"),
+                    label: format!("Container · {img}"),
+                    args: vec![
+                        bin.clone(),
+                        "run".into(),
+                        "--rm".into(),
+                        "-it".into(),
+                        img,
+                        "/bin/sh".into(),
+                    ],
+                });
+            }
+        }
+    }
+    if out.is_empty() {
+        out.push(ShellEntry {
+            id: "container.help".into(),
+            label: "Apple Container".into(),
+            args: vec![
+                "/bin/zsh".into(),
+                "-lc".into(),
+                format!(
+                    "echo 'Apple Container (https://github.com/apple/container)'; \
+                     '{bin}' system status || true; \
+                     echo; \
+                     echo 'Se o serviço estiver parado: {bin} system start'; \
+                     echo 'Depois: {bin} run -it ubuntu:latest /bin/bash'; \
+                     echo; \
+                     exec /bin/zsh"
+                ),
+            ],
+        });
+    }
+    out
+}
+
+#[cfg(target_os = "macos")]
+fn container_bin() -> Option<String> {
+    for p in [
+        "/usr/local/bin/container",
+        "/opt/homebrew/bin/container",
+        "/Applications/Container.app/Contents/MacOS/container",
+    ] {
+        if std::path::Path::new(p).is_file() {
+            return Some(p.to_string());
+        }
+    }
+    let out = std::process::Command::new("/usr/bin/which")
+        .arg("container")
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if path.is_empty() || !std::path::Path::new(&path).is_file() {
+        return None;
+    }
+    Some(path)
+}
+
+#[cfg(target_os = "macos")]
+fn container_lines(bin: &str, args: &[&str]) -> Result<Vec<String>, ()> {
+    let out = std::process::Command::new(bin)
+        .args(args)
+        .output()
+        .map_err(|_| ())?;
+    if !out.status.success() {
+        return Err(());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect())
+}
+
+/// Shell ids only allow `[a-z0-9._-]` (shells.json / bridge).
+fn shell_id_token(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        if ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '.' || ch == '_' || ch == '-' {
+            out.push(ch);
+        } else if ch.is_ascii_uppercase() {
+            out.push(ch.to_ascii_lowercase());
+        } else {
+            out.push('-');
+        }
+    }
+    while out.contains("--") {
+        out = out.replace("--", "-");
+    }
+    out.trim_matches('-').to_string()
 }
 
 #[cfg(windows)]
@@ -165,10 +303,9 @@ struct CustomShell {
 /// ```
 ///
 /// Invalid entries (empty args, id outside `[a-z0-9._-]`, duplicate id)
-/// are skipped. The strings are leaked once so `ShellEntry` can keep its
-/// `&'static str` fields.
+/// are skipped.
 fn custom_shells() -> Vec<ShellEntry> {
-    static CUSTOM: std::sync::OnceLock<Vec<(&'static str, &'static str, Vec<String>)>> =
+    static CUSTOM: std::sync::OnceLock<Vec<(String, String, Vec<String>)>> =
         std::sync::OnceLock::new();
     CUSTOM
         .get_or_init(|| {
@@ -180,17 +317,13 @@ fn custom_shells() -> Vec<ShellEntry> {
             };
             parse_custom_shells(&text)
                 .into_iter()
-                .map(|c| {
-                    let id: &'static str = Box::leak(c.id.into_boxed_str());
-                    let label: &'static str = Box::leak(c.label.into_boxed_str());
-                    (id, label, c.args)
-                })
+                .map(|c| (c.id, c.label, c.args))
                 .collect()
         })
         .iter()
         .map(|(id, label, args)| ShellEntry {
-            id,
-            label,
+            id: id.clone(),
+            label: label.clone(),
             args: args.clone(),
         })
         .collect()
@@ -238,5 +371,11 @@ mod tests {
         let ids: Vec<&str> = parsed.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(ids, vec!["my.tool"]);
         assert!(parse_custom_shells("not json").is_empty());
+    }
+
+    #[test]
+    fn shell_id_token_sanitizes() {
+        assert_eq!(shell_id_token("ubuntu:latest"), "ubuntu-latest");
+        assert_eq!(shell_id_token("My_Box.1"), "my_box.1");
     }
 }

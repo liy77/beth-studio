@@ -1,5 +1,5 @@
 import { useMemo, useState, type DragEvent as RDragEvent, type ReactNode } from "react";
-import { AppWindow, Bot, ChevronDown, ChevronRight, Columns2, Folder, FolderTree, Inbox, LayoutGrid, PanelLeftClose, Shapes, Trash2 } from "lucide-react";
+import { AppWindow, Bot, ChevronDown, ChevronRight, Columns2, Folder, FolderTree, Inbox, LayoutGrid, PanelLeftClose, Shapes, Trash2, X } from "lucide-react";
 import type { PaneInfo } from "@/lib/types";
 import { groupPanes, paneLabel } from "@/lib/panes";
 import { groupByFolder, splitCwd } from "@/lib/folders";
@@ -13,7 +13,7 @@ import { AgentBadge, KindIcon } from "./KindIcon";
 import { ToolIcon } from "./ToolIcon";
 import { paneIdentity } from "@/lib/paneIdentity";
 import { isMacTitlebar } from "@/lib/windowFrame";
-import { AGENT_FILTER, KIND_LABEL, countKinds, groupByKind, kindOrder, passesKindFilter } from "@/lib/kinds";
+import { AGENT_FILTER, KIND_LABEL, countKinds, groupByKind, passesKindFilter, visibleKindOrder } from "@/lib/kinds";
 import type { SearchResult } from "@/lib/search";
 import { AgentDot } from "./AgentDot";
 import { reasonLabel, waitingList, type AgentInfo, type AgentState } from "@/lib/agents";
@@ -30,6 +30,8 @@ interface Props {
   focusedPane: number | null;
   onOpen: (pane: number) => void;
   onOpenBeside: (pane: number) => void;
+  /** Tira o terminal da aba (ele continua rodando em Não organizados). */
+  onClosePane?: (pane: number) => void;
   onActivateTab: (tabId: string) => void;
   onDropToTab: (pane: number, tabId: string) => void;
   onRemoveGone: (tabId: string, path: Path) => void;
@@ -244,6 +246,7 @@ function WebTree(p: Props & { panes: PaneInfo[]; hideGone?: boolean }) {
                     focused={p.focusedPane === leaf.pane && t.id === p.layout.active}
                     open
                     onClick={() => p.onOpen(leaf.pane)}
+                    onClose={p.onClosePane ? () => p.onClosePane!(leaf.pane) : undefined}
                     onMenu={(x, y) => p.onMenu(leaf.pane, x, y)}
                   />
                 );
@@ -345,6 +348,7 @@ function HostTree(p: Props & { panes: PaneInfo[] }) {
                       badge={tabName}
                       onClick={() => p.onOpen(x.pane_id)}
                       onBeside={where ? undefined : () => p.onOpenBeside(x.pane_id)}
+                      onClose={where && p.onClosePane ? () => p.onClosePane!(x.pane_id) : undefined}
                       onMenu={(cx, cy) => p.onMenu(x.pane_id, cx, cy)}
                     />
                   );
@@ -374,6 +378,7 @@ function PaneItem(p: {
   badge?: string;
   onClick: () => void;
   onBeside?: () => void;
+  onClose?: () => void;
   onMenu: (x: number, y: number) => void;
   /** "Por pasta": a pasta ja' esta' no cabecalho do grupo */
   hideCwd?: boolean;
@@ -383,7 +388,7 @@ function PaneItem(p: {
   stored?: string;
 }) {
   const x = p.info;
-  const id = paneIdentity({ title: x.title, kind_label: x.kind_label, tool: x.tool, screen: p.screen, stored: p.stored }, paneLabel(x));
+  const id = paneIdentity({ title: x.title, kind_label: x.kind_label, tool: x.tool, agent: x.agent_name, screen: p.screen, stored: p.stored }, paneLabel(x));
   const sidebarName = id.tool === "codex" ? "Codex" : id.name;
   const cwd = p.hideCwd ? { parent: "", name: "" } : splitCwd(x.cwd);
   return (
@@ -430,6 +435,15 @@ function PaneItem(p: {
         {p.onBeside && (
           <IconButton label="Abrir ao lado do terminal em foco" onClick={p.onBeside} className="h-6 w-6 opacity-60 group-hover:opacity-100">
             <Columns2 size={14} />
+          </IconButton>
+        )}
+        {p.onClose && (
+          <IconButton
+            label="Tirar da aba — o terminal continua em Não organizados"
+            onClick={p.onClose}
+            className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            <X size={14} />
           </IconButton>
         )}
       </div>
@@ -490,20 +504,20 @@ function KindChips({ panes, selected, onChange, order }: { panes: PaneInfo[]; se
       key={key}
       className={cn(
         "bt-chip flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px]",
-        selected.includes(key) ? "bt-glass-on text-white" : "text-text-2 hover:text-text-1",
+        selected.includes(key) ? "bt-glass-on text-accent-text font-semibold" : "text-text-2 hover:text-text-1",
       )}
       onClick={() => toggle(key)}
       title={title}
     >
       {label}
-      <span className={cn("text-[10px]", selected.includes(key) ? "text-white/80" : "text-text-3")}>{n}</span>
+      <span className={cn("text-[10px]", selected.includes(key) ? "text-accent-text/80" : "text-text-3")}>{n}</span>
     </button>
   );
-  const kinds = kindOrder(order);
+  const kinds = visibleKindOrder(order);
   return (
     <div className="flex flex-wrap gap-1">
       <button
-        className={cn("bt-chip rounded-lg px-2 py-0.5 text-[11px]", selected.length === 0 ? "bt-glass-on text-white" : "text-text-2 hover:text-text-1")}
+        className={cn("bt-chip rounded-lg px-2 py-0.5 text-[11px]", selected.length === 0 ? "bt-glass-on text-accent-text font-semibold" : "text-text-2 hover:text-text-1")}
         onClick={() => onChange([])}
         title="Mostrar todos os tipos"
       >
@@ -544,7 +558,7 @@ function FolderTreeView(p: Props & { panes: PaneInfo[] }) {
       {groups.map((g) => (
         <div key={g.key}>
           <button
-            className="bt-folder flex w-full min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[13px] font-semibold text-text-1 hover:bg-bg-hover"
+            className="bt-folder flex w-full min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[13px] font-semibold text-text-1 hover:text-accent-text"
             onClick={() => toggle(g.key)}
             title={`${g.path || "Terminais sem pasta conhecida"}\n${closed[g.key] ? "Mostrar o grupo" : "Recolher o grupo"}`}
           >
@@ -577,6 +591,7 @@ function LoosePane({ p, x, hideCwd }: { p: Props; x: PaneInfo; hideCwd?: boolean
       badge={tabName}
       onClick={() => p.onOpen(x.pane_id)}
       onBeside={where ? undefined : () => p.onOpenBeside(x.pane_id)}
+      onClose={where && p.onClosePane ? () => p.onClosePane!(x.pane_id) : undefined}
       onMenu={(cx, cy) => p.onMenu(x.pane_id, cx, cy)}
       hideCwd={hideCwd}
     />

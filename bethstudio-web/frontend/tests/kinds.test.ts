@@ -29,7 +29,7 @@ test("filtro por tipo: OU entre tipos, E com 'agentes', vazio = todos", () => {
 
 test("contagem por tipo", () => {
   const c = countKinds(panes);
-  assert.deepEqual(c, { wsl: 2, powershell: 2, cmd: 1, gitbash: 0, ssh: 0, serial: 0, other: 1, unknown: 1, agent: 2 });
+  assert.deepEqual(c, { wsl: 2, container: 0, powershell: 2, cmd: 1, gitbash: 0, ssh: 0, serial: 0, other: 1, unknown: 1, agent: 2 });
 });
 
 test("agrupar por tipo e, em WSL, por distro", () => {
@@ -74,8 +74,8 @@ test("filtro combinado com a busca", () => {
 
 test("SSH por host e ordem configurável dos grupos", async () => {
   const { kindOrder, moveItem, KIND_ORDER } = await import("../src/lib/kinds.ts");
-  assert.deepEqual(KIND_ORDER, ["wsl", "powershell", "cmd", "gitbash", "ssh", "serial", "other", "unknown"]);
-  assert.deepEqual(kindOrder(["ssh", "xyz", "wsl"]), ["ssh", "wsl", "powershell", "cmd", "gitbash", "serial", "other", "unknown"]);
+  assert.deepEqual(KIND_ORDER, ["wsl", "container", "powershell", "cmd", "gitbash", "ssh", "serial", "other", "unknown"]);
+  assert.deepEqual(kindOrder(["ssh", "xyz", "wsl"]), ["ssh", "wsl", "container", "powershell", "cmd", "gitbash", "serial", "other", "unknown"]);
   assert.deepEqual(moveItem(["a", "b", "c"], 2, 0), ["c", "a", "b"]);
   assert.deepEqual(moveItem(["a", "b"], 0, -1), ["a", "b"]);
   const panes = [
@@ -111,7 +111,7 @@ test("SSH por host e ordem configurável dos grupos", async () => {
 test("kind novo (bash, zsh, fish, sh ou outro) cai em Outros; unknown e vazio continuam Desconhecido", async () => {
   const { kindGroup, KIND_LABEL, KIND_ORDER } = await import("../src/lib/kinds.ts");
   // Quebra se um shell de outra plataforma voltar para "unknown" ou ganhar grupo novo em KIND_ORDER.
-  assert.deepEqual(KIND_ORDER, ["wsl", "powershell", "cmd", "gitbash", "ssh", "serial", "other", "unknown"]);
+  assert.deepEqual(KIND_ORDER, ["wsl", "container", "powershell", "cmd", "gitbash", "ssh", "serial", "other", "unknown"]);
   for (const kind of ["bash", "zsh", "fish", "sh", "nu"]) {
     assert.equal(kindGroup(P(1, kind, { kind_label: kind })), "other");
   }

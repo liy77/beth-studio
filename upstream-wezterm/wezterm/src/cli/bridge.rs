@@ -305,8 +305,8 @@ enum Request {
 
 #[derive(Serialize)]
 struct ShellInfo {
-    id: &'static str,
-    label: &'static str,
+    id: String,
+    label: String,
 }
 
 #[derive(Serialize)]
@@ -1150,13 +1150,71 @@ mod tool_tests {
     }
 }
 
-/// Patch 0197: how a shell is started for the Studio.
+/// Patch 0197 + 0207: how a shell is started for the Studio.
 ///
 /// For `wsl.exe` shells a Linux folder (`/home/x`, `/mnt/d/y`, `~`) becomes
 /// `--cd <folder>` and is NOT used as the Windows working directory (that
 /// directory does not exist, the host dropped it, and the terminal opened in
-/// the wrong place), and a requested distro becomes `-d <distro>`. Any other
-/// shell keeps its argv and gets `cwd` as the working directory.
+/// the wrong place), and a requested distro becomes `-d <distro>`.
+///
+/// For Apple `container exec|run` a Linux folder becomes `--workdir`.
+/// Any other shell keeps its argv and gets `cwd` as the working directory.
+fn container_or_wsl_spawn_args(
+    args: &[String],
+    distro: Option<&str>,
+    cwd: Option<&str>,
+) -> anyhow::Result<(Vec<String>, Option<String>)> {
+    let cwd = cwd.filter(|c| !c.is_empty());
+    if is_apple_container_argv(args) {
+        return apple_container_spawn_args(args, cwd);
+    }
+    wsl_spawn_args(args, distro, cwd)
+}
+
+fn is_apple_container_argv(args: &[String]) -> bool {
+    args.first()
+        .map(|a| {
+            let a = a.replace('\\', "/").to_ascii_lowercase();
+            a == "container" || a.ends_with("/container")
+        })
+        .unwrap_or(false)
+        && args
+            .get(1)
+            .map(|a| a == "exec" || a == "run")
+            .unwrap_or(false)
+}
+
+fn apple_container_spawn_args(
+    args: &[String],
+    cwd: Option<&str>,
+) -> anyhow::Result<(Vec<String>, Option<String>)> {
+    let linux_cwd = cwd.filter(|c| c.starts_with('/') || *c == "~");
+    if linux_cwd.is_none() {
+        return Ok((args.to_vec(), cwd.map(String::from)));
+    }
+    let cwd = linux_cwd.unwrap();
+    // Drop a previous --workdir / -w and inject ours after exec|run flags.
+    let mut out = Vec::with_capacity(args.len() + 2);
+    let mut it = args.iter();
+    out.push(it.next().cloned().unwrap_or_default()); // container
+    out.push(it.next().cloned().unwrap_or_default()); // exec|run
+    while let Some(a) = it.next() {
+        if a == "--workdir" || a == "-w" || a == "--cwd" {
+            it.next();
+            continue;
+        }
+        out.push(a.clone());
+    }
+    // Insert after the subcommand (and keep -it/--rm before workdir).
+    let mut insert_at = 2;
+    while insert_at < out.len() && out[insert_at].starts_with('-') {
+        insert_at += 1;
+    }
+    out.insert(insert_at, "--workdir".into());
+    out.insert(insert_at + 1, cwd.to_string());
+    Ok((out, None))
+}
+
 fn wsl_spawn_args(
     args: &[String],
     distro: Option<&str>,
@@ -1212,7 +1270,7 @@ fn wsl_spawn_args(
 
 #[cfg(test)]
 mod wsl_spawn_tests {
-    use super::wsl_spawn_args;
+    use super::{apple_container_spawn_args, container_or_wsl_spawn_args, wsl_spawn_args};
 
     fn v(a: &[&str]) -> Vec<String> {
         a.iter().map(|s| s.to_string()).collect()
@@ -1223,6 +1281,48 @@ mod wsl_spawn_tests {
         let (a, d) = wsl_spawn_args(&v(&["pwsh.exe", "-NoLogo"]), Some("Debian"), Some("C:\\work")).unwrap();
         assert_eq!(a, v(&["pwsh.exe", "-NoLogo"]));
         assert_eq!(d.as_deref(), Some("C:\\work"));
+    }
+
+    #[test]
+    fn apple_container_linux_cwd_becomes_workdir() {
+        let (a, d) = apple_container_spawn_args(
+            &v(&["/usr/local/bin/container", "exec", "-it", "web", "/bin/sh"]),
+            Some("/content"),
+        )
+        .unwrap();
+        assert_eq!(
+            a,
+            v(&[
+                "/usr/local/bin/container",
+                "exec",
+                "-it",
+                "--workdir",
+                "/content",
+                "web",
+                "/bin/sh"
+            ])
+        );
+        assert!(d.is_none());
+        let (a2, d2) = container_or_wsl_spawn_args(
+            &v(&["container", "run", "--rm", "-it", "ubuntu:latest", "/bin/sh"]),
+            None,
+            Some("/home/u"),
+        )
+        .unwrap();
+        assert_eq!(
+            a2,
+            v(&[
+                "container",
+                "run",
+                "--rm",
+                "-it",
+                "--workdir",
+                "/home/u",
+                "ubuntu:latest",
+                "/bin/sh"
+            ])
+        );
+        assert!(d2.is_none());
     }
 
     #[test]
@@ -1293,7 +1393,7 @@ async fn spawn_shell(
         .into_iter()
         .find(|s| s.id == shell_id)
         .ok_or_else(|| anyhow::anyhow!("unknown shell id {shell_id:?}"))?;
-    let (argv, command_dir) = wsl_spawn_args(&shell.args, distro.as_deref(), cwd.as_deref())?;
+    let (argv, command_dir) = container_or_wsl_spawn_args(&shell.args, distro.as_deref(), cwd.as_deref())?;
     let config = config::configuration();
     let workspace = config
         .default_workspace

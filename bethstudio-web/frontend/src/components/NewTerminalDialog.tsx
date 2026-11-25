@@ -1,7 +1,7 @@
 import { isRemote } from "@/lib/remote";
 import { FolderBrowser } from "./FolderBrowser";
 import { useEffect, useState } from "react";
-import { AppWindow, Cable, FileText, FolderOpen, Globe, Loader2, Server, SquareTerminal, Terminal, TerminalSquare, X } from "lucide-react";
+import { AppWindow, Box, Cable, FileText, FolderOpen, Globe, Loader2, Server, SquareTerminal, Terminal, TerminalSquare, X } from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import type { PaneInfo, ShellInfo } from "@/lib/types";
 import { cwdFromPickedFolder, explorerStart, shellKind, spawnCwd, type ShellKind } from "@/lib/agents";
@@ -13,6 +13,7 @@ export const SHELL_ICON: Record<ShellKind, typeof Terminal> = {
   powershell: TerminalSquare,
   cmd: SquareTerminal,
   wsl: Terminal,
+  container: Box,
   gitbash: Terminal,
   ssh: Globe,
   log: FileText,
@@ -23,6 +24,7 @@ export const KIND_LABEL: Record<ShellKind, string> = {
   powershell: "PowerShell",
   cmd: "Prompt de comando",
   wsl: "WSL / Linux",
+  container: "Apple Container",
   gitbash: "Git Bash",
   ssh: "Remoto",
   log: "Log",
@@ -198,7 +200,11 @@ export function NewTerminalDialog({ conn, shells, focused, readOnly, onEmptyTab,
                           setCwd(e.target.value);
                           setCwdTouched(true);
                         }}
-                        placeholder={shellKind(shell.id) === "wsl" ? "/home/… ou /mnt/c/…" : "C:\\…"}
+                        placeholder={
+                          shellKind(shell.id) === "wsl" || shellKind(shell.id) === "container"
+                            ? "/home/…"
+                            : "C:\\…"
+                        }
                         className="h-8 min-w-0 flex-1 bt-field bg-bg-term px-2 font-mono text-[12px] text-text-1 outline-none"
                       />
                       <button

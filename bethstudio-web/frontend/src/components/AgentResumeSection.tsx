@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { SideBadge, stateAfter, type SideState } from "./SideStatus";
 import type { AgentResumeView, ResumeMode } from "@/lib/agentResume";
 import type { AgentProcSettings } from "@/lib/agentProcs";
+import { isMacOS } from "@/lib/windowFrame";
 
 // Configurações > Retomar sessões (agent_resume.go).
 
@@ -173,28 +174,34 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
           volta com o histórico.
         </p>
         <p>
-          Ligue o registro abaixo em cada lado onde você usa o Claude. Vale para as sessões do Claude abertas depois de ligar; no WSL, só em terminais abertos depois
-          que o host foi atualizado.
+          Ligue o registro abaixo onde você usa o Claude. Vale para as sessões do Claude abertas depois de ligar
+          {isMacOS() ? "." : "; no WSL, só em terminais abertos depois que o host foi atualizado."}
         </p>
       </div>
 
       <section className="space-y-2">
         <h3 className="text-[13px] font-semibold">1. Registrar as sessões</h3>
-        <HookCard title="Windows" state={st.windows ?? null} busy={busy === "windows"} result={results.windows ?? null} onRun={(a) => setup("windows", a)} />
-        {view.distros.length > 0 ? (
-          <HookCard title="WSL" state={st[wslKey] ?? null} busy={busy === wslKey} result={results[wslKey] ?? null} onRun={(a) => setup("wsl", a)}>
-            {view.distros.length > 1 && (
-              <select className="rounded border border-border bg-bg-panel px-2 py-1 text-[12px]" value={distro} onChange={(e) => setDistro(e.target.value)}>
-                {view.distros.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            )}
-          </HookCard>
+        {isMacOS() ? (
+          <HookCard title="macOS" state={st.windows ?? null} busy={busy === "windows"} result={results.windows ?? null} onRun={(a) => setup("windows", a)} />
         ) : (
-          <p className="text-text-3">Nenhuma distro do WSL encontrada.</p>
+          <>
+            <HookCard title="Windows" state={st.windows ?? null} busy={busy === "windows"} result={results.windows ?? null} onRun={(a) => setup("windows", a)} />
+            {view.distros.length > 0 ? (
+              <HookCard title="WSL" state={st[wslKey] ?? null} busy={busy === wslKey} result={results[wslKey] ?? null} onRun={(a) => setup("wsl", a)}>
+                {view.distros.length > 1 && (
+                  <select className="rounded border border-border bg-bg-panel px-2 py-1 text-[12px]" value={distro} onChange={(e) => setDistro(e.target.value)}>
+                    {view.distros.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </HookCard>
+            ) : (
+              <p className="text-text-3">Nenhuma distro do WSL encontrada.</p>
+            )}
+          </>
         )}
         <p className="text-[12px] text-text-3">
           Grava um hook (SessionStart e SessionEnd) no settings.json do Claude, com cópia de segurança. O hook só anota o id da sessão e o terminal; não lê a conversa.
@@ -240,9 +247,9 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
         <section className="space-y-2 border-t border-border pt-4">
           <h3 className="text-[13px] font-semibold">Processos deixados pelos agentes</h3>
           <p className="text-text-2">
-            A cada minuto o Studio procura, no Windows e nas distros do WSL que já estão rodando, os processos que um agente abriu por comando (servidor de
-            desenvolvimento, build, script) e que continuam rodando. Passado o tempo abaixo, avisa na bandeja e mostra uma faixa com <b>Encerrar</b>,{" "}
-            <b>Ignorar</b> e <b>Lembrar em 1 h</b>. Nunca encerra sozinho. Os servidores MCP do Claude ficam de fora.
+            {isMacOS()
+              ? "No Windows o Studio avisa sobre processos deixados pelos agentes (servidor de desenvolvimento, build, script). Neste Mac a lista ainda não roda."
+              : "A cada minuto o Studio procura, no Windows e nas distros do WSL que já estão rodando, os processos que um agente abriu por comando (servidor de desenvolvimento, build, script) e que continuam rodando. Passado o tempo abaixo, avisa na bandeja e mostra uma faixa com Encerrar, Ignorar e Lembrar em 1 h. Nunca encerra sozinho. Os servidores MCP do Claude ficam de fora."}
           </p>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={!procs.off} onChange={(e) => saveProcs({ ...procs, off: !e.target.checked })} />

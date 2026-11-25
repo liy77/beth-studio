@@ -53,7 +53,11 @@ export function LaunchersSection({ conn, onMessage }: { conn: Connection; onMess
 
   if (!view) return <div className="px-5 py-4 text-[13px] text-text-2">{err ?? "Carregando os atalhos…"}</div>;
   const shells = view.shells;
-  const firstShell = shells.find((s) => s.id.startsWith("wsl."))?.id ?? shells[0]?.id ?? "pwsh";
+  const firstShell =
+    shells.find((s) => s.id.startsWith("container."))?.id ??
+    shells.find((s) => s.id.startsWith("wsl."))?.id ??
+    shells[0]?.id ??
+    "login";
 
   return (
     <section className="space-y-3 px-5 py-4 text-[13px] text-text-1">
@@ -89,7 +93,11 @@ export function LaunchersSection({ conn, onMessage }: { conn: Connection; onMess
               </select>
               <input
                 className={input + " font-mono"}
-                placeholder={l.shell_id.startsWith("wsl.") ? "Pasta (ex.: /mnt/c/repo/projeto)" : "Pasta (ex.: C:\\repo\\projeto)"}
+                placeholder={
+                  l.shell_id.startsWith("wsl.") || l.shell_id.startsWith("container.")
+                    ? "Pasta (ex.: /home/…)"
+                    : "Pasta (ex.: C:\\repo\\projeto)"
+                }
                 value={l.cwd ?? ""}
                 spellCheck={false}
                 onChange={(e) => change(i, { cwd: e.target.value })}

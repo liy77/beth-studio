@@ -16,7 +16,7 @@ export function KindIcon({
 }) {
   const g = kindGroup(pane);
   const Icon =
-    g === "wsl"
+    g === "wsl" || g === "container"
       ? Terminal
       : g === "powershell"
         ? TerminalSquare
@@ -32,7 +32,7 @@ export function KindIcon({
                   ? Box
                   : HelpCircle;
   const color =
-    g === "wsl"
+    g === "wsl" || g === "container"
       ? "text-status-ok"
       : g === "powershell"
         ? "text-accent-text"

@@ -12,7 +12,18 @@ export default defineConfig({
   plugins: [
     react(),
     {
-      // phone.html sai como index.html: "/" no dom�nio do celular e /phone/ no teste local.
+      // Limpa só dist/phone (não o dist do Studio). emptyOutDir:true em
+      // outDir aninhado já chegou a empacotar o Studio sem index.html.
+      name: "phone-clean",
+      buildStart() {
+        fs.rmSync(path.resolve(__dirname, "dist/phone"), {
+          recursive: true,
+          force: true,
+        });
+      },
+    },
+    {
+      // phone.html sai como index.html: "/" no domínio do celular e /phone/ no teste local.
       name: "phone-index",
       writeBundle(opts) {
         const dir = opts.dir ?? path.resolve(__dirname, "dist/phone");
@@ -28,7 +39,9 @@ export default defineConfig({
   },
   build: {
     outDir: "dist/phone",
-    emptyOutDir: true,
+    // false: emptyOutDir aninhado não deve tocar o dist do Studio; a limpeza
+    // de dist/phone fica no plugin phone-clean acima.
+    emptyOutDir: false,
     target: "es2020",
     sourcemap: false,
     rollupOptions: {
