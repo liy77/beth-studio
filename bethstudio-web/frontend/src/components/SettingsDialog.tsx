@@ -6,7 +6,7 @@ import { setDefault, type Catalog } from "@/lib/appearance";
 import type { UIColors } from "@/lib/uiTheme";
 import type { NotifyPrefs } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { KIND_LABEL, kindOrder, moveItem } from "@/lib/kinds";
+import { KIND_LABEL, moveItem, visibleKindOrder } from "@/lib/kinds";
 import { GeneralAppearance } from "./GeneralAppearance";
 import { ShortcutsSection } from "./ShortcutsSection";
 import { WslInitSettings } from "./WslInitSettings";
@@ -24,6 +24,7 @@ import { PonteSection } from "./PonteSection";
 import { LaunchersSection } from "./LaunchersSection";
 import { AgentResumeSection } from "./AgentResumeSection";
 import { isRemote } from "@/lib/remote";
+import { isMacOS } from "@/lib/windowFrame";
 
 export type SettingsSection = "aparencia" | "atalhos" | "terminais" | "celular" | "voz" | "provedores" | "ponte" | "retomar" | "temp" | "banco" | "uso" | "barra" | "sobre";
 
@@ -52,14 +53,14 @@ interface Props {
   onClose: () => void;
 }
 
-const NAV: { id: SettingsSection; label: string; icon: ReactNode }[] = [
+const NAV_ALL: { id: SettingsSection; label: string; icon: ReactNode; macHide?: boolean }[] = [
   { id: "aparencia", label: "Aparência", icon: <Monitor size={15} /> },
   { id: "atalhos", label: "Atalhos", icon: <Keyboard size={15} /> },
   { id: "terminais", label: "Terminais", icon: <TerminalSquare size={15} /> },
   { id: "celular", label: "Celular", icon: <Smartphone size={15} /> },
   { id: "voz", label: "Voz e IA", icon: <Mic size={15} /> },
   { id: "provedores", label: "Provedores de IA", icon: <KeyRound size={15} /> },
-  { id: "ponte", label: "Ponte de agentes", icon: <Cable size={15} /> },
+  { id: "ponte", label: "Ponte de agentes", icon: <Cable size={15} />, macHide: true },
   { id: "retomar", label: "Sessões e processos", icon: <History size={15} /> },
   { id: "temp", label: "Arquivos temporários", icon: <Eraser size={15} /> },
   { id: "banco", label: "Banco de dados", icon: <Database size={15} /> },
@@ -67,6 +68,10 @@ const NAV: { id: SettingsSection; label: string; icon: ReactNode }[] = [
   { id: "barra", label: "Barra lateral", icon: <PanelLeft size={15} /> },
   { id: "sobre", label: "Sobre", icon: <Info size={15} /> },
 ];
+
+function settingsNav() {
+  return isMacOS() ? NAV_ALL.filter((n) => !n.macHide) : NAV_ALL;
+}
 
 /** Tela unica de Configuracoes, com navegacao lateral por secoes. */
 export function SettingsDialog(p: Props) {
@@ -100,7 +105,7 @@ export function SettingsDialog(p: Props) {
         </div>
         <div className="flex min-h-0 flex-1">
           <nav className="w-48 shrink-0 space-y-0.5 border-r border-border bg-bg-panel p-2">
-            {NAV.map((n) => (
+            {settingsNav().map((n) => (
               <button
                 key={n.id}
                 className={cn(
@@ -121,7 +126,21 @@ export function SettingsDialog(p: Props) {
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <TerminalsSection conn={p.conn} settings={p.settings} onMessage={p.onMessage} />
                 <PerformanceSection conn={p.conn} onMessage={p.onMessage} />
-                {!isRemote() && <WslInitSettings conn={p.conn} onMessage={p.onMessage} />}
+                {!isRemote() && !isMacOS() && <WslInitSettings conn={p.conn} onMessage={p.onMessage} />}
+                {!isRemote() && isMacOS() && (
+                  <div className="space-y-2 border-t border-border px-5 py-4">
+                    <h3 className="text-[13px] font-semibold text-text-1">Apple Container</h3>
+                    <p className="text-[12px] text-text-2">
+                      No Mac o Studio usa{" "}
+                      <a className="underline" href="https://github.com/apple/container" target="_blank" rel="noreferrer">
+                        Apple Container
+                      </a>{" "}
+                      no lugar do WSL. Em <strong>Novo terminal</strong> aparecem os containers em execução (
+                      <code>container exec</code>) ou as imagens (<code>container run</code>). Se o serviço estiver parado:{" "}
+                      <code>container system start</code>.
+                    </p>
+                  </div>
+                )}
                 <GeneralAppearance {...common} sections={["notify"]} />
               </div>
             )}
@@ -250,7 +269,12 @@ function SidebarSection({ sidebar, save }: { sidebar: SidebarPrefs; save: (p: Pa
         <div className="grid gap-2 md:grid-cols-4">
           <Choice on={view === "web"} onClick={() => save({ view: "web" })} title="Minha organização" sub="abas do web e não organizados" />
           <Choice on={view === "host"} onClick={() => save({ view: "host" })} title="Como no Beth Studio" sub="janela → aba → terminal" />
-          <Choice on={view === "kind"} onClick={() => save({ view: "kind" })} title="Por tipo" sub="WSL, PowerShell, cmd…" />
+          <Choice
+            on={view === "kind"}
+            onClick={() => save({ view: "kind" })}
+            title="Por tipo"
+            sub={isMacOS() ? "Container, SSH…" : "WSL, PowerShell, cmd…"}
+          />
           <Choice on={view === "folder"} onClick={() => save({ view: "folder" })} title="Por pasta" sub="agrupa pela pasta atual de cada terminal" />
         </div>
       </section>
@@ -274,7 +298,7 @@ function SidebarSection({ sidebar, save }: { sidebar: SidebarPrefs; save: (p: Pa
         </label>
         <p className="mb-1 text-[12px] text-text-2">Ordem dos grupos (vale para as listas, “Por tipo” e os filtros):</p>
         <ol className="max-w-xs space-y-0.5">
-          {kindOrder(sidebar.kind_order).map((k, i, all) => (
+          {visibleKindOrder(sidebar.kind_order).map((k, i, all) => (
             <li key={k} className="flex items-center gap-1 rounded bg-bg-panel px-2 py-1 text-[12px] text-text-1">
               <span className="w-4 text-text-3">{i + 1}.</span>
               <span className="flex-1">{KIND_LABEL[k]}</span>

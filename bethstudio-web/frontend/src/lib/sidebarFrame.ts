@@ -133,7 +133,7 @@ export interface GlassPlateFields {
   row: 0 | 1;
 }
 
-/** O que a página posta para uma linha. Chat entra sem rótulo duplicado. */
+/** O que a página posta para uma linha. Chat = placa sem rótulo (texto na página). */
 export function glassPlateFields(className: string, label: string): GlassPlateFields | null {
   if (!wantsNativeGlassPlate(className)) return null;
   const classes = className.split(/\s+/).filter(Boolean);

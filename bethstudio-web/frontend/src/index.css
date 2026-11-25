@@ -382,27 +382,30 @@ html.bt-vibrancy .bt-sidebar .bt-folder.bt-glass-on {
   background-color: transparent !important;
   color: rgb(var(--bt-text-1));
 }
-/* O chat não esconde o nome e não pinta fundo. O vidro nativo é só o
-   material, atrás; o rótulo continua na página, selecionado ou não. */
+/* O chat não esconde o nome e não pinta fundo. O vidro nativo é só a
+   placa (seleção/hover); o rótulo, o ponto de status e o cwd ficam na
+   página — opacity 0 aqui sumia com o indicador de posição do texto. */
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat:hover,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on:hover,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat * {
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on:hover {
   background: transparent !important;
   background-color: transparent !important;
-  opacity: 0;
+  opacity: 1;
+  color: rgb(var(--bt-text-1));
 }
-/* Chip sem placa: o vidro nativo cortava "Todos". O fundo é o mesmo
-   material, pintado na página, e o nome fica inteiro. */
-html.bt-vibrancy .bt-sidebar .bt-chip {
-  background: rgb(255 255 255 / 0.1);
+/* Categorias (chip/pasta): só texto, sem placa. Fundo fica nos chats. */
+html.bt-vibrancy .bt-sidebar .bt-chip,
+html.bt-vibrancy .bt-sidebar .bt-chip.bt-glass-on,
+html.bt-vibrancy .bt-sidebar .bt-chip:hover {
+  background: transparent !important;
+  background-color: transparent !important;
   color: rgb(var(--bt-text-1));
   opacity: 1;
 }
 html.bt-vibrancy .bt-sidebar .bt-chip.bt-glass-on {
-  background: rgb(var(--bt-accent));
-  color: white;
+  color: rgb(var(--bt-accent-text));
+  font-weight: 600;
 }
 .bt-tip,
 .bt-tip * {
@@ -436,7 +439,7 @@ html.bt-vibrancy.bt-native-menu .bt-menu button.text-status-err {
 .bt-tip {
   z-index: 10000;
 }
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-tab:not(.bt-tab-active) *,
+html.bt-vibrancy:not(:has(.bt-preview)) .bt-tab:not(.bt-tab-active) *:not(.bt-tab-close):not(.bt-tab-close *),
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-tab-tool *,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode *,
@@ -445,6 +448,11 @@ html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7 *,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search,
 html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search * {
   opacity: 0;
+}
+/* O X de fechar fica na página, mesmo com a aba inativa virando placa nativa. */
+html.bt-vibrancy .bt-tab-close,
+html.bt-vibrancy .bt-tab-close * {
+  opacity: 1 !important;
 }
 /* Sem vibrancy a lista é conteúdo, não vidro: cada chat tem fundo e o
    selecionado se destaca. Com vibrancy a página continua desenhando a
@@ -465,19 +473,21 @@ html:not(.bt-vibrancy) .bt-sidebar .bt-chat.bt-glass-on .text-text-1,
 html:not(.bt-vibrancy) .bt-sidebar .bt-chat.bt-glass-on .text-text-3 {
   color: white;
 }
-html:not(.bt-vibrancy) .bt-sidebar .bt-glass.bt-glass-on,
-html:not(.bt-vibrancy) .bt-sidebar .bt-chip.bt-glass-on,
-html:not(.bt-vibrancy) .bt-sidebar .bt-folder.bt-glass-on {
+html:not(.bt-vibrancy) .bt-sidebar .bt-glass.bt-glass-on {
   background: rgb(var(--bt-accent));
   color: white;
 }
 html:not(.bt-vibrancy) .bt-sidebar .bt-folder,
-html:not(.bt-vibrancy) .bt-sidebar .bt-chip {
-  background: rgb(var(--bt-bg-hover));
-}
 html:not(.bt-vibrancy) .bt-sidebar .bt-folder:hover,
-html:not(.bt-vibrancy) .bt-sidebar .bt-chip:hover {
-  background: rgb(var(--bt-bg-card));
+html:not(.bt-vibrancy) .bt-sidebar .bt-folder.bt-glass-on,
+html:not(.bt-vibrancy) .bt-sidebar .bt-chip,
+html:not(.bt-vibrancy) .bt-sidebar .bt-chip:hover,
+html:not(.bt-vibrancy) .bt-sidebar .bt-chip.bt-glass-on {
+  background: transparent;
+}
+html:not(.bt-vibrancy) .bt-sidebar .bt-chip.bt-glass-on {
+  color: rgb(var(--bt-accent-text));
+  font-weight: 600;
 }
 html:not(.bt-vibrancy) .bt-sidebar button.h-7 {
   background: rgb(var(--bt-bg-hover));
@@ -534,6 +544,8 @@ html:not(.bt-vibrancy) .bt-sidebar .bt-search svg {
   box-shadow: inset 0 0 0 1px rgb(var(--bt-accent));
 }
 .bt-tab-close {
+  position: relative;
+  z-index: 8;
   display: flex;
   width: 18px;
   height: 18px;
@@ -543,13 +555,13 @@ html:not(.bt-vibrancy) .bt-sidebar .bt-search svg {
   justify-content: center;
   border-radius: 6px;
   corner-shape: superellipse(1.6);
-  color: rgb(var(--bt-text-3));
+  color: rgb(var(--bt-text-2));
 }
 .bt-tab-active .bt-tab-close {
-  color: rgb(var(--bt-text-2));
+  color: rgb(var(--bt-text-1));
 }
 .bt-tab:hover .bt-tab-close {
-  color: rgb(var(--bt-text-2));
+  color: rgb(var(--bt-text-1));
 }
 .bt-tab-close:hover {
   background: rgb(var(--bt-text-1) / 0.16);

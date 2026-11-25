@@ -62,6 +62,9 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		KindOrder   []string   `json:"kind_order"`
 		SplitByKind *bool      `json:"split_by_kind"`
 		Name        string     `json:"name"`
+		Vibrancy    *bool      `json:"vibrancy"`
+		Glass       *int       `json:"glass"`
+		GlassAlpha  *int       `json:"glass_alpha"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON inválido"})
@@ -96,9 +99,18 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		snap, err = settings.setSidebar(SidebarPrefs{Collapsed: req.Collapsed, Width: req.Width, View: req.View, Kinds: req.Kinds,
 			KindOrder: req.KindOrder, SplitByKind: req.SplitByKind})
 	case "/api/settings/ui":
-		snap, err = settings.setUITheme(UITheme{Mode: req.Mode, ThemeID: req.ThemeID})
-		// terminais sem tema proprio seguem a interface (studioTermTheme)
-		pushPalette = err == nil
+		// Vibrancy e os sliders do liquid glass vão por campos próprios;
+		// mode/theme_id continuam trocando o tema da interface.
+		switch {
+		case req.Vibrancy != nil:
+			snap, err = settings.setVibrancy(*req.Vibrancy)
+		case req.Glass != nil || req.GlassAlpha != nil:
+			snap, err = settings.setGlassTune(req.Glass, req.GlassAlpha)
+		default:
+			snap, err = settings.setUITheme(UITheme{Mode: req.Mode, ThemeID: req.ThemeID})
+			// terminais sem tema proprio seguem a interface (studioTermTheme)
+			pushPalette = err == nil
+		}
 	case "/api/settings/clear-panes":
 		var n int
 		snap, n, err = settings.clearPanes()

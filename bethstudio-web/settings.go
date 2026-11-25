@@ -26,6 +26,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -746,7 +747,9 @@ func (st *settingsStore) setUITheme(u UITheme) (SettingsSnapshot, error) {
 	}
 	return st.mutate(func() error {
 		// Vibrancy é independente do modo. Quem não manda o campo (as
-		// telas antigas) mantém o que já estava salvo.
+		// telas antigas) mantém o que já estava salvo. No Mac, a primeira
+		// gravação de tema liga o material — false era o zero-value e
+		// apagava o vidro sem o usuário pedir.
 		if st.s.UITheme != nil {
 			u.Vibrancy = st.s.UITheme.Vibrancy
 			if u.Glass == 0 {
@@ -755,6 +758,8 @@ func (st *settingsStore) setUITheme(u UITheme) (SettingsSnapshot, error) {
 			if u.GlassAlpha == 0 {
 				u.GlassAlpha = st.s.UITheme.GlassAlpha
 			}
+		} else if runtime.GOOS == "darwin" {
+			u.Vibrancy = true
 		}
 		st.s.UITheme = &u
 		return st.saveLocked()

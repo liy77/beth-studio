@@ -481,7 +481,7 @@ export function App() {
   const openAgentFolder = (paneId: number, dest: string): boolean => {
     const info = paneById.get(paneId);
     if (!info) return false;
-    const tool = paneIdentity({ title: info.title, tool: info.tool, screen: conn.lastScreenText(paneId) }, "").tool;
+    const tool = paneIdentity({ title: info.title, tool: info.tool, agent: info.agent_name, screen: conn.lastScreenText(paneId) }, "").tool;
     if (!tool) return false;
     if (agentFolderRequests.current.has(paneId)) return true;
     agentFolderRequests.current.add(paneId);
@@ -1195,7 +1195,7 @@ export function App() {
                 kindFilter={sidebarPrefs.kinds ?? []}
                 tabTitle={(t) => L.tabDisplayName(t, layout.tabs.indexOf(t), (p) => {
                   const info = paneById.get(p);
-                  return info ? paneIdentity({ title: info.title, kind_label: info.kind_label, tool: info.tool, stored: L.leaves(t.root).find((l) => l.leaf.pane === p)?.leaf.tool, screen: paneTools[p] ?? conn.lastScreenText(p) }, paneLabel(info)).name : undefined;
+                  return info ? paneIdentity({ title: info.title, kind_label: info.kind_label, tool: info.tool, agent: info.agent_name, stored: L.leaves(t.root).find((l) => l.leaf.pane === p)?.leaf.tool, screen: paneTools[p] ?? conn.lastScreenText(p) }, paneLabel(info)).name : undefined;
                 }, focus[t.id] ?? null)}
                 onKindFilter={(kinds) => saveSidebar({ kinds })}
                 kindOrder={sidebarPrefs.kind_order}
@@ -1208,6 +1208,7 @@ export function App() {
                 focusedPane={focusedPane}
                 onOpen={act.open}
                 onOpenBeside={act.openBeside}
+                onClosePane={act.unorganize}
                 onActivateTab={(id) => commit(L.setActive(layout, id))}
                 onDropToTab={(pane, id) => act.dropOnTab(pane, id)}
                 onRemoveGone={(tabId, path) => commit(L.removeLeafAt(layout, tabId, path))}
@@ -1240,7 +1241,7 @@ export function App() {
               onAdd={() => commit(L.addTab(layout, ""))}
               tabTitle={(t, i) => L.tabDisplayName(t, i, (p) => {
                 const info = paneById.get(p);
-                return info ? paneIdentity({ title: info.title, kind_label: info.kind_label, tool: info.tool, stored: L.leaves(t.root).find((l) => l.leaf.pane === p)?.leaf.tool, screen: paneTools[p] ?? conn.lastScreenText(p) }, paneLabel(info)).name : undefined;
+                return info ? paneIdentity({ title: info.title, kind_label: info.kind_label, tool: info.tool, agent: info.agent_name, stored: L.leaves(t.root).find((l) => l.leaf.pane === p)?.leaf.tool, screen: paneTools[p] ?? conn.lastScreenText(p) }, paneLabel(info)).name : undefined;
               }, focus[t.id] ?? null)}
               paneScreen={(pane) => paneTools[pane] ?? conn.lastScreenText(pane)}
               onTool={(tabId, tool) => commit(L.setTabTool(layout, tabId, tool))}
@@ -1249,7 +1250,7 @@ export function App() {
                 const pick = ls.find((l) => l.leaf.pane === focus[t.id]) ?? ls[0];
                 const info = pick ? paneById.get(pick.leaf.pane) : undefined;
                 if (!info) return { name: "" };
-                return paneIdentity({ title: info.title, kind_label: info.kind_label, tool: info.tool, stored: pick.leaf.tool, screen: paneTools[pick.leaf.pane] ?? conn.lastScreenText(pick.leaf.pane) }, paneLabel(info));
+                return paneIdentity({ title: info.title, kind_label: info.kind_label, tool: info.tool, agent: info.agent_name, stored: pick.leaf.tool, screen: paneTools[pick.leaf.pane] ?? conn.lastScreenText(pick.leaf.pane) }, paneLabel(info));
               }}
               onRename={renameTabAndPanes}
               onClose={closeTabKeep}

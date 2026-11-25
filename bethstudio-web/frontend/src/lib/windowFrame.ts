@@ -21,13 +21,18 @@ export function isFrameless(): boolean {
   return typeof window !== "undefined" && !!window.__bethstudioFrameless && !!window.chrome?.webview;
 }
 
+/** macOS (Studio nativo ou página no Safari/Chrome do Mac). */
+export function isMacOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Mac/.test(navigator.platform);
+}
+
 /**
  * macOS: a janela nativa esconde a barra de título e a página desenha as
  * abas no lugar dela. Windows continua com a barra do sistema.
  */
 export function isMacTitlebar(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /Mac/.test(navigator.platform) && !isFrameless();
+  return isMacOS() && !isFrameless();
 }
 
 /** Arrasta a janela do macOS a partir da faixa de abas. */

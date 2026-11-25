@@ -266,42 +266,11 @@ static void bethApplyGlass(NSString *body) {
 			NSString *text = r[@"t"];
 
 			if ([r[@"row"] intValue] == 1) {
-				// Vidro na frente, nome dentro. A página esconde o dela.
+				// Só a placa de vidro (seleção/hover). Nome, ponto de status e
+				// cwd ficam na página — desenhar de novo aqui cobria o texto.
+				(void)text;
 				g.style = bethGlassPower > 0.55 ? NSGlassEffectViewStyleRegular : NSGlassEffectViewStyleClear;
 				g.tintColor = bethGlassTint([r[@"on"] intValue] == 1, [r[@"hov"] intValue] == 1, NO);
-				NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, w, h)];
-				NSString *png = r[@"p"];
-				if ([png isKindOfClass:[NSString class]] && png.length > 20) {
-					NSData *iconData = [[NSData alloc] initWithBase64EncodedString:png options:NSDataBase64DecodingIgnoreUnknownCharacters];
-					NSImage *img = [[NSImage alloc] initWithData:iconData];
-					if (img != nil) {
-						NSImageView *view = [[NSImageView alloc] initWithFrame:NSMakeRect(8, (h - 16) / 2.0, 16, 16)];
-						view.image = img;
-						view.imageScaling = NSImageScaleProportionallyUpOrDown;
-						[box addSubview:view];
-					}
-				}
-				NSString *title = [text isKindOfClass:[NSString class]] ? text : @"";
-				NSString *desc = r[@"sub"];
-				NSTextField *label = [NSTextField labelWithString:title];
-				label.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
-				label.textColor = [NSColor whiteColor];
-				label.lineBreakMode = NSLineBreakByTruncatingTail;
-				[label sizeToFit];
-				BOOL hasSub = [desc isKindOfClass:[NSString class]] && desc.length > 0;
-				CGFloat titleY = hasSub ? h - label.frame.size.height - 6 : (h - label.frame.size.height) / 2.0;
-				label.frame = NSMakeRect(28, titleY, w - 36, label.frame.size.height);
-				[box addSubview:label];
-				if (hasSub) {
-					NSTextField *line2 = [NSTextField labelWithString:desc];
-					line2.font = [NSFont systemFontOfSize:11 weight:NSFontWeightRegular];
-					line2.textColor = [NSColor colorWithWhite:1 alpha:0.72];
-					line2.lineBreakMode = NSLineBreakByTruncatingTail;
-					[line2 sizeToFit];
-					line2.frame = NSMakeRect(28, 5, w - 36, line2.frame.size.height);
-					[box addSubview:line2];
-				}
-				g.contentView = box;
 				[bethGlassHost addSubview:g];
 				n++;
 				continue;
