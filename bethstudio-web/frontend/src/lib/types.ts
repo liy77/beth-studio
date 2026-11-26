@@ -48,6 +48,18 @@ export interface ListEvent {
   panes: PaneInfo[];
 }
 
+/** Imagem inline no viewport (Kitty / iTerm2), estilo Ghostty. */
+export interface ScreenImage {
+  col: number;
+  row: number;
+  cols: number;
+  rows: number;
+  z?: number;
+  mime: string;
+  /** base64 dos bytes da imagem */
+  data: string;
+}
+
 export interface ScreenEvent {
   ev: "screen";
   pane_id: number;
@@ -63,6 +75,8 @@ export interface ScreenEvent {
   scrollback?: number;
   /** Patch 0204: o programa pegou o mouse (DECSET 1000/1002/1003). */
   mouse?: boolean;
+  /** Placements Kitty/iTerm no viewport. */
+  images?: ScreenImage[];
 }
 
 export interface ErrorEvent {

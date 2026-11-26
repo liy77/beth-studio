@@ -36,9 +36,11 @@
 //!   {"ev":"list","panes":[...same items as `cli list --format json`...]}
 //!   {"ev":"screen","pane_id":N,"cols":C,"rows":R,"cursor_x":X,
 //!    "cursor_y":Y,"cursor_visible":B,"offset":K,"scrollback":S,
-//!    "text":"<escapes>"}
+//!    "text":"<escapes>","images":[{"col":C,"row":R,"cols":W,"rows":H,
+//!    "z":Z,"mime":"image/png","data":"<base64>"}]?}
 //!   `offset` is the scroll offset actually shown (clamped); `scrollback`
-//!   is how many lines exist above the live screen.
+//!   is how many lines exist above the live screen. `images` carries
+//!   Kitty/iTerm placements (Ghostty-style) for the web terminal overlay.
 //!   {"ev":"agent","pane_id":N,"waiting":B,"reason":"bell|toast|user_var",
 //!    "detail":"..."}   an agent in the pane waits for the user (patch 0175)
 //!   {"ev":"shells","shells":[{"id":"powershell","label":"PowerShell 5.1"}]}
@@ -327,6 +329,9 @@ enum Event<'a> {
         /// Patch 0204: the program asked for mouse reports.
         mouse: bool,
         text: &'a str,
+        /// Kitty / iTerm2 inline images in the viewport (Beth Studio web).
+        #[serde(skip_serializing_if = "slice_is_empty")]
+        images: &'a [ScreenImage],
     },
     /// Patch 0204: OSC 52 copy from the program in the pane.
     Clipboard {
@@ -1004,6 +1009,7 @@ impl Bridge {
                                 scrollback: screen.scrollback,
                                 mouse: screen.mouse,
                                 text: &screen.text,
+                                images: &screen.images,
                             });
                         }
                     }
@@ -1414,6 +1420,44 @@ async fn spawn_shell(
         .await
 }
 
+fn slice_is_empty<T>(s: &&[T]) -> bool {
+    s.is_empty()
+}
+
+/// One image placement in the viewport (Kitty / iTerm2), for the web UI.
+/// Same path on macOS (PTY) and Windows (ConPTY): the mux already parses
+/// the protocols; we only forward placements to the Studio page.
+#[derive(Clone, Serialize)]
+struct ScreenImage {
+    /// Column of the top-left cell (0-based, in the viewport).
+    col: usize,
+    /// Row of the top-left cell (0-based, in the viewport).
+    row: usize,
+    /// Width in cells.
+    cols: usize,
+    /// Height in cells.
+    rows: usize,
+    z: i32,
+    mime: String,
+    /// Base64 of the encoded image bytes (png/jpeg/gif/…).
+    data: String,
+    /// Content hash (hex) — for change detection without hashing the payload.
+    #[serde(skip)]
+    content_hash: [u8; 32],
+}
+
+impl Hash for ScreenImage {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.col.hash(state);
+        self.row.hash(state);
+        self.cols.hash(state);
+        self.rows.hash(state);
+        self.z.hash(state);
+        self.mime.hash(state);
+        self.content_hash.hash(state);
+    }
+}
+
 #[derive(Hash)]
 struct Screen {
     cols: usize,
@@ -1428,6 +1472,89 @@ struct Screen {
     /// Patch 0204: the program grabbed the mouse.
     mouse: bool,
     text: String,
+    images: Vec<ScreenImage>,
+}
+
+/// Cap how many inline images we ship per screen (agents can spam).
+/// Kept modest so the JSON line stays safe on Windows named pipes too.
+const SCREEN_IMAGES_MAX: usize = 8;
+/// Cap decoded payload per image (bytes before base64).
+const SCREEN_IMAGE_MAX_BYTES: usize = 900_000;
+
+fn sniff_image_mime(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        "image/png"
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        "image/jpeg"
+    } else if bytes.starts_with(b"GIF8") {
+        "image/gif"
+    } else if bytes.len() > 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else {
+        "image/png"
+    }
+}
+
+/// Returns (mime, bytes, content_hash). Works for both Unix PTY and Windows ConPTY
+/// image cells the host already decoded.
+fn image_bytes(data: &termwiz::image::ImageData) -> Option<(String, Vec<u8>, [u8; 32])> {
+    use termwiz::image::ImageDataType;
+    let hash = data.hash();
+    let guard = data.data();
+    match &*guard {
+        ImageDataType::EncodedFile(bytes) => {
+            if bytes.len() > SCREEN_IMAGE_MAX_BYTES {
+                return None;
+            }
+            Some((sniff_image_mime(bytes).to_string(), bytes.clone(), hash))
+        }
+        ImageDataType::EncodedLease(lease) => {
+            let bytes = lease.get_data().ok()?;
+            if bytes.len() > SCREEN_IMAGE_MAX_BYTES {
+                return None;
+            }
+            Some((sniff_image_mime(&bytes).to_string(), bytes, hash))
+        }
+        ImageDataType::Rgba8 {
+            data: rgba,
+            width,
+            height,
+            ..
+        } => {
+            if (*width as usize) * (*height as usize) * 4 > SCREEN_IMAGE_MAX_BYTES {
+                return None;
+            }
+            let mut png = Vec::new();
+            let enc = image::codecs::png::PngEncoder::new(&mut png);
+            use image::ImageEncoder;
+            enc.write_image(
+                rgba,
+                *width,
+                *height,
+                image::ExtendedColorType::Rgba8,
+            )
+            .ok()?;
+            Some(("image/png".to_string(), png, hash))
+        }
+        ImageDataType::AnimRgba8 { frames, width, height, .. } => {
+            // First frame only (animation would need gif/apng) — same on Win/Mac.
+            let rgba = frames.first()?;
+            if (*width as usize) * (*height as usize) * 4 > SCREEN_IMAGE_MAX_BYTES {
+                return None;
+            }
+            let mut png = Vec::new();
+            let enc = image::codecs::png::PngEncoder::new(&mut png);
+            use image::ImageEncoder;
+            enc.write_image(
+                rgba,
+                *width,
+                *height,
+                image::ExtendedColorType::Rgba8,
+            )
+            .ok()?;
+            Some(("image/png".to_string(), png, hash))
+        }
+    }
 }
 
 fn hash_of<T: Hash + ?Sized>(v: &T) -> u64 {
@@ -1459,24 +1586,104 @@ async fn screen_of(
         dims.physical_top
     };
     let offset = (dims.physical_top - top).max(0) as usize;
-    let lines = client
+    let lines_msg = client
         .get_lines(codec::GetLines {
             pane_id,
             lines: vec![top..top + rows as StableRowIndex],
         })
         .await?;
-    let lines = lines
-        .lines
-        .extract_data()
-        .0
-        .into_iter()
-        .map(|(_idx, line)| line)
-        .collect();
+    let (line_pairs, image_cells) = lines_msg.lines.extract_data();
+    let lines: Vec<_> = line_pairs.into_iter().map(|(_idx, line)| line).collect();
     let mut text = lines_to_escapes(lines)?;
     // Drop the CRLF after the last row so the client does not scroll.
     if let Some(pos) = text.rfind("\r\n") {
         text.replace_range(pos..pos + 2, "");
     }
+
+    // Group Kitty/iTerm placements → one overlay per (hash, placement).
+    let mut images = Vec::new();
+    if !image_cells.is_empty() {
+        use std::collections::BTreeMap;
+        #[derive(Default)]
+        struct Place {
+            line_idx: StableRowIndex,
+            cell_idx: usize,
+            min_row: i64,
+            max_row: i64,
+            min_col: usize,
+            max_col: usize,
+            z: i32,
+            data_hash: [u8; 32],
+        }
+        let mut places: BTreeMap<(u32, Option<u32>, [u8; 32]), Place> = BTreeMap::new();
+        for im in &image_cells {
+            let key = (
+                im.image_id.unwrap_or(0),
+                im.placement_id,
+                im.data_hash,
+            );
+            let view_row = (im.line_idx - top) as i64;
+            if view_row < 0 || view_row as usize >= rows {
+                continue;
+            }
+            let e = places.entry(key).or_insert_with(|| Place {
+                line_idx: im.line_idx,
+                cell_idx: im.cell_idx,
+                min_row: view_row,
+                max_row: view_row,
+                min_col: im.cell_idx,
+                max_col: im.cell_idx,
+                z: im.z_index,
+                data_hash: im.data_hash,
+            });
+            e.min_row = e.min_row.min(view_row);
+            e.max_row = e.max_row.max(view_row);
+            e.min_col = e.min_col.min(im.cell_idx);
+            e.max_col = e.max_col.max(im.cell_idx);
+        }
+        let mut fetched: HashMap<[u8; 32], Option<(String, String, [u8; 32])>> = HashMap::new();
+        for (_k, p) in places.into_iter().take(SCREEN_IMAGES_MAX) {
+            if !fetched.contains_key(&p.data_hash) {
+                let got = match client
+                    .get_image_cell(codec::GetImageCell {
+                        pane_id,
+                        line_idx: p.line_idx,
+                        cell_idx: p.cell_idx,
+                        data_hash: p.data_hash,
+                    })
+                    .await
+                {
+                    Ok(codec::GetImageCellResponse {
+                        data: Some(data), ..
+                    }) => image_bytes(&data).map(|(mime, bytes, hash)| {
+                        (
+                            mime,
+                            base64::Engine::encode(
+                                &base64::engine::general_purpose::STANDARD,
+                                bytes,
+                            ),
+                            hash,
+                        )
+                    }),
+                    _ => None,
+                };
+                fetched.insert(p.data_hash, got);
+            }
+            if let Some(Some((mime, b64, hash))) = fetched.get(&p.data_hash) {
+                images.push(ScreenImage {
+                    col: p.min_col,
+                    row: p.min_row.max(0) as usize,
+                    cols: (p.max_col - p.min_col + 1).max(1),
+                    rows: ((p.max_row - p.min_row + 1).max(1)) as usize,
+                    z: p.z,
+                    mime: mime.clone(),
+                    data: b64.clone(),
+                    content_hash: *hash,
+                });
+            }
+        }
+    }
+
     let cursor = info.cursor_position;
     Ok(Screen {
         cols: dims.cols,
@@ -1490,6 +1697,7 @@ async fn screen_of(
         top,
         mouse: is_mouse_grabbed(pane_id),
         text,
+        images,
     })
 }
 

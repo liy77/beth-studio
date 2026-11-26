@@ -29,7 +29,7 @@ import {
   X,
 } from "lucide-react";
 import type { Connection } from "@/lib/connection";
-import type { PaneInfo, ScreenEvent, SettingsEvent } from "@/lib/types";
+import type { PaneInfo, ScreenEvent, ScreenImage, SettingsEvent } from "@/lib/types";
 import { withVisibleCursor } from "@/lib/uiTheme";
 import { DEFAULT_TERM_THEME, colorsFor, cssFamily, effectiveFor, fontAvailable, resolveFamily, setPane, useCatalog } from "@/lib/appearance";
 
@@ -411,6 +411,9 @@ export function TerminalView({
   pendingImagesRef.current = pendingImages;
   const [toast, setToast] = useState<string | null>(null);
   const [gotScreen, setGotScreen] = useState(false);
+  /** Imagens Kitty/iTerm no viewport (overlay sobre o xterm). */
+  const [termImages, setTermImages] = useState<ScreenImage[]>([]);
+  const [cellPx, setCellPx] = useState({ w: 8, h: 17 });
   const [noFit, setNoFitState] = useState<{
     cols: number;
     rows: number;
@@ -1260,6 +1263,14 @@ export function TerminalView({
         setScroll({ offset: off, scrollback: sb, rows: ev.rows });
       }
       rawRowsRef.current = ev.text.split("\r\n");
+      setTermImages(ev.images?.length ? ev.images : []);
+      // Mede a célula atual para posicionar o overlay das imagens.
+      const scr = termElRef.current?.querySelector(".xterm-screen") as HTMLElement | null;
+      if (scr && ev.cols > 0 && ev.rows > 0) {
+        const cw = scr.offsetWidth / ev.cols;
+        const ch = scr.offsetHeight / ev.rows;
+        if (cw > 0 && ch > 0) setCellPx({ w: cw, h: ch });
+      }
       lastScreen = ev;
       latestScreen = ev;
       scheduleScreen();
@@ -1685,7 +1696,36 @@ Arraste para outra aba ou para a borda de outro terminal`
             if (el.scrollLeft !== next.scrollLeft) el.scrollLeft = next.scrollLeft;
           }}
         >
-          <div ref={termElRef} className="select-text p-1.5" />
+          <div className="relative shrink-0">
+            <div ref={termElRef} className="select-text p-1.5" />
+            {/* Kitty / iTerm2: imagens no terminal (como no Ghostty). */}
+            {termImages.length > 0 && (
+              <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden p-1.5" aria-hidden>
+                {termImages.map((im, i) => {
+                  // WebView2 (Windows) e WKWebView (Mac): data URL com mime explícito.
+                  const mime = im.mime && im.mime.startsWith("image/") ? im.mime : "image/png";
+                  if (!im.data) return null;
+                  return (
+                    <img
+                      key={`${im.row}-${im.col}-${im.cols}x${im.rows}-${i}`}
+                      src={`data:${mime};base64,${im.data}`}
+                      alt=""
+                      draggable={false}
+                      className="absolute max-w-none"
+                      style={{
+                        left: im.col * cellPx.w,
+                        top: im.row * cellPx.h,
+                        width: Math.max(1, im.cols) * cellPx.w,
+                        height: Math.max(1, im.rows) * cellPx.h,
+                        zIndex: 5 + (im.z ?? 0),
+                        objectFit: "fill",
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
         {!gotScreen && !gone && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-text-2">Carregando a tela do terminal…</div>
