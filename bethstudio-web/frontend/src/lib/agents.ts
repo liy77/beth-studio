@@ -61,8 +61,10 @@ const WORKING_TITLE_CURSOR =
   /(?:⏳\s*Working|⌨️\s*Running|🧭\s*Planning|📋\s*Queued|\bWorking…|\bWorking\.\.\.)/i;
 const WAITING_TITLE_CURSOR = /(?:❓\s*Waiting|🔐\s*Waiting|\bWaiting for you|\bWaiting for confirmation)/i;
 const READY_TITLE_CURSOR = /✅\s*Ready/i;
-// Cursor TUI (Ink): enquanto o turno roda, a caixa de input mostra isto.
-const WORKING_SCREEN = /ctrl\+c to stop/i;
+// Cursor TUI: status ao vivo no rodapé (legado "ctrl+c to stop"; UI nova
+// "Calling 38.2k tokens" / Thinking… / Generating…). Só o final da tela.
+const WORKING_SCREEN =
+  /(?:ctrl\+c to stop|\bCalling\s+[\d.,]+\s*k?\s*tokens|\bCalling[.…]+|\bThinking[.…]+|\bGenerating[.…]+|\bEsc to (?:cancel|interrupt|stop))/i;
 
 /** Título com spinner / status de “trabalhando” (Claude ou Cursor). */
 export function titleLooksWorking(title: string): boolean {
@@ -190,21 +192,29 @@ export function spawnCwd(cwdUri: string, shellId: string): string {
   if (kind === "container") {
     return path.startsWith("/") ? path : "";
   }
-  if (kind === "log" || kind === "ssh" || kind === "other") return "";
+  if (kind === "log" || kind === "ssh") return "";
+  // macOS/Linux (login/zsh/bash → shellKind "other"): caminho absoluto Unix.
+  if (kind === "other") {
+    return path.startsWith("/") ? path : "";
+  }
   if (winDrive) return `${winDrive[1].toUpperCase()}:${(winDrive[2] ?? "\\").replace(/\//g, "\\")}`;
   if (mnt) return `${mnt[1].toUpperCase()}:${(mnt[2] ?? "\\").replace(/\//g, "\\")}`;
   return "";
 }
 
-/** Onde o seletor de pasta do Windows deve abrir. Vazio = o Windows escolhe. */
+/** Onde o seletor de pasta deve abrir. Vazio = o SO escolhe. */
 export function explorerStart(cwd: string): string {
   const t = cwd.trim();
   if (!t) return "";
   if (/^[A-Za-z]:[\\/]/.test(t) || t.startsWith("\\\\")) return t;
   const m = /^\/mnt\/([a-zA-Z])(\/.*)?$/.exec(t);
-  if (!m) return "";
-  const rest = (m[2] ?? "").replace(/\//g, "\\");
-  return `${m[1].toUpperCase()}:${rest || "\\"}`;
+  if (m) {
+    const rest = (m[2] ?? "").replace(/\//g, "\\");
+    return `${m[1].toUpperCase()}:${rest || "\\"}`;
+  }
+  // macOS/Linux
+  if (t.startsWith("/")) return t;
+  return "";
 }
 
 /** Pasta escolhida no Explorer, no formato que o shell entende. */

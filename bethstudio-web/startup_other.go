@@ -24,7 +24,7 @@ func claimSingleStudio() bool {
 	}
 	if b, err := os.ReadFile(path); err == nil {
 		pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-		if pid > 0 && pid != os.Getpid() && processAlive(pid) {
+		if pid > 0 && pid != os.Getpid() && processAlive(pid) && isStudioPID(pid) {
 			_ = os.WriteFile(studioFocusFile(), []byte("focus\n"), 0o644)
 			return false
 		}

@@ -1,5 +1,5 @@
 import { Fragment, useRef, useState, type DragEvent as RDragEvent, type MouseEvent as RMouseEvent, type ReactNode } from "react";
-import { Trash2 } from "lucide-react";
+import { ArrowLeftRight, Columns2, Rows2, Trash2 } from "lucide-react";
 import type { LayoutNode, Path, Zone } from "@/lib/layout";
 import { PANE_MIME, draggedPane, endDrag, useDrag } from "@/lib/dnd";
 import { cn } from "@/lib/utils";
@@ -91,6 +91,28 @@ function SplitBox(p: Props & { node: Extract<LayoutNode, { type: "split" }>; pat
   );
 }
 
+/** Fantasma kanban: cartão pontilhado que mostra onde o painel vai cair. */
+function GhostCard({ zone, label, icon }: { zone: Zone; label: string; icon: ReactNode }) {
+  const place: Record<Zone, string> = {
+    left: "left-2 top-2 bottom-2 w-[calc(50%-10px)]",
+    right: "right-2 top-2 bottom-2 w-[calc(50%-10px)]",
+    top: "left-2 right-2 top-2 h-[calc(50%-10px)]",
+    bottom: "left-2 right-2 bottom-2 h-[calc(50%-10px)]",
+    center: "inset-[12%]",
+  };
+  return (
+    <div
+      className={cn(
+        "bt-drop-ghost bt-drop-ghost-on pointer-events-none absolute flex flex-col items-center justify-center gap-2.5 rounded-xl",
+        place[zone],
+      )}
+    >
+      <span className="bt-drop-ghost__icon flex h-9 w-9 items-center justify-center rounded-lg">{icon}</span>
+      <span className="bt-drop-ghost__label">{label}</span>
+    </div>
+  );
+}
+
 /** Zonas de soltar sobre um terminal: bordas dividem, centro troca. */
 function DropZones({ pane, onDrop }: { pane: number; onDrop: (pane: number, target: number, zone: Zone) => void }) {
   const drag = useDrag();
@@ -102,39 +124,40 @@ function DropZones({ pane, onDrop }: { pane: number; onDrop: (pane: number, targ
     const x = (e.clientX - r.left) / r.width;
     const y = (e.clientY - r.top) / r.height;
     const d = Math.min(x, 1 - x, y, 1 - y);
-    if (d > 0.25) return "center";
+    if (d > 0.28) return "center";
     if (d === x) return "left";
     if (d === 1 - x) return "right";
     if (d === y) return "top";
     return "bottom";
   };
-  const hl: Record<Zone, string> = {
-    left: "left-0 top-0 bottom-0 w-1/2",
-    right: "right-0 top-0 bottom-0 w-1/2",
-    top: "left-0 right-0 top-0 h-1/2",
-    bottom: "left-0 right-0 bottom-0 h-1/2",
-    center: "inset-[20%]",
+
+  const meta: Record<Zone, { label: string; icon: ReactNode }> = {
+    left: { label: "Dividir à esquerda", icon: <Columns2 size={18} strokeWidth={1.75} /> },
+    right: { label: "Dividir à direita", icon: <Columns2 size={18} strokeWidth={1.75} /> },
+    top: { label: "Dividir acima", icon: <Rows2 size={18} strokeWidth={1.75} /> },
+    bottom: { label: "Dividir abaixo", icon: <Rows2 size={18} strokeWidth={1.75} /> },
+    center: { label: "Trocar de lugar", icon: <ArrowLeftRight size={18} strokeWidth={1.75} /> },
   };
-  const label: Record<Zone, string> = {
-    left: "Dividir à esquerda",
-    right: "Dividir à direita",
-    top: "Dividir acima",
-    bottom: "Dividir abaixo",
-    center: "Trocar de lugar",
-  };
+
   return (
     <div
+      data-term-drop="pane"
       className="absolute inset-0 z-30"
       onDragOver={(e) => {
         if (!e.dataTransfer.types.includes(PANE_MIME)) return;
         e.preventDefault();
+        e.stopPropagation();
         e.dataTransfer.dropEffect = "move";
         const z = zoneAt(e);
         if (z !== zone) setZone(z);
       }}
-      onDragLeave={() => setZone(null)}
+      onDragLeave={(e) => {
+        if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) return;
+        setZone(null);
+      }}
       onDrop={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         const p = draggedPane(e);
         const z = zoneAt(e);
         setZone(null);
@@ -142,11 +165,17 @@ function DropZones({ pane, onDrop }: { pane: number; onDrop: (pane: number, targ
         if (p !== null) onDrop(p, pane, z);
       }}
     >
-      {zone && (
-        <div className={cn("pointer-events-none absolute flex items-center justify-center rounded border-2 border-accent bg-accent/25", hl[zone])}>
-          <span className="rounded bg-bg-card px-2 py-1 text-[12px] text-text-1 shadow">{label[zone]}</span>
-        </div>
-      )}
+      {/* Quadro base: pontilhado leve em volta do terminal */}
+      <div className="pointer-events-none absolute inset-1.5 rounded-xl border-2 border-dashed border-accent/40 bg-accent/[0.05]" />
+
+      {/* Faixas laterais/topo/baixo como pista (estilo coluna kanban) */}
+      <div className="pointer-events-none absolute left-2 top-[22%] bottom-[22%] w-2 rounded-full bg-accent/15" />
+      <div className="pointer-events-none absolute right-2 top-[22%] bottom-[22%] w-2 rounded-full bg-accent/15" />
+      <div className="pointer-events-none absolute top-2 left-[22%] right-[22%] h-2 rounded-full bg-accent/15" />
+      <div className="pointer-events-none absolute bottom-2 left-[22%] right-[22%] h-2 rounded-full bg-accent/15" />
+
+      {/* Cartão fantasma só na zona ativa — “vai cair aqui” */}
+      {zone && <GhostCard zone={zone} label={meta[zone].label} icon={meta[zone].icon} />}
     </div>
   );
 }

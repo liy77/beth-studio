@@ -20,6 +20,7 @@ import {
   Mic,
   Monitor,
   Palette,
+  PanelTopOpen,
   Power,
   RefreshCw,
   Save,
@@ -39,6 +40,7 @@ import { cwdPath, paneLabel, shortCwd } from "@/lib/panes";
 import { applyTabComplete, expandHome, joinDirName, pathSep, splitDirPrefix } from "@/lib/pathComplete";
 import { copyText, readClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
+import { dragMacWindow, zoomMacWindow } from "@/lib/windowFrame";
 import { IconButton } from "./IconButton";
 import { PasteDialog } from "./PasteDialog";
 import { ImagePastePreview, type PendingPasteImage } from "./ImagePastePreview";
@@ -93,6 +95,10 @@ interface Props {
   onAskKill?: () => void;
   /** destaca este terminal numa janela nativa (ausente = remoto/somente leitura) */
   onDetach?: () => void;
+  /** janela destacada: encaixa de volta no Studio */
+  onAttach?: () => void;
+  /** macOS --term: a barra deste terminal é a titlebar (espaço para os semáforos) */
+  macWindowChrome?: boolean;
   /** abre a confirmacao "Separar no Beth Studio?" (pane em split no host) */
   onAskSeparate?: () => void;
   /** "Novo terminal à direita/abaixo/…" (zone ausente = escolher a direcao) */
@@ -312,6 +318,8 @@ export function TerminalView({
   onOrganize,
   onAskKill,
   onDetach,
+  onAttach,
+  macWindowChrome = false,
   onAskSeparate,
   onNewSplit,
   onSpeak,
@@ -1408,7 +1416,20 @@ export function TerminalView({
       onFocusCapture={onFocus}
     >
       <header
-        className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-2"
+        className={cn(
+          "flex shrink-0 items-center gap-2 border-b border-border px-2",
+          macWindowChrome ? "h-10 pl-[78px]" : "h-9",
+        )}
+        onMouseDown={(e) => {
+          if (!macWindowChrome || e.button !== 0) return;
+          if ((e.target as HTMLElement).closest("button,input,[data-no-drag]")) return;
+          dragMacWindow();
+        }}
+        onDoubleClick={(e) => {
+          if (!macWindowChrome) return;
+          if ((e.target as HTMLElement).closest("button,input,[data-no-drag]")) return;
+          zoomMacWindow();
+        }}
         onContextMenu={(e) => {
           if (!onOrganize) return;
           e.preventDefault();
@@ -1582,6 +1603,11 @@ Arraste para outra aba ou para a borda de outro terminal`
         {onDetach && (
           <button title="Destacar em janela (o terminal continua rodando)" onClick={onDetach}>
             <AppWindow size={14} />
+          </button>
+        )}
+        {onAttach && (
+          <button title="Encaixar de volta no Beth Studio" onClick={onAttach}>
+            <PanelTopOpen size={14} />
           </button>
         )}
         {canClose && (

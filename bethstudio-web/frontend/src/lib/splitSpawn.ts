@@ -6,7 +6,7 @@
 // entra ao lado do clicado, dividindo 50/50. Funcoes testadas em
 // tests/splitSpawn.test.ts (sem React, sem rede).
 
-import { spawnCwd } from "./agents.ts";
+import { shellKind, spawnCwd } from "./agents.ts";
 import { insertPlaceholder, removePlaceholder, resolvePlaceholder, type Layout, type Zone } from "./layout.ts";
 import type { PaneInfo, ShellInfo, SpawnedEvent } from "./types";
 
@@ -42,8 +42,13 @@ export function sameShellId(pane: Pick<PaneInfo, "kind" | "distro"> | undefined,
       return first("gitbash");
     case "mobaxterm":
       return first("mobaxterm");
-    default:
-      return null;
+    default: {
+      // macOS/Linux: login / zsh / bash / sh
+      for (const id of ["login", "zsh", "bash", "sh"] as const) {
+        if (has(id)) return id;
+      }
+      return shells.find((s) => shellKind(s.id) === "other")?.id ?? null;
+    }
   }
 }
 

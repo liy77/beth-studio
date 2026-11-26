@@ -26,10 +26,6 @@ import (
 )
 
 const (
-	termEnvURL   = "BETHSTUDIO_TERM_URL"
-	termEnvAPI   = "BETHSTUDIO_TERM_API"
-	termEnvToken = "BETHSTUDIO_TERM_TOKEN"
-
 	wmMoving       = 0x0216
 	wmExitSizeMove = 0x0232
 )
@@ -40,8 +36,6 @@ var (
 )
 
 type winPoint struct{ X, Y int32 }
-
-func termTitle(pane int) string { return fmt.Sprintf("Terminal %d", pane) }
 
 // termWinProc: a janela destacada vista pelo Studio.
 type termWinProc struct {

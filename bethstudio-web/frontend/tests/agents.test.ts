@@ -27,6 +27,22 @@ test("fase do chat: rodando / aguardando / pronto", () => {
   assert.equal(agentChatPhase({ title: "Chat - ❓ Waiting for you", agentName: "Cursor" }), "waiting");
   assert.equal(agentChatPhase({ title: "Image Preview", agentName: "Cursor", screen: "…\nctrl+c to stop\n" }), "running");
   assert.equal(agentChatPhase({ title: "Image Preview", agentName: "Cursor", screen: "Add a follow-up" }), "ready");
+  assert.equal(
+    agentChatPhase({
+      title: "Mobicortex Visual Fix",
+      agentName: "Cursor",
+      screen: "…\n: Calling 38.2k tokens\nAdd a follow-up\n",
+    }),
+    "running",
+  );
+  assert.equal(
+    agentChatPhase({
+      title: "Commit And Push",
+      agentName: "Cursor",
+      screen: "Thinking…\n",
+    }),
+    "running",
+  );
   assert.equal(agentChatPhase({ title: "◐ x" }), "none");
 });
 
@@ -88,13 +104,17 @@ test("pasta inicial convertida para o shell", () => {
   assert.equal(spawnCwd("file://h/mnt/c/Users/x", "cmd"), "C:\\Users\\x");
   assert.equal(spawnCwd(win, "app.debug"), "");
   assert.equal(spawnCwd("", "cmd"), "");
+  // macOS/Linux login/zsh
+  assert.equal(spawnCwd("file://mac/Users/brian/src/repo", "login"), "/Users/brian/src/repo");
+  assert.equal(spawnCwd("file://mac/Users/brian/src", "zsh"), "/Users/brian/src");
 });
 
 test("seletor de pasta: abre no caminho Windows e devolve o formato do shell", () => {
   assert.equal(explorerStart(""), "");
   assert.equal(explorerStart("C:\\src\\repo"), "C:\\src\\repo");
   assert.equal(explorerStart("/mnt/c/src/repo"), "C:\\src\\repo");
-  assert.equal(explorerStart("/home/user"), "");
+  assert.equal(explorerStart("/home/user"), "/home/user");
+  assert.equal(explorerStart("/Users/brian/src"), "/Users/brian/src");
   assert.equal(cwdFromPickedFolder("C:\\src\\repo", "powershell"), "C:\\src\\repo");
   assert.equal(cwdFromPickedFolder("C:\\src\\repo", "wsl.ubuntu"), "/mnt/c/src/repo");
   assert.equal(cwdFromPickedFolder("D:\\", "wsl.default"), "/mnt/d");

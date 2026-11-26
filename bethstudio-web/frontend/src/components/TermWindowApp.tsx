@@ -3,7 +3,7 @@ import { PanelTopOpen } from "lucide-react";
 import { Connection } from "@/lib/connection";
 import { loadCatalog, useCatalog } from "@/lib/appearance";
 import { paneLabel } from "@/lib/panes";
-import { useWindowState, winCommand } from "@/lib/windowFrame";
+import { isMacTitlebar, useWindowState, winCommand } from "@/lib/windowFrame";
 import { LIGHT, NAVY_DARK, VSCODE_DARK, applyUI, deriveUI, normalizeUIMode, type UIColors } from "@/lib/uiTheme";
 import { IconButton } from "./IconButton";
 import { TerminalView } from "./TerminalView";
@@ -14,14 +14,26 @@ const conn = new Connection();
 void loadCatalog(conn);
 const pane = Number(new URLSearchParams(window.location.search).get("pane"));
 
+function closeMacWindow() {
+  const w = window as unknown as {
+    webkit?: { messageHandlers?: { bethDrag?: { postMessage: (v: string) => void } } };
+  };
+  w.webkit?.messageHandlers?.bethDrag?.postMessage("close");
+  window.close();
+}
+
 /**
  * Processo --term: um terminal destacado em janela nativa. Usa o mesmo
  * servidor e o mesmo host do Studio. Fechar a janela NUNCA encerra o terminal.
+ *
+ * macOS: uma barra só (FullSizeContentView) — a header do TerminalView é a
+ * titlebar, com espaço para os semáforos. Windows: chrome frameless próprio.
  */
 export function TermWindowApp() {
   const snap = useSyncExternalStore(conn.subscribe, conn.getSnapshot);
   const winState = useWindowState();
   const catalog = useCatalog();
+  const mac = isMacTitlebar();
   const info = useMemo(() => snap.panes?.find((p) => p.pane_id === pane), [snap.panes]);
 
   // mesmo tema da interface do Studio
@@ -44,35 +56,44 @@ export function TermWindowApp() {
 
   const title = info ? paneLabel(info) : `Terminal ${pane}`;
   useEffect(() => {
-    document.title = `Terminal ${pane}`; // o Go acha a janela por este titulo
-  }, []);
+    // Windows: FindWindow usa "Terminal N". Mac: título útil no Mission Control.
+    document.title = mac ? title : `Terminal ${pane}`;
+  }, [mac, title, pane]);
 
   const attach = () => {
-    // pede ao Studio para encaixar na aba ativa; ele fecha esta janela
     void conn.api("/api/term/drag", { pane_id: pane, x: 0, y: 0, end: true, attach: true }).catch(() => undefined);
+  };
+
+  const close = () => {
+    if (mac) closeMacWindow();
+    else winCommand("close");
   };
 
   return (
     <div className="flex h-screen w-screen flex-col bg-bg-body text-text-1">
-      <TopResizeEdges state={winState} />
-      <div
-        className="flex h-7 shrink-0 select-none items-start gap-2 border-b border-border px-2 pt-1"
-        onMouseDown={(e) => {
-          if (e.button === 0 && !(e.target as HTMLElement).closest("button,[data-no-drag]")) winCommand("drag");
-        }}
-        onDoubleClick={(e) => {
-          if (!(e.target as HTMLElement).closest("button,[data-no-drag]")) winCommand("toggle");
-        }}
-      >
-        <span className="min-w-0 flex-1 truncate pl-1 text-xs leading-6 text-text-2">{title}</span>
-        <div className="flex h-6 items-center">
-          <IconButton label="Encaixar de volta no Beth Studio" onClick={attach}>
-            <PanelTopOpen size={15} />
-          </IconButton>
-        </div>
-        <WindowControls state={winState} closeTitle="Fechar a janela (o terminal continua rodando)" />
-      </div>
-      <div className="flex min-h-0 flex-1 p-1">
+      {!mac && (
+        <>
+          <TopResizeEdges state={winState} />
+          <div
+            className="flex h-7 shrink-0 select-none items-start gap-2 border-b border-border px-2 pt-1"
+            onMouseDown={(e) => {
+              if (e.button === 0 && !(e.target as HTMLElement).closest("button,[data-no-drag]")) winCommand("drag");
+            }}
+            onDoubleClick={(e) => {
+              if (!(e.target as HTMLElement).closest("button,[data-no-drag]")) winCommand("toggle");
+            }}
+          >
+            <span className="min-w-0 flex-1 truncate pl-1 text-xs leading-6 text-text-2">{title}</span>
+            <div className="flex h-6 items-center">
+              <IconButton label="Encaixar de volta no Beth Studio" onClick={attach}>
+                <PanelTopOpen size={15} />
+              </IconButton>
+            </div>
+            <WindowControls state={winState} closeTitle="Fechar a janela (o terminal continua rodando)" />
+          </div>
+        </>
+      )}
+      <div className={mac ? "flex min-h-0 flex-1" : "flex min-h-0 flex-1 p-1"}>
         <TerminalView
           conn={conn}
           paneId={pane}
@@ -83,7 +104,9 @@ export function TermWindowApp() {
           focused={false}
           canClose={false}
           onFocus={() => undefined}
-          onClose={() => winCommand("close")}
+          onClose={close}
+          onAttach={mac ? attach : undefined}
+          macWindowChrome={mac}
           aloneInHost
         />
       </div>

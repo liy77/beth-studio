@@ -5,7 +5,8 @@ package main
 // No Windows é um job object com teto rígido (os processos novos entram no
 // job sozinhos). Os terminais WSL rodam na VM do WSL, fora do job: lá o teto
 // vira uma quantidade de núcleos (taskset nos processos do usuário da distro).
-// No macOS o teto é um duty-cycle (SIGCONT/SIGSTOP) na árvore do host
+// No macOS o teto é renice (setpriority) na árvore do host — sem SIGSTOP,
+// que fazia o shell marcar agentes como "suspended (signal)"
 // (cpu_limit_darwin.go). O limite pode ter prazo; ao vencer, tudo volta ao
 // normal. A parte Windows está em cpu_limit_windows.go.
 

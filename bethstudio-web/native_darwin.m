@@ -24,9 +24,85 @@ static int bethHidden = 0;
 static int bethAllowClose = 0;
 static int bethAuxWindow = 0;
 
+// 0 = Studio principal (fecha = esconde)
+// 1 = auxiliar com barra de título nativa (tasks/sftp/db)
+// 2 = auxiliar com FullSizeContentView (terminal destacado: a página
+//     desenha a barra e os semáforos ficam sobre ela)
 void bethSetAuxWindow(int on) {
-	bethAuxWindow = on ? 1 : 0;
+	bethAuxWindow = on;
 	bethAllowClose = on ? 1 : 0;
+}
+
+// --- arrasto da janela destacada (--term) → reencaixar no Studio -------------
+extern void goTermNativeDrag(int x, int y, int end);
+
+static int bethTermDragOn = 0;
+static id bethTermMoveObs = nil;
+static id bethTermUpMon = nil;
+
+void bethEnableTermDrag(int on) {
+	bethTermDragOn = on ? 1 : 0;
+}
+
+static void bethTermReport(int end) {
+	if (!bethTermDragOn) return;
+	NSPoint p = [NSEvent mouseLocation];
+	CGFloat top = 0;
+	for (NSScreen *s in [NSScreen screens]) {
+		CGFloat t = NSMaxY(s.frame);
+		if (t > top) top = t;
+	}
+	int sx = (int)lround(p.x);
+	int sy = (int)lround(top - p.y); // topo-esquerda, como no Windows
+	goTermNativeDrag(sx, sy, end);
+}
+
+// sx/sy = tela topo-esquerda. Devolve coords CSS da área cliente do Studio.
+int bethScreenToClient(int sx, int sy, int *outX, int *outY) {
+	if (bethWindow == nil || bethHidden) return 0;
+	NSView *content = bethWindow.contentView;
+	if (content == nil) return 0;
+	CGFloat top = 0;
+	for (NSScreen *s in [NSScreen screens]) {
+		CGFloat t = NSMaxY(s.frame);
+		if (t > top) top = t;
+	}
+	NSPoint cocoa = NSMakePoint(sx, top - sy);
+	NSRect frame = [bethWindow contentRectForFrameRect:bethWindow.frame];
+	if (!NSPointInRect(cocoa, frame)) return 0;
+	CGFloat cx = cocoa.x - frame.origin.x;
+	CGFloat cy = frame.origin.y + frame.size.height - cocoa.y; // topo-esquerda
+	CGFloat scale = bethWindow.backingScaleFactor;
+	if (scale < 0.5) scale = 1;
+	// Pixels físicos (como o ScreenToClient do Windows / devicePixelRatio).
+	*outX = (int)lround(cx * scale);
+	*outY = (int)lround(cy * scale);
+	return 1;
+}
+
+static void bethInstallTermDrag(NSWindow *win) {
+	if (bethTermMoveObs) {
+		[[NSNotificationCenter defaultCenter] removeObserver:bethTermMoveObs];
+		bethTermMoveObs = nil;
+	}
+	if (bethTermUpMon) {
+		[NSEvent removeMonitor:bethTermUpMon];
+		bethTermUpMon = nil;
+	}
+	if (!bethTermDragOn || win == nil) return;
+	bethTermMoveObs = [[NSNotificationCenter defaultCenter]
+		addObserverForName:NSWindowDidMoveNotification
+		object:win
+		queue:nil
+		usingBlock:^(NSNotification *n) {
+			(void)n;
+			bethTermReport(0);
+		}];
+	bethTermUpMon = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseUp
+		handler:^NSEvent *(NSEvent *e) {
+			bethTermReport(1);
+			return e;
+		}];
 }
 
 extern void goWindowDrag(void);
@@ -68,6 +144,8 @@ static CGFloat bethAccentR = 0.0;
 static CGFloat bethAccentG = 120.0 / 255.0;
 static CGFloat bethAccentB = 212.0 / 255.0;
 static BOOL bethGlassDark = YES;
+// Cor do vão (topbar). A página manda via bethGutter; default até a 1ª msg.
+static char bethGutter[96] = "unset";
 
 static NSColor *bethGlassTint(BOOL selected, BOOL hover, BOOL tip) {
 	CGFloat a = (0.08 + bethGlassPower * 0.9) * bethGlassAlpha;
@@ -145,6 +223,17 @@ static NSColor *bethGutterColor(void);
 - (NSView *)hitTest:(NSPoint)point { (void)point; return nil; }
 @end
 
+// Última geometria/cor aplicadas. Sem isto, reordenar a faixa ou pintar a
+// janela a cada mensagem da página (ou DidResize) trava a main thread —
+// cliques morrem, host e terminais seguem.
+static CGFloat bethHoleWinH = -1;
+static CGFloat bethHoleSideW = -1;
+static CGFloat bethHoleGlassX = -1;
+static CGFloat bethHoleGlassY = -1;
+static CGFloat bethHoleGlassW = -1;
+static CGFloat bethHoleGlassH = -1;
+static char bethHoleGutter[96] = "";
+
 static void bethApplySidebarHole(void) {
 	if (bethVibrancy == nil || bethWindow == nil) return;
 	NSView *content = bethWindow.contentView;
@@ -175,24 +264,38 @@ static void bethApplySidebarHole(void) {
 		glassH = frameBottom - frameTop;
 		if (glassH < 1) glassH = 0;
 	}
+	const char *gutterKey = bethGutter[0] ? bethGutter : (bethGlassDark ? "dark" : "light");
+	BOOL same =
+		bethGutterStrip != nil &&
+		bethHoleWinH == h &&
+		bethHoleSideW == w &&
+		bethHoleGlassX == glassX &&
+		bethHoleGlassY == glassY &&
+		bethHoleGlassW == glassW &&
+		bethHoleGlassH == glassH &&
+		strcmp(bethHoleGutter, gutterKey) == 0;
+	if (same) return;
+	bethHoleWinH = h;
+	bethHoleSideW = w;
+	bethHoleGlassX = glassX;
+	bethHoleGlassY = glassY;
+	bethHoleGlassW = glassW;
+	bethHoleGlassH = glassH;
+	snprintf(bethHoleGutter, sizeof(bethHoleGutter), "%s", gutterKey);
+
 	bethVibrancy.frame = NSMakeRect(glassX, glassY, glassW, glassH);
 	bethVibrancy.layer.cornerRadius = 12;
 	bethVibrancy.layer.masksToBounds = YES;
-	FILE *logf = fopen("/tmp/beth-vibrancy-frame.txt", "a");
-	if (logf != NULL) {
-		NSRect vf = bethVibrancy.frame;
-		fprintf(logf, "glass x %.0f y %.0f w %.0f h %.0f windowH %.0f\n", vf.origin.x, vf.origin.y, vf.size.width, vf.size.height, h);
-		fclose(logf);
-	}
 	bethVibrancy.wantsLayer = YES;
 	if (bethWindow != nil) {
 		NSColor *gutter = bethGutterColor();
-		bethWindow.backgroundColor = gutter;
 		NSView *content = bethWindow.contentView;
 		if (bethGutterStrip == nil) {
 			BethPassView *strip = [[BethPassView alloc] initWithFrame:NSZeroRect];
 			strip.wantsLayer = YES;
 			bethGutterStrip = strip;
+			[content addSubview:bethGutterStrip positioned:NSWindowBelow relativeTo:bethWeb];
+		} else if (bethGutterStrip.superview != content) {
 			[content addSubview:bethGutterStrip positioned:NSWindowBelow relativeTo:bethWeb];
 		}
 		// Largura 0: uma faixa na coluna inteira cobriria a lista e o vão.
@@ -200,9 +303,12 @@ static void bethApplySidebarHole(void) {
 		// wallpaper. A faixa opaca cobre só o vão: semáforos, 8 px da borda
 		// e 8 px até o terminal. O cartão (x=8, largura w-16) fica de fora.
 		bethGutterStrip.frame = NSMakeRect(0, 0, w, h);
-		NSColor *strip = gutter;
-		bethGutterStrip.layer.backgroundColor = strip.CGColor;
-		bethWindow.backgroundColor = [NSColor clearColor];
+		bethGutterStrip.layer.backgroundColor = gutter.CGColor;
+		// Só clearColor: pintar gutter e depois clear a cada chamada
+		// recria a máscara de canto da janela e engasga a main thread.
+		if (bethWindow.backgroundColor.alphaComponent > 0.01) {
+			bethWindow.backgroundColor = [NSColor clearColor];
+		}
 		CAShapeLayer *hole = [CAShapeLayer layer];
 		hole.frame = bethGutterStrip.bounds;
 		CGMutablePathRef path = CGPathCreateMutable();
@@ -216,8 +322,6 @@ static void bethApplySidebarHole(void) {
 		hole.fillRule = kCAFillRuleEvenOdd;
 		CGPathRelease(path);
 		bethGutterStrip.layer.mask = hole;
-		[bethGutterStrip removeFromSuperview];
-		[content addSubview:bethGutterStrip positioned:NSWindowBelow relativeTo:bethWeb];
 	}
 	// O material não pode vazar abaixo do cartão. A máscara é a própria faixa.
 	CAShapeLayer *mask = [CAShapeLayer layer];
@@ -276,12 +380,20 @@ static NSImageView *bethGlassIcon(NSString *name, CGFloat side) {
 	return view;
 }
 
+// Último JSON de placas. Sem isto, a página pode reenviar o mesmo layout
+// (timer 200 ms / hover) e o AppKit destrói+recria NSGlassEffectView a
+// cada vez — main thread trava, cliques morrem, host segue.
+static NSString *bethLastGlassBody = nil;
+
 // Liquid glass nativo na frente da página, no formato de cada aba e botão.
 // Atrás do WebView o efeito não atravessa a camada da página. Na frente,
 // o texto da página continua visível porque o vidro é translúcido e o
 // clique atravessa.
 static void bethApplyGlass(NSString *body) {
 	if (bethGlassHost == nil || bethWeb == nil || bethWindow == nil) return;
+	if (body == nil) body = @"";
+	if (bethLastGlassBody != nil && [bethLastGlassBody isEqualToString:body]) return;
+	bethLastGlassBody = [body copy];
 	if (@available(macOS 26.0, *)) {
 		for (NSView *child in [bethGlassHost.subviews copy]) [child removeFromSuperview];
 		[bethChatHoles removeAllObjects];
@@ -792,12 +904,16 @@ void bethSetSidebarWidth(double width) {
 	}
 	// Com vibrancy o material cobre a janela inteira. A página deixa
 	// transparente tudo que está fora da caixa do terminal.
-	bethSidebarWidth = width < 0 ? 0 : width;
+	CGFloat next = width < 0 ? 0 : width;
+	if (next == bethSidebarWidth && bethVibrancy != nil) {
+		bethPlaceTitleDrag();
+		bethApplySidebarHole(); // no-op se geometria igual
+		return;
+	}
+	bethSidebarWidth = next;
 	bethPlaceTitleDrag();
 	bethApplySidebarHole();
 }
-
-static char bethGutter[96] = "unset";
 
 // A página manda a cor da topbar (rgb/rgba). Sem isso o vão fica o preto
 // da janela transparente — no tema claro isso aparece nos cantos do cartão.
@@ -826,7 +942,11 @@ static NSColor *bethGutterColor(void) {
 }
 
 void bethWriteFrame(int on) {
+	// Debug antigo escrevia /tmp/beth-vibrancy-frame.txt a milhares de
+	// linhas/s e ajudava a matar a UI. Só liga com BETHSTUDIO_DEBUG_VIBRANCY=1.
 	(void)on;
+	const char *dbg = getenv("BETHSTUDIO_DEBUG_VIBRANCY");
+	if (dbg == NULL || dbg[0] == '\0' || strcmp(dbg, "0") == 0) return;
 	if (bethWindow == nil || bethVibrancy == nil) return;
 	NSRect vf = bethVibrancy.frame;
 	CGFloat h = bethWindow.contentView.bounds.size.height;
@@ -836,15 +956,14 @@ void bethWriteFrame(int on) {
 	fclose(logf);
 }
 
+static int bethVibrancyOn = 0;
+
 void bethSetVibrancy(int on) {
 	if (bethWindow == nil) return;
-	{
-		CGFloat h = bethWindow.contentView.bounds.size.height;
-		double frameTop = 0, frameBottom = 0;
-		bethSidebarFrame(h, &frameTop, &frameBottom);
-	}
 	NSView *content = bethWindow.contentView;
 	if (!on) {
+		bethVibrancyOn = 0;
+		bethHoleWinH = -1; // força reaplicar se religar
 		[bethVibrancy removeFromSuperview];
 		bethVibrancy = nil;
 		if (bethGutterStrip != nil) {
@@ -860,6 +979,13 @@ void bethSetVibrancy(int on) {
 		}
 		return;
 	}
+	// A página reenvia "1" a cada efeito React. Remover/recolocar a view
+	// nesse ritmo engasga o AppKit — early-return quando já está ligado.
+	if (bethVibrancyOn && bethVibrancy != nil && bethVibrancy.superview == content) {
+		bethApplySidebarHole();
+		return;
+	}
+	bethVibrancyOn = 1;
 	if (bethWeb != nil) {
 		bethWeb.underPageBackgroundColor = [NSColor clearColor];
 		// Sem isto o WebView compõe um fundo opaco e o material nunca aparece,
@@ -880,16 +1006,18 @@ void bethSetVibrancy(int on) {
 		bethVibrancy = fx;
 	} else {
 		bethVibrancy.material = bethGlassDark ? NSVisualEffectMaterialSidebar : NSVisualEffectMaterialUnderWindowBackground;
+		if (bethVibrancy.superview != content) {
+			[content addSubview:bethVibrancy positioned:NSWindowBelow relativeTo:bethWeb];
+		}
 	}
 	// Camadas atrás do WebView: vibrancy (fundo) → rowHost (placa do chat)
 	// → web (texto por cima do vidro). Sem isto o rowHost ficava sob o
 	// vibrancy e a placa do selecionado sumia.
-	if (bethVibrancy != nil) {
-		[bethVibrancy removeFromSuperview];
+	if (bethRowHost != nil && bethRowHost.superview != content) {
+		[content addSubview:bethRowHost positioned:NSWindowBelow relativeTo:bethWeb];
+	} else if (bethRowHost != nil && bethVibrancy != nil) {
+		// Garante ordem: vibrancy abaixo do rowHost abaixo do web.
 		[content addSubview:bethVibrancy positioned:NSWindowBelow relativeTo:bethWeb];
-	}
-	if (bethRowHost != nil) {
-		[bethRowHost removeFromSuperview];
 		[content addSubview:bethRowHost positioned:NSWindowBelow relativeTo:bethWeb];
 	}
 	bethApplySidebarHole();
@@ -1036,7 +1164,10 @@ static BethWindowDelegate *bethWindowDelegate = nil;
 		bethSetSidebarWidth([[message.body description] doubleValue]);
 	} else if ([message.name isEqualToString:@"bethGutter"]) {
 		NSString *g = [message.body description];
-		if (g.length > 0 && g.length < 90) snprintf(bethGutter, sizeof(bethGutter), "%s", g.UTF8String);
+		if (g.length > 0 && g.length < 90) {
+			if (strcmp(bethGutter, g.UTF8String) == 0) return;
+			snprintf(bethGutter, sizeof(bethGutter), "%s", g.UTF8String);
+		}
 		// A cor chega depois do vibrancy (mesmo effect da página). Sem
 		// reaplica, a faixa fica no default escuro e o tema claro mostra
 		// preto nos cantos do cartão.
@@ -1217,7 +1348,9 @@ void bethOpen(const char *url, const char *title, int width, int height) {
 	// passa por aqui.
 	NSWindowStyleMask mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
 	           NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
-	if (!bethAuxWindow) {
+	// Barra nativa só no modo 1. Principal (0) e terminal destacado (2)
+	// usam FullSizeContentView: a página desenha a faixa sob os semáforos.
+	if (bethAuxWindow != 1) {
 		mask |= NSWindowStyleMaskFullSizeContentView;
 	}
 	NSWindow *win = [[NSWindow alloc]
@@ -1226,13 +1359,12 @@ void bethOpen(const char *url, const char *title, int width, int height) {
 		backing:NSBackingStoreBuffered
 		defer:NO];
 	[win setTitle:[NSString stringWithUTF8String:title]];
-	if (bethAuxWindow) {
+	if (bethAuxWindow == 1) {
 		[win setTitlebarAppearsTransparent:NO];
 		[win setTitleVisibility:NSWindowTitleVisible];
 		win.titlebarSeparatorStyle = NSTitlebarSeparatorStyleAutomatic;
 		[win setOpaque:YES];
 		[win setBackgroundColor:[NSColor windowBackgroundColor]];
-		// Sem FullSizeContentView os semáforos ficam na barra de título normal.
 	} else {
 		[win setTitlebarAppearsTransparent:YES];
 		[win setTitleVisibility:NSWindowTitleHidden];
@@ -1254,6 +1386,7 @@ void bethOpen(const char *url, const char *title, int width, int height) {
 		bethWindowDelegate = [BethWindowDelegate new];
 	}
 	[win setDelegate:bethWindowDelegate];
+	if (bethAuxWindow == 2) bethInstallTermDrag(win);
 	WKWebViewConfiguration *cfg = [[WKWebViewConfiguration alloc] init];
 	cfg.defaultWebpagePreferences.allowsContentJavaScript = YES;
 

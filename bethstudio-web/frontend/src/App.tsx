@@ -7,7 +7,7 @@ import { Connection } from "@/lib/connection";
 import { loadCatalog } from "@/lib/appearance";
 import type { PaneInfo, SettingsEvent, StatusEvent } from "@/lib/types";
 import * as L from "@/lib/layout";
-import { beginExternalPaneDrag, dispatchPaneDrag, endDrag, startPaneDrag, useDrag } from "@/lib/dnd";
+import { beginExternalPaneDrag, dispatchPaneDrag, dragEndedOutside, endDrag, startPaneDrag, useDrag } from "@/lib/dnd";
 import { pointInPage, shouldCloseAfterDrop, toCssPoint } from "@/lib/termDrop";
 import { Sidebar, type SidebarMode } from "@/components/Sidebar";
 import { TerminalView } from "@/components/TerminalView";
@@ -63,7 +63,7 @@ import { useAgentAlerts, useNotifyPrefs } from "@/lib/notify";
 import { aloneInHostTab } from "@/lib/hostFit";
 import { paneLabel } from "@/lib/panes";
 import { displayName, paneIdentity } from "@/lib/paneIdentity";
-import { AGENT_COMMAND, agentFolder } from "@/lib/agents";
+import { AGENT_COMMAND, agentFolder, screenLooksWorking, spawnCwd } from "@/lib/agents";
 import { cn } from "@/lib/utils";
 import { eventMatches, shortcutOf } from "@/lib/shortcut";
 import { useCatalog } from "@/lib/appearance";
@@ -331,6 +331,8 @@ export function App() {
     pane: number;
     name: string;
     at: number;
+    detach?: boolean;
+    agentCmd?: string;
   } | null>(null);
   const [notifyPrefs, setNotifyPrefs] = useNotifyPrefs();
   useAgentAlerts(snap.agents, snap.panes, notifyPrefs);
@@ -435,7 +437,7 @@ export function App() {
     let t = 0;
     const stops = agentPaneIds.map((id) =>
       conn.onScreen(id, (s) => {
-        const working = /ctrl\+c to stop/i.test(s.text.length > 2400 ? s.text.slice(-2400) : s.text);
+        const working = screenLooksWorking(s.text);
         if (agentWorkingRef.current[id] === working) return;
         agentWorkingRef.current[id] = working;
         window.clearTimeout(t);
@@ -668,9 +670,31 @@ export function App() {
         if (tabId === null) open("arrastar para o +", L.addTab(layout, "", pane));
         else open("arrastar para a aba", L.movePaneToTab(layout, pane, tabId));
       },
+      /** Arrastou guia/pane para fora da janela → janela(s) destacada(s). */
+      tearOffPanes(panes: number[]) {
+        const uniq = [...new Set(panes.filter((p) => p >= 0))];
+        if (!uniq.length || readOnly || isRemote()) return;
+        let next = layout;
+        for (const pane of uniq) next = L.detachPaneClosingEmpty(next, pane);
+        why("arrastar para fora → janela");
+        commit(next);
+        for (const pane of uniq) {
+          void conn.api("/api/term/detach", { pane_id: pane }).catch((e: unknown) => {
+            setNotice(e instanceof Error ? e.message : "não foi possível abrir a janela");
+          });
+        }
+      },
+      tearOffTab(tabId: string) {
+        const t = L.tabById(layout, tabId);
+        if (!t) return;
+        const panes = L.leaves(t.root)
+          .filter((l) => !l.leaf.gone && !L.isPlaceholder(l.leaf.pane))
+          .map((l) => l.leaf.pane);
+        a.tearOffPanes(panes);
+      },
     };
     return a;
-  }, [layout, commit, focusedPane]);
+  }, [layout, commit, focusedPane, readOnly, conn]);
 
   // Terminal destacado: o Go manda onde esta' o cursor enquanto a janela nativa
   // e' arrastada; aqui o arrasto vira eventos de drag da pagina, e as zonas de
@@ -693,12 +717,12 @@ export function App() {
           return;
         }
         const pt = toCssPoint(e.x, e.y, window.devicePixelRatio || 1);
-        // So' a barra de abas recebe a janela destacada (paineis nao).
+        // Abas OU zonas de split nos painéis: preview e reencaixe.
         const hit = pointInPage(pt, window.innerWidth, window.innerHeight) ? document.elementFromPoint(pt.x, pt.y) : null;
-        const el = hit?.closest('[data-term-drop="tabs"]') ? hit : null;
+        const el = hit?.closest('[data-term-drop="tabs"], [data-term-drop="pane"]') ?? null;
         const prev = termDragLast.current;
         if (prev && prev !== el) dispatchPaneDrag(prev, "dragleave", e.pane, pt);
-        termDragLast.current = el;
+        termDragLast.current = el as Element | null;
         if (!e.end) {
           if (el) {
             beginExternalPaneDrag(e.pane);
@@ -708,17 +732,18 @@ export function App() {
         }
         if (el) dispatchPaneDrag(el, "drop", e.pane, pt);
         termDragLast.current = null;
-        // so' fecha a janela se o pane entrou mesmo no layout (soltou numa zona valida)
-        const overBar = !!el;
+        const overDrop = !!el;
+        const overTabs = !!el?.closest?.('[data-term-drop="tabs"]');
         window.setTimeout(() => {
           let now = getLayout();
-          // soltou num espaco vazio da barra (sem aba sob o cursor): vira aba nova
-          if (overBar && now && !L.findPane(now, e.pane)) {
+          // Soltou na barra (sem aba sob o cursor): vira aba nova.
+          if (overTabs && now && !L.findPane(now, e.pane)) {
             commit(L.addTab(now, "", e.pane));
             now = getLayout();
           }
           if (shouldCloseAfterDrop(!!now && !!L.findPane(now, e.pane))) closeWindow();
-          endDrag();
+          else if (!overDrop) endDrag();
+          else endDrag();
         }, 80);
       }),
     [getLayout, commit],
@@ -804,10 +829,34 @@ export function App() {
   const searchShortcut = shortcutOf(shortcuts, "search");
 
   // Atalhos de aba/config: teclado e CustomEvent nativo (⌘T no macOS).
+  // ⌘T: com terminal em foco, nova aba na mesma pasta; sem terminal, diálogo padrão.
   useEffect(() => {
+    const spawnSameFolder = () => {
+      const info = focusedPane !== null ? paneById.get(focusedPane) : undefined;
+      if (!info || readOnly) {
+        setNewTab(true);
+        return;
+      }
+      void (async () => {
+        const shells = await conn.ensureShells();
+        const shell =
+          sameShellId(info, shells) ??
+          shells.find((s) => ["login", "zsh", "bash", "sh"].includes(s.id))?.id ??
+          shells[0]?.id;
+        if (!shell) {
+          setNewTab(true);
+          return;
+        }
+        const cwd = spawnCwd(info.cwd, shell) || undefined;
+        const ev = await conn.spawn({ shell_id: shell, window_id: info.window_id, cwd });
+        setPendingSpawn({ pane: ev.pane_id, name: "", at: Date.now() });
+      })().catch((e: Error) => setError(`Não foi possível abrir a aba: ${e.message}`));
+    };
     const newTab = () => {
       if (!layout) return;
-      commit(L.addTab(layout, ""));
+      const info = focusedPane !== null ? paneById.get(focusedPane) : undefined;
+      if (info) spawnSameFolder();
+      else setNewTab(true);
     };
     const onNative = (e: Event) => {
       if ((e as CustomEvent).detail === "new_tab") newTab();
@@ -854,7 +903,7 @@ export function App() {
       window.removeEventListener("beth-shortcut", onNative);
       window.removeEventListener("keydown", onKey, true);
     };
-  }, [searchShortcut, shortcuts, layout]);
+  }, [searchShortcut, shortcuts, layout, focusedPane, paneById, readOnly, conn]);
 
   const waitingTabs = useMemo(() => {
     const s = new Set<string>();
@@ -894,8 +943,10 @@ export function App() {
     const id = window.requestAnimationFrame(() => setSideAnim(true));
     return () => window.cancelAnimationFrame(id);
   }, []);
+  // Diff/preview no slot da pasta: mesma altura do terminal, empurra o layout.
+  const rightOverlay = !!(gitDiff || filePreviewPath);
   useEffect(() => {
-    if (filesOpen) {
+    if (filesOpen || rightOverlay) {
       setFilesKeep(true);
       // Antes de sideAnim: abre na hora. Depois: um frame em 0 px e anima.
       if (!sideAnim) {
@@ -906,7 +957,7 @@ export function App() {
       return () => window.cancelAnimationFrame(id);
     }
     setFilesExpand(false);
-  }, [filesOpen, sideAnim]);
+  }, [filesOpen, rightOverlay, sideAnim]);
   const sidebarPrefs: SidebarPrefs = sidebarLocal ?? snap.settings?.sidebar ?? { collapsed: false, width: 288 };
   // Depois que /api/settings chegou, campo ausente é desligado. O
   // localStorage só cobre o instante anterior à resposta; senão um "1"
@@ -936,6 +987,9 @@ export function App() {
   const [dragFiles, setFilesWidth] = useState<number | null>(null);
   const sidebarWidth = dragWidth ?? sidebarPrefs.width ?? 288;
   const filesWidth = dragFiles ?? sidebarPrefs.files_width ?? 308;
+  // Evita reenviar vibrancy/sidebar/gutter a cada re-render (status de
+  // agente etc.): o nativo reaplicava máscara e travava a UI no Mac.
+  const lastNativeShell = useRef({ vib: "", tune: "", side: "", gutter: "" });
   useEffect(() => {
     document.documentElement.classList.toggle("bt-vibrancy", vibrancy);
     document.documentElement.classList.toggle("bt-acrylic", acrylic);
@@ -955,7 +1009,11 @@ export function App() {
     const w = window as unknown as {
       webkit?: { messageHandlers?: { bethVibrancy?: { postMessage: (v: string) => void }; bethSidebar?: { postMessage: (v: string) => void } } };
     };
-    w.webkit?.messageHandlers?.bethVibrancy?.postMessage(vibrancy ? "1" : "0");
+    const vib = vibrancy ? "1" : "0";
+    if (lastNativeShell.current.vib !== vib) {
+      lastNativeShell.current.vib = vib;
+      w.webkit?.messageHandlers?.bethVibrancy?.postMessage(vib);
+    }
     const power = (snap.settings?.ui_theme?.glass || 55) / 100;
     const alpha = (snap.settings?.ui_theme?.glass_alpha || 70) / 100;
     document.documentElement.style.setProperty("--bt-preview-vibrancy-opacity", String(0.34 + alpha * 0.32));
@@ -963,15 +1021,24 @@ export function App() {
     const accentParts = getComputedStyle(document.documentElement).getPropertyValue("--bt-accent").trim().split(/\s+/).map(Number);
     const [ar, ag, ab] = accentParts.length >= 3 && accentParts.every((n) => Number.isFinite(n)) ? accentParts : [0, 120, 212];
     // Último campo: 1 = tema escuro (véu/texto do vidro), 0 = claro.
-    (w.webkit?.messageHandlers as { bethGlassTune?: { postMessage: (v: string) => void } } | undefined)?.bethGlassTune?.postMessage(
-      `${power},${alpha},${Math.round(ar)},${Math.round(ag)},${Math.round(ab)},${dark ? 1 : 0}`,
-    );
+    const tune = `${power},${alpha},${Math.round(ar)},${Math.round(ag)},${Math.round(ab)},${dark ? 1 : 0}`;
+    if (lastNativeShell.current.tune !== tune) {
+      lastNativeShell.current.tune = tune;
+      (w.webkit?.messageHandlers as { bethGlassTune?: { postMessage: (v: string) => void } } | undefined)?.bethGlassTune?.postMessage(tune);
+    }
     const width = !vibrancy ? 0 : sidebarCollapsed ? 48 : sidebarWidth;
-    w.webkit?.messageHandlers?.bethSidebar?.postMessage(String(width));
+    const side = String(width);
+    if (lastNativeShell.current.side !== side) {
+      lastNativeShell.current.side = side;
+      w.webkit?.messageHandlers?.bethSidebar?.postMessage(side);
+    }
     // Cor explícita com vírgulas: o vão nativo tem de bater com a topbar.
     // Probe + rgb sem vírgula falhava e o AppKit caía no default quase preto.
     const gutter = dark ? "rgb(19, 19, 19)" : "rgb(236, 236, 236)";
-    (w.webkit?.messageHandlers as { bethGutter?: { postMessage: (v: string) => void } } | undefined)?.bethGutter?.postMessage(gutter);
+    if (lastNativeShell.current.gutter !== gutter) {
+      lastNativeShell.current.gutter = gutter;
+      (w.webkit?.messageHandlers as { bethGutter?: { postMessage: (v: string) => void } } | undefined)?.bethGutter?.postMessage(gutter);
+    }
   }, [vibrancy, acrylic, sideMaterial, sidebarCollapsed, sidebarWidth, snap.settings?.ui_theme?.glass, snap.settings?.ui_theme?.glass_alpha, uiColors, uiPreview]);
   const previewOpen = !!filePreviewPath;
   useEffect(() => {
@@ -1208,25 +1275,50 @@ export function App() {
       }, 90);
     };
     kick();
-    const timer = window.setInterval(kick, 200);
+    // Rede de segurança: mutações/hover cobrem o normal. 200 ms + mouseover
+    // no document inteiro (xterm) rebentava o WebKit e a main thread.
+    const timer = window.setInterval(kick, 1000);
     window.addEventListener("resize", onResize);
     window.visualViewport?.addEventListener("resize", onResize);
-    document.addEventListener("mouseover", kick);
-    document.addEventListener("mouseout", kick);
+    // Hover/input: só rAF (kick), e só na sidebar/abas — mouse sobre o
+    // terminal não deve reconstruir liquid glass.
+    const onGlassHover = (e: Event) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (!t.closest(".bt-sidebar, .bt-tabstrip, .bt-tip, .bt-modal")) return;
+      kick();
+    };
+    document.addEventListener("mouseover", onGlassHover);
+    document.addEventListener("mouseout", onGlassHover);
     document.addEventListener("input", kick);
     document.addEventListener("transitionrun", kick);
     // Largura da sidebar (arraste) muda style a cada pixel — posta na hora,
     // sem reiniciar este efeito (sidebarWidth não entra nas deps).
+    // Classe de agente (rodando/pronto) muda muitas vezes: agrupa em 80 ms.
+    // Nunca observar document.body: o xterm muda o DOM a cada paint do
+    // agente e reconstruía o liquid glass sem parar (UI congelava no Mac).
+    let mutTimer = 0;
     const watch = new MutationObserver(() => {
-      sendFast();
-      kick();
+      if (mutTimer) return;
+      mutTimer = window.setTimeout(() => {
+        mutTimer = 0;
+        sendFast();
+        kick();
+      }, 80);
     });
-    watch.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
+    const glassRoots = () =>
+      [document.querySelector(".bt-sidebar"), document.querySelector(".bt-tabstrip")].filter(
+        (n): n is Element => !!n,
+      );
+    for (const root of glassRoots()) {
+      watch.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
+    }
     watch.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "class"] });
     return () => {
       disposed = true;
       window.clearInterval(timer);
       window.clearTimeout(resizeIdle);
+      window.clearTimeout(mutTimer);
       if (frame) window.cancelAnimationFrame(frame);
       if (resizeLive) window.cancelAnimationFrame(resizeLive);
       window.removeEventListener("resize", onResize);
@@ -1259,13 +1351,27 @@ export function App() {
     setFlash((f) => ({ pane, n: (f?.n ?? 0) + 1 }));
   };
 
-  // Terminal criado no host: espera o pane aparecer na lista e cria a aba.
+  // Terminal criado no host: espera o pane aparecer na lista e cria a aba
+  // (ou destaca em janela nova). Se pediu agente, digita o comando.
   useEffect(() => {
     if (!pendingSpawn || !layout || !snap.panes) return;
     if (snap.panes.some((p) => p.pane_id === pendingSpawn.pane)) {
-      const l = L.addTab(layout, pendingSpawn.name, pendingSpawn.pane);
-      commit(l);
-      focusPane(l.active, pendingSpawn.pane);
+      const pane = pendingSpawn.pane;
+      const agentCmd = pendingSpawn.agentCmd;
+      if (pendingSpawn.detach) {
+        void conn
+          .api("/api/term/detach", { pane_id: pane })
+          .catch((e: Error) => setError(`Não foi possível abrir a janela nova: ${e.message}`));
+      } else {
+        const l = L.addTab(layout, pendingSpawn.name, pane);
+        commit(l);
+        focusPane(l.active, pane);
+      }
+      if (agentCmd) {
+        window.setTimeout(() => {
+          if (!conn.send(pane, agentCmd + "\r")) setError("Terminal criado, mas o agente não recebeu o comando.");
+        }, 400);
+      }
       setPendingSpawn(null);
       return;
     }
@@ -1277,7 +1383,7 @@ export function App() {
       Math.max(0, 8000 - (Date.now() - pendingSpawn.at)),
     );
     return () => window.clearTimeout(t);
-  }, [pendingSpawn, layout, snap.panes, commit]);
+  }, [pendingSpawn, layout, snap.panes, commit, conn]);
 
   return (
     <div className={cn("flex h-full flex-col text-text-1", sideMaterial ? "" : "bg-bg-body")}>
@@ -1462,6 +1568,7 @@ export function App() {
               onReopenClosed={layout.closed?.length ? reopenClosed : undefined}
               onMoveTab={(id, to) => commit(L.moveTab(layout, id, to))}
               onDropPane={act.dropOnTab}
+              onTearOffTab={readOnly || isRemote() ? undefined : (id) => act.tearOffTab(id)}
               onSearch={() => setPalette(true)}
               onGrid={() => setTermGrid(true)}
               filesOpen={filesOpen}
@@ -1496,7 +1603,7 @@ export function App() {
           )}
           {!restoreDismissed && restoreInfo && <RestoreBanner conn={conn} info={restoreInfo} onDismiss={() => setRestoreDismissed(true)} />}
           {snap.resumeOffers.length > 0 && <ResumeBanner conn={conn} offers={snap.resumeOffers} nameOf={(id) => storedName(id) || undefined} />}
-          <div className={cn("bt-stage flex min-h-0 flex-1", filesOpen && "bt-stage-files")}>
+          <div className={cn("bt-stage flex min-h-0 flex-1", (filesOpen || filesKeep || rightOverlay) && "bt-stage-files")}>
           <div className="bt-term-frame flex min-h-0 min-w-0 flex-1 flex-col bg-bg-term">
             {hostBanner(snap.host, isMacTitlebar() ? "mac" : "windows") && (
               <HostBanner conn={conn} info={hostBanner(snap.host, "windows")!} />
@@ -1549,7 +1656,11 @@ export function App() {
                       onFocus={() => focusPane(activeTab.id, pane)}
                       onClose={() => act.unorganize(pane)}
                       onHeaderDragStart={(e) => startPaneDrag(e, pane)}
-                      onHeaderDragEnd={endDrag}
+                      onHeaderDragEnd={(e) => {
+                        const outside = dragEndedOutside(e);
+                        endDrag();
+                        if (outside && !readOnly && !isRemote()) act.tearOffPanes([pane]);
+                      }}
                       onOrganize={(x, y) => {
                         setSplitMenu(null);
                         setMenu({ pane, x, y });
@@ -1568,7 +1679,10 @@ export function App() {
                         setMenu(null);
                         setSplitMenu({ pane, x, y, zone });
                       }}
-                      onOpenFile={setFilePreviewPath}
+                      onOpenFile={(path) => {
+                        setGitDiff(null);
+                        setFilePreviewPath(path);
+                      }}
                       onAgentFolder={readOnly ? undefined : (dest) => openAgentFolder(pane, dest)}
                     />
                   )
@@ -1576,34 +1690,40 @@ export function App() {
               />
             )}
           </div>
-          {activeTab && (filesOpen || filesKeep) && (
+          {activeTab && (filesOpen || filesKeep || rightOverlay) && (
             <div
               className={cn(
                 "bt-side-slot bt-side-slot-right relative h-full min-h-0 shrink-0 self-stretch overflow-hidden",
                 sideAnim && "bt-side-anim",
                 dragFiles != null && "bt-side--dragging",
-                !filesOpen && "pointer-events-none",
+                !filesExpand && !rightOverlay && "pointer-events-none",
               )}
-              style={{ width: filesExpand ? filesWidth + 16 : 0, background: "var(--bt-topbar)" }}
-              aria-hidden={!filesOpen}
+              style={{
+                width: filesExpand || rightOverlay ? Math.max(filesWidth, rightOverlay ? 480 : 0) + 16 : 0,
+                background: "var(--bt-topbar)",
+              }}
+              aria-hidden={!filesExpand && !rightOverlay}
               onTransitionEnd={(e) => {
-                if (e.propertyName !== "width" || filesExpand) return;
+                if (e.propertyName !== "width" || filesExpand || rightOverlay) return;
                 setFilesKeep(false);
               }}
             >
               {/* Largura = filesWidth: o slot já tem 8 px de padding nos lados;
                   filesWidth+16 aqui comia o vão/radius da direita (overflow). */}
-              <div className="relative h-full w-full" style={{ width: filesWidth }}>
+              <div
+                className="relative h-full w-full"
+                style={{ width: Math.max(filesWidth, rightOverlay ? 480 : 0) }}
+              >
                 <div
                   className="absolute -left-1 top-2 z-20 h-[calc(100%-1rem)] w-2 cursor-col-resize hover:bg-accent/40"
                   title="Arraste para mudar a largura da pasta"
                   onMouseDown={(e) => {
                     e.preventDefault();
                     const x0 = e.clientX;
-                    const w0 = filesWidth;
+                    const w0 = Math.max(filesWidth, rightOverlay ? 480 : 0);
                     let w = w0;
                     const move = (ev: MouseEvent) => {
-                      w = Math.max(200, Math.min(640, w0 - (ev.clientX - x0)));
+                      w = Math.max(200, Math.min(720, w0 - (ev.clientX - x0)));
                       setFilesWidth(w);
                     };
                     const up = () => {
@@ -1617,22 +1737,48 @@ export function App() {
                     window.addEventListener("mouseup", up);
                   }}
                   onDoubleClick={() => {
-                    setFilesWidth(308);
-                    saveSidebar({ files_width: 308 });
+                    setFilesWidth(rightOverlay ? 520 : 308);
+                    saveSidebar({ files_width: rightOverlay ? 520 : 308 });
                   }}
                 />
-                <WorktreePanel
-                  key={activeTab.id}
-                  conn={conn}
-                  folder={focusedFolder()}
-                  folderLabel={focusedPane !== null ? shortCwd(paneById.get(focusedPane)?.cwd ?? "", 2) : ""}
-                  onClose={() => setFilesOpen(false)}
-                  onOpenFile={setFilePreviewPath}
-                  onOpenDiff={(path) => {
-                    setFilePreviewPath(null);
-                    setGitDiff({ path, folder: focusedFolder() });
-                  }}
-                />
+                {gitDiff ? (
+                  <GitDiffPanel
+                    key={`diff:${gitDiff.path}`}
+                    conn={conn}
+                    path={gitDiff.path}
+                    folder={gitDiff.folder}
+                    onClose={() => setGitDiff(null)}
+                  />
+                ) : filePreviewPath ? (
+                  <FilePreviewPanel
+                    key={panelKey}
+                    conn={conn}
+                    path={filePreviewPath}
+                    editOnOpen={editPath}
+                    docked
+                    onClose={() => setFilePreviewPath(null)}
+                    onOpen={setFilePreviewPath}
+                    onNewFile={newScratch}
+                    onSaveUntitled={(content) => setBrowser({ mode: "new-file", initial: untitledDir, content })}
+                  />
+                ) : (
+                  <div key={`files:${activeTab.id}`} className="bt-side-panel-slide h-full min-h-0">
+                    <WorktreePanel
+                      conn={conn}
+                      folder={focusedFolder()}
+                      folderLabel={focusedPane !== null ? shortCwd(paneById.get(focusedPane)?.cwd ?? "", 2) : ""}
+                      onClose={() => setFilesOpen(false)}
+                      onOpenFile={(path) => {
+                        setGitDiff(null);
+                        setFilePreviewPath(path);
+                      }}
+                      onOpenDiff={(path) => {
+                        setFilePreviewPath(null);
+                        setGitDiff({ path, folder: focusedFolder() });
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1676,21 +1822,6 @@ export function App() {
           onClose={() => setSeparateTarget(null)}
           onDone={setNotice}
         />
-      )}
-      {filePreviewPath && (
-        <FilePreviewPanel
-          key={panelKey}
-          conn={conn}
-          path={filePreviewPath}
-          editOnOpen={editPath}
-          onClose={() => setFilePreviewPath(null)}
-          onOpen={setFilePreviewPath}
-          onNewFile={newScratch}
-          onSaveUntitled={(content) => setBrowser({ mode: "new-file", initial: untitledDir, content })}
-        />
-      )}
-      {gitDiff && (
-        <GitDiffPanel conn={conn} path={gitDiff.path} folder={gitDiff.folder} onClose={() => setGitDiff(null)} />
       )}
       {browser && (
         <FolderBrowser
@@ -1768,7 +1899,15 @@ export function App() {
           focused={focusedPane !== null ? paneById.get(focusedPane) : undefined}
           readOnly={readOnly}
           onEmptyTab={() => commit(L.addTab(layout, ""))}
-          onCreated={(pane, name) => setPendingSpawn({ pane, name, at: Date.now() })}
+          onCreated={(pane, name, opts) =>
+            setPendingSpawn({
+              pane,
+              name,
+              at: Date.now(),
+              detach: opts?.detach,
+              agentCmd: opts?.agentCmd,
+            })
+          }
           onOpenTools={(kind) => {
             setNewTab(false);
             setSplitTool(null);

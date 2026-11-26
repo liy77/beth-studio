@@ -95,6 +95,9 @@ test("mesmo tipo deste: shell da GUI pelo tipo do terminal", () => {
   assert.equal(sameShellId({ kind: "mobaxterm" }, shells), "mobaxterm.local");
   assert.equal(sameShellId({ kind: "unknown" }, shells), null);
   assert.equal(sameShellId({ kind: "cmd" }, null), null);
+  const mac = ["login", "zsh", "bash"].map((id) => ({ id, label: id }));
+  assert.equal(sameShellId({ kind: "zsh" }, mac), "login");
+  assert.equal(sameShellId({ kind: "other" }, mac), "login");
 });
 
 /** Organizacao em memoria + spawn falso. */

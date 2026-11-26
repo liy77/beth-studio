@@ -68,3 +68,26 @@ export function draggedPane(e?: RDragEvent): number | null {
   const v = e?.dataTransfer.getData(PANE_MIME);
   return v ? Number(v) : null;
 }
+
+/**
+ * Soltou fora da janela do Studio? (guia/pane → janela destacada).
+ * HTML5: fora da página o clientX/Y costuma ser 0; no Mac o screenX/Y
+ * continua válido — comparamos com a moldura da janela.
+ */
+export function dragEndedOutside(e: { clientX: number; clientY: number; screenX: number; screenY: number; dataTransfer: DataTransfer }): boolean {
+  if (e.dataTransfer.dropEffect === "move" || e.dataTransfer.dropEffect === "copy" || e.dataTransfer.dropEffect === "link") {
+    return false;
+  }
+  const margin = 12;
+  if (typeof window === "undefined") return false;
+  // client fora do viewport
+  if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth - 1 || e.clientY >= window.innerHeight - 1) {
+    // Confirma com a moldura da janela (evita falso positivo no canto 0,0).
+    const left = window.screenX;
+    const top = window.screenY;
+    const right = left + window.outerWidth;
+    const bottom = top + window.outerHeight;
+    return e.screenX < left + margin || e.screenY < top + margin || e.screenX > right - margin || e.screenY > bottom - margin;
+  }
+  return false;
+}

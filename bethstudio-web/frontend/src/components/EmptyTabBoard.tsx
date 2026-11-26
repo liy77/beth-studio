@@ -46,6 +46,9 @@ export function EmptyTabBoard({ conn, shells, panes, readOnly, dragging, onDrop,
   useEffect(() => {
     if (!readOnly && !shells) conn.requestShells();
   }, [conn, readOnly, shells]);
+  useEffect(() => {
+    if (!dragging) setOver(false);
+  }, [dragging]);
 
   const grouped = new Map<ShellKind, ShellInfo[]>();
   for (const s of shells ?? []) {
@@ -62,7 +65,7 @@ export function EmptyTabBoard({ conn, shells, panes, readOnly, dragging, onDrop,
 
   return (
     <div
-      className={cn("flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4", over && "bg-accent-soft/30")}
+      className={cn("relative flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4", over && "bg-accent-soft/20")}
       onDragOver={(e) => {
         if (!e.dataTransfer.types.includes(PANE_MIME)) return;
         e.preventDefault();
@@ -77,6 +80,13 @@ export function EmptyTabBoard({ conn, shells, panes, readOnly, dragging, onDrop,
         if (p !== null) onDrop(p);
       }}
     >
+      {(over || dragging) && (
+        <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-accent/70 bg-accent/[0.08] shadow-[inset_0_0_0_1px_rgb(var(--bt-accent)/0.2)]">
+          <div className="bt-drop-ghost bt-drop-ghost-on flex flex-col items-center gap-2 px-8 py-6">
+            <span className="bt-drop-ghost__label">Solte para abrir nesta guia</span>
+          </div>
+        </div>
+      )}
       <div>
         <div className="bt-settings-page__title text-[22px]">O que abrir nesta aba</div>
         <div className="bt-settings-page__sub">As mesmas opções do botão de nova aba. Ou arraste um terminal para cá.</div>

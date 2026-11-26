@@ -76,6 +76,8 @@ interface Props {
   onNewFile?: (dir: string) => void;
   /** texto "Sem título" (path = UNTITLED_PATH): Salvar pede onde gravar */
   onSaveUntitled?: (content: string) => void;
+  /** No slot da pasta da guia: mesma altura do terminal, empurra o layout. */
+  docked?: boolean;
 }
 
 type Doc =
@@ -117,7 +119,7 @@ function initialRect(): Rect {
  * antes de sobrescrever; fechar/abrir outro com alteração pendente pergunta.
  * Fora do modo editar, Ctrl+S salva uma cópia.
  */
-export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editOnOpen, onNewFile, onSaveUntitled }: Props) {
+export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editOnOpen, onNewFile, onSaveUntitled, docked = false }: Props) {
   // arquivo mostrado; troca de "requested" com alteração pendente espera a resposta do aviso
   const [path, setPath] = useState(requested);
   const [doc, setDoc] = useState<Doc>({ phase: "loading" });
@@ -640,24 +642,30 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
   const showSource = isText && (!doc.markdown || view === "source");
   const textStyle = { fontSize: `${font}px` };
 
-  return (
-    <div className="pointer-events-none fixed inset-0 z-50">
+  const panel = (
       <div
         ref={rootRef}
         tabIndex={-1}
         onKeyDown={onKeyDown}
         className={cn(
-          "pointer-events-auto absolute flex flex-col overflow-hidden bt-dialog bt-preview outline-none",
-          maximized && "inset-4",
+          "flex flex-col overflow-hidden bt-preview outline-none",
+          docked
+            ? "bt-worktree bt-side-panel-slide pointer-events-auto h-full w-full"
+            : cn("pointer-events-auto absolute bt-dialog", maximized && "inset-4"),
         )}
-        style={maximized ? undefined : { left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+        style={docked || maximized ? undefined : { left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
       >
         {/* título + janela */}
         <div
-          className={cn("bt-preview-title flex h-10 shrink-0 select-none items-center gap-2 border-b border-border px-3", !maximized && "cursor-grab touch-none active:cursor-grabbing")}
-          onPointerDown={startMove}
-          onDoubleClick={(e) => !(e.target as Element).closest("button") && setMaximized((m) => !m)}
-          title={maximized ? undefined : "Arraste para mover · duplo clique maximiza"}
+          className={cn(
+            "bt-preview-title flex h-10 shrink-0 select-none items-center gap-2 border-b border-border px-3",
+            !docked && !maximized && "cursor-grab touch-none active:cursor-grabbing",
+          )}
+          onPointerDown={docked ? undefined : startMove}
+          onDoubleClick={
+            docked ? undefined : (e) => !(e.target as Element).closest("button") && setMaximized((m) => !m)
+          }
+          title={docked || maximized ? undefined : "Arraste para mover · duplo clique maximiza"}
         >
           <div className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-[13px] font-semibold text-text-1" title={path}>
             {!untitled && <FileKindIcon name={name} size={18} />}
@@ -682,15 +690,19 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
           >
             <NotebookText size={15} />
           </IconButton>
-          <IconButton label="Encostar na esquerda (altura toda)" onClick={() => dock("left")}>
-            <PanelLeft size={15} />
-          </IconButton>
-          <IconButton label="Encostar na direita (altura toda)" onClick={() => dock("right")}>
-            <PanelRight size={15} />
-          </IconButton>
-          <IconButton label={maximized ? "Restaurar o tamanho do painel" : "Maximizar o painel"} onClick={() => setMaximized((m) => !m)}>
-            {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </IconButton>
+          {!docked && (
+            <>
+              <IconButton label="Encostar na esquerda (altura toda)" onClick={() => dock("left")}>
+                <PanelLeft size={15} />
+              </IconButton>
+              <IconButton label="Encostar na direita (altura toda)" onClick={() => dock("right")}>
+                <PanelRight size={15} />
+              </IconButton>
+              <IconButton label={maximized ? "Restaurar o tamanho do painel" : "Maximizar o painel"} onClick={() => setMaximized((m) => !m)}>
+                {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </IconButton>
+            </>
+          )}
           <IconButton label="Fechar (Esc)" onClick={requestClose}>
             <X size={16} />
           </IconButton>
@@ -1029,7 +1041,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
         </div>
         </div>
 
-        {!maximized && (
+        {!docked && !maximized && (
           <>
             <div className="absolute inset-y-3 left-0 w-1.5 cursor-ew-resize" onPointerDown={startResize("w")} />
             <div className="absolute inset-y-3 right-0 w-1.5 cursor-ew-resize" onPointerDown={startResize("e")} />
@@ -1048,7 +1060,11 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
           </div>
         )}
       </div>
+  );
 
+  return (
+    <>
+      {docked ? panel : <div className="pointer-events-none fixed inset-0 z-50">{panel}</div>}
       {menu && (
         <GlassMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} className="min-w-[200px]">
           {menu.editing ? (
@@ -1065,7 +1081,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
           <MenuItem icon={<FileOutput size={14} />} symbol="save" label="Salvar uma cópia como…" onClick={() => (setMenu(null), void saveAs())} />
         </GlassMenu>
       )}
-    </div>
+    </>
   );
 }
 

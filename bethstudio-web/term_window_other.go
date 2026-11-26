@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package main
 
@@ -6,7 +6,7 @@ import "fmt"
 
 func launchTermWindow(s *server, pane int) error {
 	_, _ = s, pane
-	return fmt.Errorf("a janela de terminal destacada só existe no Windows")
+	return fmt.Errorf("a janela de terminal destacada só existe no Windows e no macOS")
 }
 
 func studioScreenToClient(x, y int) (int, int, bool) { return x, y, false }

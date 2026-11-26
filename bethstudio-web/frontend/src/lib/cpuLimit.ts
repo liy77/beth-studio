@@ -63,7 +63,7 @@ export function statusText(l: CpuLimit, host?: "mac" | "windows"): string {
       typeof navigator !== "undefined" &&
       (/Mac|iPhone|iPad/.test(navigator.platform || "") || /Mac OS X/.test(navigator.userAgent || "")));
   if (mac) {
-    parts.push(`${proc} no Mac.`);
+    parts.push(`${proc} com prioridade reduzida no Mac (sem pausar agentes).`);
   } else {
     const where = [`${proc} no Windows`];
     if (l.wsl) where.push(`${l.applied_wsl} no WSL (${l.wsl_cores} núcleos)`);

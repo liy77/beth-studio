@@ -17,6 +17,8 @@ int bethAsk(const char *text, const char *title);
 char *bethPickFolder(const char *initial);
 
 void bethSidebarFrame(double windowHeight, double *top, double *bottom);
+void bethEnableTermDrag(int on);
+int bethScreenToClient(int sx, int sy, int *outX, int *outY);
 */
 import "C"
 
@@ -183,7 +185,13 @@ func openWindow(pageURL string, devtools bool, width, height int) error {
 	runtime.LockOSThread()
 	aux := windowTitle != "" && windowTitle != appTitle
 	if aux {
-		C.bethSetAuxWindow(1)
+		// Terminal N: chrome embutido na página (FullSizeContentView).
+		// Demais auxiliares: barra de título nativa.
+		if strings.HasPrefix(windowTitle, "Terminal ") {
+			C.bethSetAuxWindow(2)
+		} else {
+			C.bethSetAuxWindow(1)
+		}
 	}
 	title := appTitle
 	if windowTitle != "" {

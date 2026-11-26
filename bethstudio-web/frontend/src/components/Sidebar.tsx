@@ -256,7 +256,7 @@ function WebTree(p: Props & { panes: PaneInfo[]; hideGone?: boolean }) {
               <span className="ml-auto font-normal text-text-3">{ls.length}</span>
             </button>
             {ls.length === 0 && <div className="px-2 pb-1 pl-6 text-[11px] text-text-3">vazia — arraste terminais para cá</div>}
-            <ul className="flex flex-col gap-0.5 pl-2">
+            <ul className="flex flex-col gap-1.5 pl-2">
               {ls.map(({ leaf, path }) => {
                 const info = leaf.gone ? undefined : byId.get(leaf.pane);
                 // com filtro de tipo: some o que nao passa (e os encerrados)
@@ -330,13 +330,13 @@ function WebTree(p: Props & { panes: PaneInfo[]; hideGone?: boolean }) {
                     Reabrir aba
                   </button>
                 </div>
-                <ul className="flex flex-col gap-0.5">{ps.map(item)}</ul>
+                <ul className="flex flex-col gap-1.5">{ps.map(item)}</ul>
               </div>
             );
           return p.splitByKind ? (
             <KindSections key="rest" panes={ps} order={p.kindOrder} render={item} compact />
           ) : (
-            <ul key="rest" className="flex flex-col gap-0.5">
+            <ul key="rest" className="flex flex-col gap-1.5">
               {ps.map(item)}
             </ul>
           );
@@ -370,7 +370,7 @@ function HostTree(p: Props & { panes: PaneInfo[] }) {
                   {t.label}
                 </div>
               )}
-              <ul className="flex flex-col gap-0.5">
+              <ul className="flex flex-col gap-1.5">
                 {t.panes.map((x) => {
                   const where = findPane(p.layout, x.pane_id);
                   const wt = where ? p.layout.tabs.find((tt) => tt.id === where.tabId) : undefined;
@@ -657,7 +657,7 @@ function FolderTreeView(p: Props & { panes: PaneInfo[] }) {
             {g.panes.some((x) => p.agents[x.pane_id]) && <AgentDot agent={g.panes.map((x) => p.agents[x.pane_id]).find(Boolean)!} />}
             <span className="ml-auto shrink-0 text-[11px] font-normal text-text-3">{g.panes.length}</span>
           </button>
-          {!closed[g.key] && <ul className="flex flex-col gap-0.5">{g.panes.map((x) => <LoosePane key={x.pane_id} p={p} x={x} hideCwd />)}</ul>}
+          {!closed[g.key] && <ul className="flex flex-col gap-1.5">{g.panes.map((x) => <LoosePane key={x.pane_id} p={p} x={x} hideCwd />)}</ul>}
         </div>
       ))}
     </nav>
@@ -720,11 +720,11 @@ function KindSections({ panes, order, render, compact }: { panes: PaneInfo[]; or
                   <div className="truncate px-2 pb-0.5 pl-6 text-[11px] text-text-3">
                     {s.group === "ssh" ? `SSH · ${d.distro}` : d.distro} <span className="text-text-3/70">({d.panes.length})</span>
                   </div>
-                  <ul className="flex flex-col gap-0.5">{d.panes.map(render)}</ul>
+                  <ul className="flex flex-col gap-1.5">{d.panes.map(render)}</ul>
                 </div>
               ))
             ) : (
-              <ul className="flex flex-col gap-0.5">{s.panes.map(render)}</ul>
+              <ul className="flex flex-col gap-1.5">{s.panes.map(render)}</ul>
             ))}
         </div>
       ))}

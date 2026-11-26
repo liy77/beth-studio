@@ -1,12 +1,14 @@
 import { isRemote } from "@/lib/remote";
 import { FolderBrowser } from "./FolderBrowser";
 import { useEffect, useState } from "react";
-import { AppWindow, Box, Cable, FileText, FolderOpen, Globe, Loader2, Server, SquareTerminal, Terminal, TerminalSquare } from "lucide-react";
+import { AppWindow, Bot, Box, Cable, FileText, FolderOpen, Globe, Loader2, PanelTop, Server, SquareArrowOutUpRight, SquareTerminal, Terminal, TerminalSquare } from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import type { PaneInfo, ShellInfo } from "@/lib/types";
 import { cwdFromPickedFolder, explorerStart, shellKind, spawnCwd, type ShellKind } from "@/lib/agents";
 import { paneLabel } from "@/lib/panes";
 import { isMacOS } from "@/lib/windowFrame";
+import { displayName, isAgentTool, type AgentTool } from "@/lib/paneIdentity";
+import { ToolIcon } from "./ToolIcon";
 import type { ToolKind } from "./SshScreen";
 import {
   AppSheet,
@@ -40,13 +42,26 @@ export const KIND_LABEL: Record<ShellKind, string> = {
   other: "Terminal",
 };
 
+export interface InstalledAgent {
+  id: string;
+  name: string;
+  command: string;
+  path: string;
+}
+
+export type SpawnCreatedOpts = {
+  detach?: boolean;
+  agentCmd?: string;
+  agentName?: string;
+};
+
 interface Props {
   conn: Connection;
   shells: ShellInfo[] | null;
   focused: PaneInfo | undefined;
   readOnly: boolean;
   onEmptyTab: () => void;
-  onCreated: (pane: number, tabName: string) => void;
+  onCreated: (pane: number, tabName: string, opts?: SpawnCreatedOpts) => void;
   onOpenTools: (kind: ToolKind) => void;
   onClose: () => void;
 }
@@ -56,22 +71,39 @@ export function NewTerminalDialog({ conn, shells, focused, readOnly, onEmptyTab,
   const [shell, setShell] = useState<ShellInfo | null>(null);
   const [cwd, setCwd] = useState("");
   const [cwdTouched, setCwdTouched] = useState(false);
-  const [where, setWhere] = useState<"focused" | "new">(focused ? "focused" : "new");
+  // Sempre dá para abrir como guia nesta janela — não depende de ter terminal em foco.
+  const [where, setWhere] = useState<"focused" | "new">("focused");
   const [name, setName] = useState("");
   const [nameTouched, setNameTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
   const [inPage, setInPage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [agents, setAgents] = useState<InstalledAgent[] | null>(null);
+  const [agent, setAgent] = useState<InstalledAgent | null>(null);
 
   useEffect(() => {
     if (!readOnly) conn.requestShells();
   }, [conn, readOnly]);
 
+  useEffect(() => {
+    if (readOnly) return;
+    conn
+      .api<{ agents: InstalledAgent[] }>("/api/agents/installed")
+      .then((r) => setAgents(r.agents ?? []))
+      .catch(() => setAgents([]));
+  }, [conn, readOnly]);
+
   const pick = (s: ShellInfo) => {
     setShell(s);
-    if (!nameTouched) setName(s.label);
+    if (!nameTouched && !agent) setName(s.label);
     if (!cwdTouched) setCwd(focused ? spawnCwd(focused.cwd, s.id) : "");
+  };
+
+  const pickAgent = (a: InstalledAgent | null) => {
+    setAgent(a);
+    if (a && !nameTouched) setName(a.name);
+    if (!a && shell && !nameTouched) setName(shell.label);
   };
 
   const browse = () => {
@@ -100,10 +132,26 @@ export function NewTerminalDialog({ conn, shells, focused, readOnly, onEmptyTab,
     if (!shell) return;
     setBusy(true);
     setError(null);
+    // Janela nova: nasce na mux do foco (se houver) e o Studio abre a janela destacada.
+    const windowId = focused?.window_id;
     conn
-      .spawn({ shell_id: shell.id, window_id: where === "focused" && focused ? focused.window_id : undefined, cwd: cwd.trim() || undefined })
+      .spawn({
+        shell_id: shell.id,
+        window_id: where === "focused" || where === "new" ? windowId : undefined,
+        cwd: cwd.trim() || undefined,
+      })
       .then((ev) => {
-        onCreated(ev.pane_id, nameTouched && name.trim() !== shell.label ? name.trim() : "");
+        const tab =
+          nameTouched && name.trim() && name.trim() !== shell.label
+            ? name.trim()
+            : agent
+              ? agent.name
+              : "";
+        onCreated(ev.pane_id, tab, {
+          detach: where === "new",
+          agentCmd: agent?.command,
+          agentName: agent?.name,
+        });
         onClose();
       })
       .catch((e: Error) => {
@@ -135,7 +183,7 @@ export function NewTerminalDialog({ conn, shells, focused, readOnly, onEmptyTab,
             {!readOnly && (
               <SettingsBtn tone="accent" disabled={!shell || busy} onClick={create}>
                 {busy && <Loader2 size={13} className="animate-spin" />}
-                Criar terminal
+                {agent ? `Abrir ${agent.name}` : "Criar terminal"}
               </SettingsBtn>
             )}
           </>
@@ -190,6 +238,44 @@ export function NewTerminalDialog({ conn, shells, focused, readOnly, onEmptyTab,
               </div>
             </div>
 
+            {shell && agents && agents.length > 0 && (
+              <div>
+                <SettingsSectionLabel>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Bot size={13} /> Agente (opcional)
+                  </span>
+                </SettingsSectionLabel>
+                <div className="bt-settings-choice-grid">
+                  <SettingsChoice
+                    on={agent === null}
+                    onClick={() => pickAgent(null)}
+                    icon={<Terminal size={16} />}
+                    title="Só o terminal"
+                    sub="sem iniciar agente"
+                  />
+                  {agents.map((a) => {
+                    const tool = isAgentTool(a.id) ? (a.id as AgentTool) : null;
+                    return (
+                      <SettingsChoice
+                        key={a.id}
+                        on={agent?.id === a.id}
+                        onClick={() => pickAgent(a)}
+                        icon={tool ? <ToolIcon tool={tool} size={16} /> : <Bot size={16} />}
+                        title={tool ? displayName(tool) : a.name}
+                        sub={a.command}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {shell && agents === null && (
+              <div className="flex items-center gap-2 py-1 text-[12px] text-text-2">
+                <Loader2 size={13} className="animate-spin" /> Procurando agentes instalados…
+              </div>
+            )}
+
             {shell && (
               <>
                 <div>
@@ -230,18 +316,27 @@ export function NewTerminalDialog({ conn, shells, focused, readOnly, onEmptyTab,
                       <AppWindow size={13} /> Onde abrir
                     </span>
                   </SettingsSectionLabel>
-                  <div className="bt-settings-choice-grid">
+                  <SettingsHint>
+                    Escolha se o terminal entra como guia nesta janela ou numa janela só dele.
+                  </SettingsHint>
+                  <div className="bt-settings-choice-grid bt-settings-choice-grid--where">
                     <SettingsChoice
                       on={where === "focused"}
-                      onClick={() => focused && setWhere("focused")}
-                      title="Nova aba da janela em foco"
-                      sub={focused ? `janela de “${paneLabel(focused)}”` : "nenhum terminal em foco"}
+                      onClick={() => setWhere("focused")}
+                      icon={<PanelTop size={18} strokeWidth={1.75} />}
+                      title="Nova guia"
+                      sub={
+                        focused
+                          ? `nesta janela · junto de “${paneLabel(focused)}”`
+                          : "nesta janela do Studio"
+                      }
                     />
                     <SettingsChoice
                       on={where === "new"}
                       onClick={() => setWhere("new")}
-                      title="Janela nova do Beth Studio"
-                      sub="a GUI também mostra essa janela"
+                      icon={<SquareArrowOutUpRight size={18} strokeWidth={1.75} />}
+                      title="Janela separada"
+                      sub="abre fora, destacada do Studio"
                     />
                   </div>
                 </div>

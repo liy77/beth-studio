@@ -2,8 +2,14 @@
 
 package main
 
-// cpu_limit_darwin.go — teto de CPU no macOS via duty-cycle (SIGCONT/SIGSTOP)
-// na árvore do host. O mesmo loop respeita o teto de RAM (ram_limit_darwin.go).
+// cpu_limit_darwin.go — teto de CPU no macOS.
+//
+// Antes: duty-cycle SIGCONT/SIGSTOP na árvore do host. Isso fazia o zsh
+// imprimir `[N] + pid suspended (signal) cursor-agent` (e qualquer TUI
+// interativa) o tempo todo — SIGSTOP em filho de shell = job control.
+//
+// Agora: renice (setpriority) na árvore. Limite mais “macio”, sem suspender
+// processos. O teto de RAM ainda pode pausar (SIGSTOP) se estourar.
 
 import (
 	"context"
@@ -19,7 +25,8 @@ import (
 
 const cpuLimitEvery = 20 * time.Second
 
-const darwinThrottlePeriod = 100 * time.Millisecond
+// Com que frequência relemos a árvore (processos novos: cursor-agent, builds…).
+const darwinLimitRefresh = 2 * time.Second
 
 type darwinHostLimits struct {
 	mu         sync.Mutex
@@ -65,6 +72,7 @@ func (t *darwinHostLimits) clearAll() {
 	t.cpuPercent, t.ramBytes = 0, 0
 	if len(list) > 0 {
 		signalTree(list, syscall.SIGCONT)
+		setTreeNice(list, 0)
 	}
 }
 
@@ -77,6 +85,7 @@ func (t *darwinHostLimits) restartLocked() {
 	if t.cpuPercent <= 0 && t.ramBytes == 0 {
 		if len(list) > 0 {
 			signalTree(list, syscall.SIGCONT)
+			setTreeNice(list, 0)
 		}
 		return
 	}
@@ -140,6 +149,32 @@ func signalTree(pids []int, sig syscall.Signal) {
 	}
 }
 
+// niceForCPUPercent: teto em % → nice (0 = normal; 1..19 = menos CPU).
+// 95% → nice 1; 50% → ~10; 5% → 18.
+func niceForCPUPercent(percent int) int {
+	if percent <= 0 {
+		return 0
+	}
+	n := 19 - (percent*18)/100
+	if n < 1 {
+		n = 1
+	}
+	if n > 19 {
+		n = 19
+	}
+	return n
+}
+
+func setTreeNice(pids []int, nice int) {
+	me := os.Getpid()
+	for _, p := range pids {
+		if p <= 1 || p == me {
+			continue
+		}
+		_ = syscall.Setpriority(syscall.PRIO_PROCESS, p, nice)
+	}
+}
+
 func darwinTreeRSS(pids []int) uint64 {
 	if len(pids) == 0 {
 		return 0
@@ -170,60 +205,43 @@ func darwinTreeRSS(pids []int) uint64 {
 	return kb << 10
 }
 
-func darwinLimitLoop(ctx context.Context, pids []int, cpuPercent int, ramBytes uint64) {
-	on := time.Duration(cpuPercent) * darwinThrottlePeriod / 100
-	off := darwinThrottlePeriod - on
-	if cpuPercent > 0 {
-		if on < time.Millisecond {
-			on = time.Millisecond
+func darwinLimitLoop(ctx context.Context, seed []int, cpuPercent int, ramBytes uint64) {
+	nice := niceForCPUPercent(cpuPercent)
+	tick := time.NewTicker(darwinLimitRefresh)
+	defer tick.Stop()
+
+	apply := func() []int {
+		tree := seed
+		if t, err := hostTreeDarwin(); err == nil && len(t) > 0 {
+			tree = t
+			darLimits.mu.Lock()
+			darLimits.pids = append([]int(nil), tree...)
+			darLimits.mu.Unlock()
 		}
-		if off < 0 {
-			off = 0
+		if ramBytes > 0 && darwinTreeRSS(tree) > ramBytes {
+			// Estouro de RAM: pausa de verdade (mesmo efeito de antes).
+			signalTree(tree, syscall.SIGSTOP)
+			return tree
 		}
+		// Garante que ninguém ficou parado de um ciclo anterior / duty-cycle velho.
+		signalTree(tree, syscall.SIGCONT)
+		if cpuPercent > 0 {
+			setTreeNice(tree, nice)
+		} else {
+			setTreeNice(tree, 0)
+		}
+		return tree
 	}
+
+	last := apply()
 	for {
 		select {
 		case <-ctx.Done():
-			signalTree(pids, syscall.SIGCONT)
+			signalTree(last, syscall.SIGCONT)
+			setTreeNice(last, 0)
 			return
-		default:
-		}
-		if ramBytes > 0 && darwinTreeRSS(pids) > ramBytes {
-			signalTree(pids, syscall.SIGSTOP)
-			select {
-			case <-ctx.Done():
-				signalTree(pids, syscall.SIGCONT)
-				return
-			case <-time.After(200 * time.Millisecond):
-			}
-			continue
-		}
-		if cpuPercent <= 0 {
-			signalTree(pids, syscall.SIGCONT)
-			select {
-			case <-ctx.Done():
-				signalTree(pids, syscall.SIGCONT)
-				return
-			case <-time.After(200 * time.Millisecond):
-			}
-			continue
-		}
-		signalTree(pids, syscall.SIGCONT)
-		select {
-		case <-ctx.Done():
-			signalTree(pids, syscall.SIGCONT)
-			return
-		case <-time.After(on):
-		}
-		if off <= 0 {
-			continue
-		}
-		signalTree(pids, syscall.SIGSTOP)
-		select {
-		case <-ctx.Done():
-			signalTree(pids, syscall.SIGCONT)
-			return
-		case <-time.After(off):
+		case <-tick.C:
+			last = apply()
 		}
 	}
 }

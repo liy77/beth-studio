@@ -546,7 +546,11 @@ ends the shell together with everything it started (patch 0203).
   updated 2026-11-25). Clicking a row in **Mudanças** opens a diff panel
   with lines added (green) and removed (red) versus HEAD; new untracked
   files show the whole file as additions, and binary files say there is
-  no text diff (2026-11-25). A search field filters the file tree and the
+  no text diff (2026-11-25). The diff (and a file opened from **Arquivos**)
+  replaces the right sidebar in the same slot as the folder list — same
+  height as the terminal, slides in from the right and pushes the terminal;
+  closing it brings the folder sidebar back with the same animation
+  (2026-11-25). A search field filters the file tree and the
   changes list by name (2026-11-25). Switching tabs
   shows that tab's own sidebar, open or closed as it was left. That choice
   is saved with the tabs, so the next launch opens each tab the same way.
@@ -599,11 +603,11 @@ ends the shell together with everything it started (patch 0203).
   on a row deletes it after an inline "Apagar esta nota?". Opening another
   note or file saves the current note first. If saving fails, the text
   still goes to **Recuperar**.
-- 🟢 **Janela do painel de arquivo/notas** (2026-10-02): drag the title bar
-  to move it, drag any edge or corner to resize, double-click the title
-  to maximize, and the two panel buttons dock it to the left or right
-  edge at full height. Position and size are remembered and the panel
-  comes back inside the window if the app window shrinks.
+- 🟢 **Painel de arquivo/notas** (2026-10-02; encaixe na pasta da guia 2026-11-25):
+  opened from **Arquivos**, a terminal path or **Novo arquivo**, it replaces
+  the right sidebar (same height as the terminal, slides in from the right
+  and pushes the layout). Esc or the close button returns the folder list
+  with the same animation.
 - 🟢 **Reparar visualização** no topo de cada terminal reconstrói apenas o
   xterm.js local. Não envia `reset` nem altera o host; pode ser usado com
   Claude Code em execução. Quadros de tela recebidos rapidamente são
@@ -612,7 +616,8 @@ ends the shell together with everything it started (patch 0203).
   does not stay “waiting” while the title still shows a working spinner.
 - 🟢 **Fase do chat na barra lateral** (2026-11-25). Each agent row shows
   **rodando…** (Claude title spinner, Cursor `⏳ Working` / title status, or
-  Cursor TUI `ctrl+c to stop` on screen), **pronto** (idle after a turn), or
+  Cursor TUI on screen: `ctrl+c to stop`, `Calling 38.2k tokens`, `Thinking…`,
+  `Generating…`), **pronto** (idle after a turn), or
   **aguardando você** (needs a reply, with a question-mark icon instead of
   the tool mark; Cursor `❓ Waiting` in the title counts too). **Avisos de agente**
   in settings (and a checkbox under the waiting bar) can send a system

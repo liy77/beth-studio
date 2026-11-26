@@ -18,7 +18,7 @@ import { GlassMenu, MenuItem, MenuRule } from "./GlassMenu";
 import { buildStudioActions, type StudioAction } from "./StudioActions";
 import type { Layout, WebTab } from "@/lib/layout";
 import { countLeaves, leaves } from "@/lib/layout";
-import { PANE_MIME, TAB_MIME, draggedPane, endDrag, startTabDrag, useDrag } from "@/lib/dnd";
+import { PANE_MIME, TAB_MIME, dragEndedOutside, draggedPane, endDrag, startTabDrag, useDrag } from "@/lib/dnd";
 import { ToolIcon } from "./ToolIcon";
 import { paneIdentity } from "@/lib/paneIdentity";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,8 @@ interface Props {
   onMoveTab: (id: string, toIndex: number) => void;
   /** soltar um terminal no titulo da aba (ou no "+", tabId = null) */
   onDropPane: (pane: number, tabId: string | null) => void;
+  /** arrastou a guia para fora da janela → vira janela(s) destacada(s) */
+  onTearOffTab?: (tabId: string) => void;
   /** abre a paleta "ir para terminal" */
   onSearch: () => void;
   /** popup com todos os terminais em grade (prints, nome, caminho), inclusive os sem aba */
@@ -90,6 +92,7 @@ export function TabBar({
   onReopenClosed,
   onMoveTab,
   onDropPane,
+  onTearOffTab,
   onSearch,
   onGrid,
   filesOpen,
@@ -116,6 +119,9 @@ export function TabBar({
   const drag = useDrag();
   const [editing, setEditing] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  useEffect(() => {
+    if (!drag) setOver(null);
+  }, [drag]);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const win = useWindowState();
   const frameless = isFrameless();
@@ -213,7 +219,12 @@ export function TabBar({
               key={t.id}
               draggable={editing !== t.id}
               onDragStart={(e) => startTabDrag(e, t.id)}
-              onDragEnd={endDrag}
+              onDragEnd={(e) => {
+                const id = t.id;
+                const outside = dragEndedOutside(e);
+                endDrag();
+                if (outside && onTearOffTab) onTearOffTab(id);
+              }}
               onDragOver={(e) => {
                 if (!accepts(e)) return;
                 e.preventDefault();
@@ -275,7 +286,12 @@ export function TabBar({
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-status-warn" />
                 </span>
               )}
-              <span className="shrink-0 text-[10px] text-text-3">{n}</span>
+              {/* Só com 2+ terminais: evita “Aba 2” + “0/1” parecer “Aba 20/21”. */}
+              {n > 1 && (
+                <span className="bt-tab-count" title={`${n} terminais nesta guia`}>
+                  {n}
+                </span>
+              )}
               <span className="min-w-2 flex-1" />
               <button
                 className="bt-tab-close"
@@ -292,6 +308,15 @@ export function TabBar({
         })}
       </div>
       </div>
+      {/* Enquanto arrasta um terminal: slot pontilhado “nova guia” (kanban). */}
+      {drag?.kind === "pane" && (
+        <div
+          className={cn("bt-tab-ghost", over === "+" && "bt-tab-ghost-hot")}
+          aria-hidden
+        >
+          nova guia
+        </div>
+      )}
       <button
         className={cn("bt-tab-tool bt-tab-tool-plus", over === "+" && "bt-tab-tool-over")}
         aria-label="Nova aba"
