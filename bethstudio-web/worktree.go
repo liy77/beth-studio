@@ -90,7 +90,9 @@ func worktreeStatus(ctx context.Context, dir string) (root, branch string, chang
 	if b, err := worktreeGit(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
 		branch = strings.TrimSpace(string(b))
 	}
-	porcelain, err := worktreeGit(ctx, dir, "status", "--porcelain", "-uall", "--", ".")
+	// --ignored=matching: pastas/arquivos do .gitignore (estilo VS Code no explorador).
+	// matching evita listar cada ficheiro dentro de node_modules/ etc.
+	porcelain, err := worktreeGit(ctx, dir, "status", "--porcelain", "-uall", "--ignored=matching", "--", ".")
 	if err != nil {
 		return root, branch, changes, true
 	}

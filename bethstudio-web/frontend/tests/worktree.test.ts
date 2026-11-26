@@ -1,6 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { changeAbsPath, changeCounts, diffStats, folderKey, folderSep, joinFolder, paneFolder, parseUnifiedDiff, pruneTabSidebar, setTabSidebarOpen, splitRel, statusLabel, statusMark, tabSidebarOpen } from "../src/lib/worktree.ts";
+import {
+  changeAbsPath,
+  changeCounts,
+  changeRelKey,
+  diffStats,
+  explorerStatusClass,
+  folderKey,
+  folderSep,
+  indexGitTree,
+  joinFolder,
+  paneFolder,
+  parseUnifiedDiff,
+  pruneTabSidebar,
+  scmChanges,
+  setTabSidebarOpen,
+  splitRel,
+  statusLabel,
+  statusMark,
+  tabSidebarOpen,
+  treeGitStatus,
+} from "../src/lib/worktree.ts";
 
 test("a sidebar de uma guia não abre a da outra", () => {
   let open = {};
@@ -64,8 +84,36 @@ test("statusMark e statusLabel", () => {
   assert.equal(statusMark("adicionado"), "A");
   assert.equal(statusMark("apagado"), "D");
   assert.equal(statusMark("renomeado"), "R");
+  assert.equal(statusMark("ignorado"), "I");
   assert.equal(statusLabel("alterado"), "Alterado");
   assert.equal(statusLabel("novo"), "Novo (não rastreado)");
+  assert.equal(statusLabel("ignorado"), "Ignorado pelo git");
+});
+
+test("árvore git: cores e pasta herda status dos filhos", () => {
+  const folder = "/Users/brian/repo";
+  const changes = [
+    { path: "src/a.ts", status: "alterado" },
+    { path: "src/b.ts", status: "novo" },
+    { path: "node_modules", status: "ignorado" },
+    { path: "dist/out.js", status: "ignorado" },
+  ];
+  assert.deepEqual(
+    scmChanges(changes).map((c) => c.path),
+    ["src/a.ts", "src/b.ts"],
+  );
+  assert.deepEqual(changeCounts(changes), [
+    { status: "alterado", n: 1 },
+    { status: "novo", n: 1 },
+  ]);
+  const idx = indexGitTree(changes, folder);
+  assert.equal(treeGitStatus(idx, "src/a.ts", folder), "alterado");
+  assert.equal(treeGitStatus(idx, "src", folder), "alterado"); // alterado > novo
+  assert.equal(treeGitStatus(idx, "node_modules", folder), "ignorado");
+  assert.equal(treeGitStatus(idx, "dist", folder), "ignorado");
+  assert.equal(explorerStatusClass("alterado"), "text-status-warn");
+  assert.equal(explorerStatusClass("ignorado"), "text-text-3 opacity-60");
+  assert.equal(changeRelKey("Src\\A.ts", "C:\\repo"), "src/a.ts");
 });
 
 test("parseUnifiedDiff e diffStats", () => {

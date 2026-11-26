@@ -2,7 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Folder, FolderGit2, GitBranch, GitCompareArrows, Loader2, PanelRightClose, RefreshCw, Search, X } from "lucide-react";
 import { FileKindIcon } from "./FileKindIcon";
 import type { Connection } from "@/lib/connection";
-import { changeAbsPath, changeCounts, joinFolder, splitRel, statusLabel, statusMark, type WorktreeChange } from "@/lib/worktree";
+import {
+  changeAbsPath,
+  changeCounts,
+  explorerStatusClass,
+  indexGitTree,
+  joinFolder,
+  scmChanges,
+  splitRel,
+  statusLabel,
+  statusMark,
+  treeGitStatus,
+  type WorktreeChange,
+} from "@/lib/worktree";
 import { cn } from "@/lib/utils";
 
 // Sidebar da direita de UMA guia. A pasta é a do terminal em foco nessa
@@ -19,6 +31,7 @@ const STATUS_COLOR: Record<string, string> = {
   adicionado: "text-status-ok",
   apagado: "text-status-err",
   renomeado: "text-accent-text",
+  ignorado: "text-text-3 opacity-60",
 };
 
 function nameMatches(name: string, q: string) {
@@ -124,7 +137,9 @@ export function WorktreePanel({
   };
 
   const q = query.trim().toLowerCase();
-  const counts = changeCounts(git?.changes ?? []);
+  const trackedChanges = useMemo(() => scmChanges(git?.changes ?? []), [git]);
+  const counts = changeCounts(trackedChanges);
+  const gitIndex = useMemo(() => (folder && git?.repo ? indexGitTree(git.changes, folder) : new Map<string, string>()), [folder, git]);
   const name = folderLabel || folder;
   const shortName = name.split(/[\\/]/).filter(Boolean).pop() || name;
 
@@ -135,13 +150,12 @@ export function WorktreePanel({
   }, [list, q]);
 
   const gitChanges = useMemo(() => {
-    if (!git) return [];
-    if (!q) return git.changes;
-    return git.changes.filter((c) => {
+    if (!q) return trackedChanges;
+    return trackedChanges.filter((c) => {
       const { name: base } = splitRel(c.path);
       return nameMatches(base, q) || nameMatches(c.path, q);
     });
-  }, [git, q]);
+  }, [trackedChanges, q]);
 
   return (
     <aside className="bt-worktree flex h-full w-full flex-col rounded-xl border border-border bg-bg-panel text-[12.5px] text-text-1">
@@ -213,7 +227,7 @@ export function WorktreePanel({
             onClick={() => setTab(id)}
           >
             {id === "arquivos" ? <Folder size={12} className="shrink-0" aria-hidden /> : <GitCompareArrows size={12} className="shrink-0" aria-hidden />}
-            {id === "arquivos" ? "Arquivos" : `Mudanças${git?.changes.length ? ` · ${git.changes.length}` : ""}`}
+            {id === "arquivos" ? "Arquivos" : `Mudanças${trackedChanges.length ? ` · ${trackedChanges.length}` : ""}`}
           </button>
         ))}
       </div>
@@ -233,9 +247,12 @@ export function WorktreePanel({
                 key={e.name}
                 entry={e}
                 path={joinFolder(list.path, e.name)}
+                rel={e.name}
                 depth={0}
                 open={open}
                 query={q}
+                folder={folder}
+                gitIndex={gitIndex}
                 onToggle={toggle}
                 onOpenFile={onOpenFile}
               />
@@ -264,7 +281,7 @@ export function WorktreePanel({
                   </span>
                 ))}
               </div>
-              {git.changes.length === 0 ? (
+              {trackedChanges.length === 0 ? (
                 <p className="px-3 py-2 text-text-3">Nenhuma mudança nesta pasta.</p>
               ) : gitChanges.length === 0 ? (
                 <p className="px-3 py-2 text-text-3">Nenhuma mudança com esse nome.</p>
@@ -308,17 +325,24 @@ export function WorktreePanel({
 function TreeRow({
   entry,
   path,
+  rel,
   depth,
   open,
   query,
+  folder,
+  gitIndex,
   onToggle,
   onOpenFile,
 }: {
   entry: Entry;
   path: string;
+  /** Caminho relativo à pasta da guia (como no git status). */
+  rel: string;
   depth: number;
   open: Record<string, Entry[] | "loading" | "err">;
   query: string;
+  folder: string;
+  gitIndex: Map<string, string>;
   onToggle: (path: string) => void;
   onOpenFile: (path: string) => void;
 }) {
@@ -329,13 +353,16 @@ function TreeRow({
       ? state.filter((e) => nameMatches(e.name, query))
       : state
     : [];
+  const gitStatus = treeGitStatus(gitIndex, rel, folder);
+  const nameClass = explorerStatusClass(gitStatus);
+  const tip = gitStatus ? `${statusLabel(gitStatus)}: ${path}` : path;
   return (
     <>
       <button
         type="button"
         className="mx-1.5 flex w-[calc(100%-12px)] items-center gap-1 rounded-md py-1 pr-2 text-left hover:bg-bg-hover"
         style={{ paddingLeft: 8 + depth * 12 }}
-        title={path}
+        title={tip}
         onClick={() => (entry.is_dir ? onToggle(path) : onOpenFile(path))}
       >
         {entry.is_dir ? (
@@ -344,7 +371,8 @@ function TreeRow({
           <span className="w-3 shrink-0" />
         )}
         <FileKindIcon name={entry.name} isDir={entry.is_dir} open={expanded} size={18} />
-        <span className="min-w-0 flex-1 truncate text-text-1">{entry.name}</span>
+        <span className={cn("min-w-0 flex-1 truncate", nameClass)}>{entry.name}</span>
+        {gitStatus && gitStatus !== "ignorado" && <StatusBadge status={gitStatus} className="h-4 w-4 text-[10px]" />}
         {state === "loading" && <Loader2 size={11} className="animate-spin text-text-3" />}
       </button>
       {expanded &&
@@ -353,9 +381,12 @@ function TreeRow({
             key={e.name}
             entry={e}
             path={joinFolder(path, e.name)}
+            rel={`${rel.replace(/\\/g, "/")}/${e.name}`}
             depth={depth + 1}
             open={open}
             query={query}
+            folder={folder}
+            gitIndex={gitIndex}
             onToggle={onToggle}
             onOpenFile={onOpenFile}
           />

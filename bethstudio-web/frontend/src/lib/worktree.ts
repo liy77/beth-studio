@@ -91,12 +91,77 @@ export function splitRel(rel: string): { dir: string; name: string } {
   return { dir: p.slice(0, i), name: p.slice(i + 1) };
 }
 
-/** Conta por status, na ordem em que a sidebar mostra. */
+/** Conta por status, na ordem em que a sidebar mostra (sem “ignorado”). */
 export function changeCounts(changes: WorktreeChange[]): { status: string; n: number }[] {
   const order = ["alterado", "novo", "adicionado", "apagado", "renomeado"];
   const n = new Map<string, number>();
-  for (const c of changes) n.set(c.status, (n.get(c.status) ?? 0) + 1);
+  for (const c of changes) {
+    if (c.status === "ignorado") continue;
+    n.set(c.status, (n.get(c.status) ?? 0) + 1);
+  }
   return order.filter((s) => n.has(s)).map((status) => ({ status, n: n.get(status)! }));
+}
+
+/** Mudanças da aba “Mudanças” — ignora .gitignore (só coloridos na árvore). */
+export function scmChanges(changes: WorktreeChange[]): WorktreeChange[] {
+  return changes.filter((c) => c.status !== "ignorado");
+}
+
+/** Normaliza caminho relativo do git (sempre /). No Windows a chave é minúscula. */
+export function changeRelKey(rel: string, folder: string): string {
+  let p = rel.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (folderSep(folder) === "\\") p = p.toLowerCase();
+  return p;
+}
+
+/** Menor = mais “forte” na pasta pai (como no explorador do VS Code). */
+function statusRank(status: string): number {
+  switch (status) {
+    case "apagado":
+      return 0;
+    case "alterado":
+      return 1;
+    case "renomeado":
+      return 2;
+    case "adicionado":
+      return 3;
+    case "novo":
+      return 4;
+    case "ignorado":
+      return 5;
+    default:
+      return 9;
+  }
+}
+
+function preferStatus(a: string | undefined, b: string): string {
+  if (!a) return b;
+  return statusRank(b) < statusRank(a) ? b : a;
+}
+
+/**
+ * Índice path→status para colorir a árvore. Pastas herdam o status mais
+ * forte dos filhos (e o próprio, se o git marcou a pasta como ignorada).
+ */
+export function indexGitTree(changes: WorktreeChange[], folder: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const c of changes) {
+    const key = changeRelKey(c.path, folder);
+    if (!key) continue;
+    out.set(key, preferStatus(out.get(key), c.status));
+    let i = key.lastIndexOf("/");
+    while (i >= 0) {
+      const dir = key.slice(0, i);
+      out.set(dir, preferStatus(out.get(dir), c.status));
+      i = key.lastIndexOf("/", i - 1);
+    }
+  }
+  return out;
+}
+
+/** Status git do item na árvore (relativo à pasta da guia), ou undefined. */
+export function treeGitStatus(index: Map<string, string>, rel: string, folder: string): string | undefined {
+  return index.get(changeRelKey(rel, folder));
 }
 
 /** Rótulo completo do status (tooltip / acessibilidade). */
@@ -113,14 +178,14 @@ export function statusLabel(status: string): string {
     case "renomeado":
       return "Renomeado";
     case "ignorado":
-      return "Ignorado";
+      return "Ignorado pelo git";
     default:
       return status;
   }
 }
 
 /**
- * Marca curta do status (estilo VS Code): M / U / A / D / R.
+ * Marca curta do status (estilo VS Code): M / U / A / D / R / I.
  * A sidebar mostra só isto; o nome completo fica no title.
  */
 export function statusMark(status: string): string {
@@ -135,8 +200,28 @@ export function statusMark(status: string): string {
       return "D";
     case "renomeado":
       return "R";
+    case "ignorado":
+      return "I";
     default:
       return "?";
+  }
+}
+
+/** Classe Tailwind do nome no explorador (cores de status do tema). */
+export function explorerStatusClass(status: string | undefined): string {
+  switch (status) {
+    case "alterado":
+    case "renomeado":
+      return "text-status-warn";
+    case "novo":
+    case "adicionado":
+      return "text-status-ok";
+    case "apagado":
+      return "text-status-err";
+    case "ignorado":
+      return "text-text-3 opacity-60";
+    default:
+      return "text-text-1";
   }
 }
 
