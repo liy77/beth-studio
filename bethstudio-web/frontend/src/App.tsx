@@ -429,6 +429,8 @@ export function App() {
   );
   const [agentScreenRev, setAgentScreenRev] = useState(0);
   const agentWorkingRef = useRef<Record<number, boolean>>({});
+  /** Última cauda de tela por pane — evita regex a cada poll se o texto não mudou. */
+  const agentTailRef = useRef<Record<number, string>>({});
   useEffect(() => {
     const visible = activeLeaves.filter((l) => !l.leaf.gone && paneById.has(l.leaf.pane)).map((l) => l.leaf.pane);
     conn.setWatched([...new Set([...visible, ...agentPaneIds])]);
@@ -437,7 +439,11 @@ export function App() {
     let t = 0;
     const stops = agentPaneIds.map((id) =>
       conn.onScreen(id, (s) => {
-        const working = screenLooksWorking(s.text);
+        const text = s.text ?? "";
+        const tail = text.length > 2400 ? text.slice(-2400) : text;
+        if (agentTailRef.current[id] === tail) return;
+        agentTailRef.current[id] = tail;
+        const working = screenLooksWorking(text);
         if (agentWorkingRef.current[id] === working) return;
         agentWorkingRef.current[id] = working;
         window.clearTimeout(t);

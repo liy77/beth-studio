@@ -58,6 +58,8 @@ export interface ScreenImage {
   mime: string;
   /** base64 dos bytes da imagem */
   data: string;
+  /** Hex do content hash (chave estável no overlay; opcional). */
+  hash?: string;
 }
 
 export interface ScreenEvent {

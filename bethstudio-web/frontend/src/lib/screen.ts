@@ -123,6 +123,19 @@ export function createScreenWriter(incremental = true): ScreenWriter {
       const rows = all.length > max ? all.slice(0, max) : all;
       if (!prev || prev.length !== rows.length || (ev.cols ?? -1) !== prevCols || sinceFull >= FULL_EVERY) return full(ev, rows);
 
+      // Só o cursor mudou: evita O(rows × SGR) e write grande no xterm (Win/Mac).
+      let dirty = false;
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i] !== prev[i]) {
+          dirty = true;
+          break;
+        }
+      }
+      if (!dirty) {
+        const cur = ev.cursor_visible ? ESC + "[?25h" : ESC + "[?25l";
+        return ESC + "[?7l" + ESC + "[0m" + ESC + "[" + (ev.cursor_y + 1) + ";" + (ev.cursor_x + 1) + "H" + cur;
+      }
+
       let out = "";
       let t = EMPTY_TAIL;
       for (let i = 0; i < rows.length; i++) {

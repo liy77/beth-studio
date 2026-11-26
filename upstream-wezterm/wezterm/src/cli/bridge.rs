@@ -586,7 +586,12 @@ impl Bridge {
             })?;
 
         let mut watched: BTreeSet<PaneId> = BTreeSet::new();
+        // Cheap screen fingerprint (line seqnos + image cells + cursor).
+        // Skips lines_to_escapes / image encode when the pane is quiescent.
         let mut last_screen: HashMap<PaneId, u64> = HashMap::new();
+        // Encoded Kitty/iTerm payloads by content hash — reused across polls
+        // so agent TUIs do not re-base64 the same image every 30 ms (Win pipes).
+        let mut image_b64_cache: HashMap<[u8; 32], (String, String)> = HashMap::new();
         // Desired lines-above-live from the last scroll op; consumed on the
         // next screen fetch to (re)pin `anchors`.
         let mut pending_scroll: HashMap<PaneId, usize> = HashMap::new();
@@ -638,6 +643,7 @@ impl Bridge {
                             watched = pane_ids.into_iter().chain(pane_id).collect();
                             // Force a fresh screen for every watched pane.
                             last_screen.clear();
+                            image_b64_cache.clear();
                             // Patch 0204: ask the host for render changes once,
                             // so the mouse state of an idle pane arrives too.
                             for &id in &watched {
@@ -982,36 +988,39 @@ impl Bridge {
             for &pane_id in &watched {
                 let want = pending_scroll.remove(&pane_id);
                 let pin = anchors.get(&pane_id).copied();
+                let prior_fp = last_screen.get(&pane_id).copied();
                 let rpc_start = std::time::Instant::now();
-                let result = screen_of(&client, pane_id, want, pin).await;
+                let result =
+                    screen_of(&client, pane_id, want, pin, prior_fp, &mut image_b64_cache).await;
                 echo.rpc_max_ms = echo
                     .rpc_max_ms
                     .max(rpc_start.elapsed().as_millis() as u32);
                 match result {
-                    Ok(screen) => {
+                    Ok((fp, maybe)) => {
+                        last_screen.insert(pane_id, fp);
+                        let Some(screen) = maybe else {
+                            // Fingerprint match: pane quiescent — keep anchors.
+                            continue;
+                        };
                         if screen.offset == 0 {
                             anchors.remove(&pane_id);
                         } else {
                             anchors.insert(pane_id, screen.top);
                         }
-                        let h = hash_of(&screen);
-                        if last_screen.get(&pane_id) != Some(&h) {
-                            last_screen.insert(pane_id, h);
-                            echo.screen_changed(pane_id);
-                            emit(&Event::Screen {
-                                pane_id,
-                                cols: screen.cols,
-                                rows: screen.rows,
-                                cursor_x: screen.cursor_x,
-                                cursor_y: screen.cursor_y,
-                                cursor_visible: screen.cursor_visible,
-                                offset: screen.offset,
-                                scrollback: screen.scrollback,
-                                mouse: screen.mouse,
-                                text: &screen.text,
-                                images: &screen.images,
-                            });
-                        }
+                        echo.screen_changed(pane_id);
+                        emit(&Event::Screen {
+                            pane_id,
+                            cols: screen.cols,
+                            rows: screen.rows,
+                            cursor_x: screen.cursor_x,
+                            cursor_y: screen.cursor_y,
+                            cursor_visible: screen.cursor_visible,
+                            offset: screen.offset,
+                            scrollback: screen.scrollback,
+                            mouse: screen.mouse,
+                            text: &screen.text,
+                            images: &screen.images,
+                        });
                     }
                     Err(err) => {
                         // A closed pane is not an error (patch 0179): the
@@ -1441,7 +1450,10 @@ struct ScreenImage {
     mime: String,
     /// Base64 of the encoded image bytes (png/jpeg/gif/…).
     data: String,
-    /// Content hash (hex) — for change detection without hashing the payload.
+    /// Hex of content hash — stable key for the web overlay (no re-decode).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    hash: String,
+    /// Content hash — for change detection without hashing the payload.
     #[serde(skip)]
     content_hash: [u8; 32],
 }
@@ -1480,6 +1492,18 @@ struct Screen {
 const SCREEN_IMAGES_MAX: usize = 8;
 /// Cap decoded payload per image (bytes before base64).
 const SCREEN_IMAGE_MAX_BYTES: usize = 900_000;
+/// Max cached encoded images across panes (evict all when exceeded).
+const IMAGE_B64_CACHE_MAX: usize = 24;
+
+fn hex_hash(h: &[u8; 32]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(64);
+    for b in h {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0xf) as usize] as char);
+    }
+    out
+}
 
 fn sniff_image_mime(bytes: &[u8]) -> &'static str {
     if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
@@ -1565,12 +1589,18 @@ fn hash_of<T: Hash + ?Sized>(v: &T) -> u64 {
 
 /// `want_offset`: fresh scroll request (lines above live). `pin`: previously
 /// pinned top row. Prefer pin so new scrollback does not slide the view.
+///
+/// Returns `(fingerprint, Some(screen))` when the pane changed, or
+/// `(fingerprint, None)` when the cheap fingerprint matches `prior_fp`
+/// (skip escape conversion and image encode — same on Win ConPTY / Mac PTY).
 async fn screen_of(
     client: &Client,
     pane_id: PaneId,
     want_offset: Option<usize>,
     pin: Option<StableRowIndex>,
-) -> anyhow::Result<Screen> {
+    prior_fp: Option<u64>,
+    image_cache: &mut HashMap<[u8; 32], (String, String)>,
+) -> anyhow::Result<(u64, Option<Screen>)> {
     let info = client
         .get_dimensions(codec::GetPaneRenderableDimensions { pane_id })
         .await?;
@@ -1593,6 +1623,42 @@ async fn screen_of(
         })
         .await?;
     let (line_pairs, image_cells) = lines_msg.lines.extract_data();
+    let cursor = info.cursor_position;
+    let cursor_x = cursor.x;
+    let cursor_y = (cursor.y - top) as i64;
+    // Scrolled back, the cursor row may be off screen: hide it.
+    let cursor_visible = offset == 0 && cursor.visibility == CursorVisibility::Visible;
+    let mouse = is_mouse_grabbed(pane_id);
+
+    // Fingerprint before lines_to_escapes / get_image_cell (hot path).
+    let fp = {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        dims.cols.hash(&mut h);
+        rows.hash(&mut h);
+        cursor_x.hash(&mut h);
+        cursor_y.hash(&mut h);
+        cursor_visible.hash(&mut h);
+        offset.hash(&mut h);
+        scrollback.hash(&mut h);
+        top.hash(&mut h);
+        mouse.hash(&mut h);
+        for (_idx, line) in &line_pairs {
+            line.current_seqno().hash(&mut h);
+        }
+        for im in &image_cells {
+            im.line_idx.hash(&mut h);
+            im.cell_idx.hash(&mut h);
+            im.data_hash.hash(&mut h);
+            im.z_index.hash(&mut h);
+            im.image_id.hash(&mut h);
+            im.placement_id.hash(&mut h);
+        }
+        h.finish()
+    };
+    if prior_fp == Some(fp) {
+        return Ok((fp, None));
+    }
+
     let lines: Vec<_> = line_pairs.into_iter().map(|(_idx, line)| line).collect();
     let mut text = lines_to_escapes(lines)?;
     // Drop the CRLF after the last row so the client does not scroll.
@@ -1604,7 +1670,6 @@ async fn screen_of(
     let mut images = Vec::new();
     if !image_cells.is_empty() {
         use std::collections::BTreeMap;
-        #[derive(Default)]
         struct Place {
             line_idx: StableRowIndex,
             cell_idx: usize,
@@ -1641,9 +1706,8 @@ async fn screen_of(
             e.min_col = e.min_col.min(im.cell_idx);
             e.max_col = e.max_col.max(im.cell_idx);
         }
-        let mut fetched: HashMap<[u8; 32], Option<(String, String, [u8; 32])>> = HashMap::new();
         for (_k, p) in places.into_iter().take(SCREEN_IMAGES_MAX) {
-            if !fetched.contains_key(&p.data_hash) {
+            if !image_cache.contains_key(&p.data_hash) {
                 let got = match client
                     .get_image_cell(codec::GetImageCell {
                         pane_id,
@@ -1655,21 +1719,25 @@ async fn screen_of(
                 {
                     Ok(codec::GetImageCellResponse {
                         data: Some(data), ..
-                    }) => image_bytes(&data).map(|(mime, bytes, hash)| {
+                    }) => image_bytes(&data).map(|(mime, bytes, _hash)| {
                         (
                             mime,
                             base64::Engine::encode(
                                 &base64::engine::general_purpose::STANDARD,
                                 bytes,
                             ),
-                            hash,
                         )
                     }),
                     _ => None,
                 };
-                fetched.insert(p.data_hash, got);
+                if let Some(pair) = got {
+                    if image_cache.len() >= IMAGE_B64_CACHE_MAX {
+                        image_cache.clear();
+                    }
+                    image_cache.insert(p.data_hash, pair);
+                }
             }
-            if let Some(Some((mime, b64, hash))) = fetched.get(&p.data_hash) {
+            if let Some((mime, b64)) = image_cache.get(&p.data_hash) {
                 images.push(ScreenImage {
                     col: p.min_col,
                     row: p.min_row.max(0) as usize,
@@ -1678,27 +1746,29 @@ async fn screen_of(
                     z: p.z,
                     mime: mime.clone(),
                     data: b64.clone(),
-                    content_hash: *hash,
+                    hash: hex_hash(&p.data_hash),
+                    content_hash: p.data_hash,
                 });
             }
         }
     }
 
-    let cursor = info.cursor_position;
-    Ok(Screen {
-        cols: dims.cols,
-        rows,
-        cursor_x: cursor.x,
-        cursor_y: (cursor.y - top) as i64,
-        // Scrolled back, the cursor row may be off screen: hide it.
-        cursor_visible: offset == 0 && cursor.visibility == CursorVisibility::Visible,
-        offset,
-        scrollback,
-        top,
-        mouse: is_mouse_grabbed(pane_id),
-        text,
-        images,
-    })
+    Ok((
+        fp,
+        Some(Screen {
+            cols: dims.cols,
+            rows,
+            cursor_x,
+            cursor_y,
+            cursor_visible,
+            offset,
+            scrollback,
+            top,
+            mouse,
+            text,
+            images,
+        }),
+    ))
 }
 
 /// Cap how many physical rows we dump at once (very large scrollbacks).

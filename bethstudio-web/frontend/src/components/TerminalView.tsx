@@ -1184,6 +1184,9 @@ export function TerminalView({
     let divergentNow = false;
     let fightingNow = false;
     let gotScreenOnce = false;
+    let lastImgSig = "";
+    let lastCellW = 0;
+    let lastCellH = 0;
     const pumpScreen = () => {
       if (disposed || writing) return;
       if (repairPending) {
@@ -1263,13 +1266,25 @@ export function TerminalView({
         setScroll({ offset: off, scrollback: sb, rows: ev.rows });
       }
       rawRowsRef.current = ev.text.split("\r\n");
-      setTermImages(ev.images?.length ? ev.images : []);
+      // Só redesenha o overlay quando placement/payload muda (evita re-render a cada poll).
+      const imgs = ev.images?.length ? ev.images : [];
+      const imgSig = imgs
+        .map((im) => `${im.hash ?? ""}:${im.row},${im.col},${im.cols}x${im.rows},${im.z ?? 0},${im.mime},${im.data?.length ?? 0}`)
+        .join("|");
+      if (imgSig !== lastImgSig) {
+        lastImgSig = imgSig;
+        setTermImages(imgs);
+      }
       // Mede a célula atual para posicionar o overlay das imagens.
       const scr = termElRef.current?.querySelector(".xterm-screen") as HTMLElement | null;
       if (scr && ev.cols > 0 && ev.rows > 0) {
         const cw = scr.offsetWidth / ev.cols;
         const ch = scr.offsetHeight / ev.rows;
-        if (cw > 0 && ch > 0) setCellPx({ w: cw, h: ch });
+        if (cw > 0 && ch > 0 && (Math.abs(cw - lastCellW) > 0.05 || Math.abs(ch - lastCellH) > 0.05)) {
+          lastCellW = cw;
+          lastCellH = ch;
+          setCellPx({ w: cw, h: ch });
+        }
       }
       lastScreen = ev;
       latestScreen = ev;
@@ -1707,7 +1722,7 @@ Arraste para outra aba ou para a borda de outro terminal`
                   if (!im.data) return null;
                   return (
                     <img
-                      key={`${im.row}-${im.col}-${im.cols}x${im.rows}-${i}`}
+                      key={im.hash || `${im.row}-${im.col}-${im.cols}x${im.rows}-${i}`}
                       src={`data:${mime};base64,${im.data}`}
                       alt=""
                       draggable={false}
