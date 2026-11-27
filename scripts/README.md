@@ -22,11 +22,14 @@ irm https://raw.githubusercontent.com/rodrigo-mcu/beth-studio/main/scripts/get.p
 
 Gerar manifests de um release novo: `powershell -File scripts\winget-gen.ps1`.
 
-### macOS
+### macOS e Linux
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rodrigo-mcu/beth-studio/main/scripts/get.sh | bash
 ```
+
+- **macOS:** baixa o DMG do release (quando existir) e abre para arrastar a `/Applications`.
+- **Linux:** se o release tiver tarball (`*linux*.tar.gz` / `.zip`), instala `bethstudio` + `bethstudio-host` em `~/.local/bin`. Sem asset, clona o tag e roda `./scripts/install` (precisa de Rust nightly). A janela do Studio no Linux ainda não vem no release.
 
 Releases: https://github.com/rodrigo-mcu/beth-studio/releases/latest
 

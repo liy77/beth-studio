@@ -837,7 +837,9 @@ xterm screen. Remote access from the phone is not wired on the PC yet.
   `scripts/winget/MCU.BethStudio/` (`winget-gen.ps1` refreshes them; local
   install with `winget install --manifest …`; community id `MCU.BethStudio`
   after the winget-pkgs PR). Scoop JSON in `scripts/scoop/bethstudio.json`.
-  macOS: `curl …/scripts/get.sh | bash` when a DMG is on the release.
+  macOS/Linux: `curl …/scripts/get.sh | bash` (DMG no Mac; no Linux tarball
+  do release → `~/.local`, ou clone+`./scripts/install` se ainda não houver asset).
+
 - ⚪ Linux builds of the Studio window (host+CLI install via `scripts/pack-linux.sh`).
 
 ---

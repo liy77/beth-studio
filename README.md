@@ -2,16 +2,7 @@
 
 **Site:** [rodrigo-mcu.github.io/beth-studio](https://rodrigo-mcu.github.io/beth-studio/) (português) · [English](https://rodrigo-mcu.github.io/beth-studio/en/) · **Baixar:** [Releases](https://github.com/rodrigo-mcu/beth-studio/releases/latest)
 
-**Instalar (Windows, sem compilar):**
-
-```powershell
-irm https://raw.githubusercontent.com/rodrigo-mcu/beth-studio/main/scripts/get.ps1 | iex
-```
-
-**winget** (quando publicado): `winget install -e --id MCU.BethStudio` · local: `winget install --manifest scripts\winget\MCU.BethStudio\0.4.1`  
-**Do código:** `./scripts/install` / `scripts\install.cmd` · catálogo: [`scripts/README.md`](scripts/README.md).
-
-**Beth Studio** é um terminal para Windows feito para quem trabalha com muitos terminais ao mesmo tempo e não quer perdê-los quando a interface trava. Um host persistente é o dono dos terminais, dos agentes de IA e das sessões WSL; a interface (abas, divisões, arquivos, banco de dados, SSH, voz) é só uma camada por cima, e é pensada para o mouse.
+**Beth Studio** é um terminal (Windows e macOS; no Linux o host/CLI) feito para quem trabalha com muitos terminais ao mesmo tempo e não quer perdê-los quando a interface trava. Um host persistente é o dono dos terminais, dos agentes de IA e das sessões WSL; a interface (abas, divisões, arquivos, banco de dados, SSH, voz) é só uma camada por cima, e é pensada para o mouse.
 
 Mais do que um terminal, o Beth Studio é um estúdio de trabalho: o terminal, um editor, um cliente de banco de dados, SSH/serial/SFTP e acesso pelo navegador ou pelo celular, tudo no mesmo programa.
 
@@ -66,28 +57,71 @@ A lista completa e atualizada está em [`FEATURES.md`](FEATURES.md). O manual pa
 
 Detalhes em [Arquitetura](wiki/Arquitetura.md).
 
-## Baixar
+## Instalar (usuário final)
 
-Na página **[Releases](../../releases/latest)** do repositório, baixe:
+Tudo vem do **[último release no GitHub](https://github.com/rodrigo-mcu/beth-studio/releases/latest)**. Confira o arquivo com `SHA256SUMS.txt` quando baixar na mão. Catálogo completo dos scripts: [`scripts/README.md`](scripts/README.md).
 
-- **`BethStudio-Setup.exe`**: instalador de um arquivo só (recomendado).
-- **`BethStudio-<versão>-windows-x64.zip`**: versão portátil; descompacte e abra `bethstudio-web.exe`.
+### Windows
 
-Confira o arquivo com `SHA256SUMS.txt`. Requer Windows 10 ou 11.
+**Um comando (recomendado)** — baixa o `BethStudio-Setup.exe` do release e abre o instalador:
 
-> **Linux e macOS.** Hoje o Beth Studio só roda no Windows. Há planos de portá-lo para Linux e para macOS (sem WSL, que é do Windows), começando pelo Linux e por uma interface aberta no navegador. Ainda não há data nem compromisso de entrega. Detalhes em [Perguntas frequentes](wiki/Perguntas-frequentes.md).
+```powershell
+irm https://raw.githubusercontent.com/rodrigo-mcu/beth-studio/main/scripts/get.ps1 | iex
+```
 
-Ajuda e limites do projeto: [`SUPPORT.md`](SUPPORT.md). Para gerar um release você mesmo: [`RELEASING.md`](RELEASING.md).
+| Forma | Comando / arquivo |
+| --- | --- |
+| **winget** (quando o pacote estiver no community) | `winget install -e --id MCU.BethStudio` |
+| **winget** com o manifesto do repo | clone o repo e rode `winget install --manifest scripts\winget\MCU.BethStudio\0.4.1` |
+| **Scoop** | `scoop install .\scripts\scoop\bethstudio.json` (depois do clone) |
+| Zip portátil | `powershell -File scripts\get.ps1 -Portable` ou baixe `BethStudio-<versão>-windows-x64.zip` nas Releases |
+| Na mão | baixe **`BethStudio-Setup.exe`**, execute, escolha a pasta e clique em **Instalar** |
 
-## Instalação
+Requer Windows 10 ou 11. O instalador é portátil (sem registro do Windows). Atualizar com o host rodando não derruba os terminais. Detalhes: [Instalação](wiki/Instalacao.md).
 
-1. Baixe o `BethStudio-Setup.exe`.
-2. Execute, escolha a pasta (a sugestão é `C:\Users\Public\BethStudio`) e clique em **Instalar**.
-3. Abra pelo atalho ou pelo botão **Abrir** do instalador.
+### macOS
 
-O instalador é portátil: sem registro do Windows e sem pastas escondidas. Atualizar com o host rodando não derruba seus terminais. Requisitos e detalhes em [Instalação](wiki/Instalacao.md).
+**Um comando** — baixa o DMG do release (quando existir) e abre para arrastar para Aplicativos:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rodrigo-mcu/beth-studio/main/scripts/get.sh | bash
+```
+
+| Forma | O que fazer |
+| --- | --- |
+| **DMG nas Releases** | baixe `BethStudio-macOS.dmg` (ou nome parecido), abra e arraste **Beth Studio** para `/Applications` |
+| **Sem DMG no release** | compile e instale: `git clone … && cd beth-studio && ./scripts/install` |
+
+### Linux
+
+**Um comando** (mesmo script do macOS) — se o release tiver tarball Linux, instala host + CLI em `~/.local`; senão clona e compila:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rodrigo-mcu/beth-studio/main/scripts/get.sh | bash
+```
+
+| Forma | O que fazer |
+| --- | --- |
+| **curl** (acima) | tarball do release → `~/.local/bin`, ou `./scripts/install` a partir do código |
+| **Clone manual** | `git clone … && cd beth-studio && ./scripts/install` |
+
+A **janela do Studio** no Linux ainda não vem no release (só host + CLI). Acompanhamento: [Perguntas frequentes](wiki/Perguntas-frequentes.md).
+
+Ajuda e limites: [`SUPPORT.md`](SUPPORT.md). Para publicar um release: [`RELEASING.md`](RELEASING.md).
 
 ## Compilar do código
+
+Instalador unificado (compila e instala no SO atual):
+
+```bash
+# macOS / Linux
+./scripts/install
+
+# Windows (cmd)
+scripts\install.cmd
+```
+
+Ou o caminho clássico no Windows:
 
 ```powershell
 # host e CLI (Rust nightly, MSVC e Strawberry Perl no PATH)
@@ -103,7 +137,7 @@ cd ..
 .\pack-bethstudio-setup.cmd
 ```
 
-Passo a passo, testes e dicas em [Compilar do código](wiki/Compilar-do-codigo.md).
+No macOS: `./pack-bethstudio-macos.sh --install`. Passo a passo: [Compilar do código](wiki/Compilar-do-codigo.md) e [`scripts/README.md`](scripts/README.md).
 
 ## Segurança e privacidade
 
