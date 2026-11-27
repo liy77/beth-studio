@@ -1,0 +1,27 @@
+#!/bin/bash
+# Sobe o Studio a partir do checkout (macOS/Linux).
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+os="$(uname -s)"
+case "$os" in
+  Darwin)
+    exec "$root/run-bethstudio-macos.command" "$@"
+    ;;
+  Linux)
+    echo "No Linux a janela do Studio ainda não empacota; host/CLI:" >&2
+    echo "  bethstudio-host   # se instalou com ./scripts/install" >&2
+    echo "  Veja scripts/README.md" >&2
+    if command -v bethstudio-host >/dev/null 2>&1; then
+      exec bethstudio-host "$@"
+    fi
+    host="$root/dist/linux/bethstudio-host"
+    if [[ -x "$host" ]]; then
+      exec "$host" "$@"
+    fi
+    exit 1
+    ;;
+  *)
+    echo "Windows: use run-bethstudio.cmd na raiz do repo." >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: MCU.BethStudio
+PackageVersion: 0.4.1
+PackageLocale: pt-BR
+Publisher: MCU
+PublisherUrl: https://github.com/rodrigo-mcu
+PublisherSupportUrl: https://github.com/rodrigo-mcu/beth-studio/issues
+Author: Rodrigo
+PackageName: Beth Studio
+PackageUrl: https://rodrigo-mcu.github.io/beth-studio/
+License: Proprietary
+ShortDescription: Terminal e estúdio com host persistente, agentes e arquivos.
+Description: Beth Studio separa a interface do host dos terminais. Abas, divisões, arquivos, banco, SSH e voz num só programa.
+Moniker: bethstudio
+Tags:
+- terminal
+- agentes
+- wsl
+ReleaseNotesUrl: https://github.com/rodrigo-mcu/beth-studio/releases/tag/v0.4.1
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

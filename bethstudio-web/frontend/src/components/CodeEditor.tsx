@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { highlightCode, type CodeTok } from "@/lib/codeHighlight";
 import { cn } from "@/lib/utils";
 
@@ -23,32 +23,59 @@ const COLOR: Record<CodeTok, string> = {
   plain: "text-[#D4D4D4]",
 };
 
+/** Verde das linhas que o agent acabou de editar (linha inteira). */
+const REVEAL_BG = "rgba(34, 197, 94, 0.32)";
+const REVEAL_GUTTER = "bg-[#22c55e]/35 text-[#86efac]";
+
 function lineHighlighted(ln: number, revealLine?: number, revealCount?: number): boolean {
   if (revealLine == null || revealLine < 1) return false;
   const n = Math.max(1, revealCount ?? 1);
   return ln >= revealLine && ln < revealLine + n;
 }
 
-function RevealBand({
+/**
+ * Faixa verde por linha, mesma geometria do gutter — cobre a largura toda do código.
+ * Fica atrás do <pre>/textarea; a rolagem sincroniza como o gutter.
+ */
+function RevealLines({
+  lines,
   revealLine,
   revealCount,
   fontPx,
   padY,
+  scrollTop,
 }: {
+  lines: number;
   revealLine?: number;
   revealCount?: number;
   fontPx: number;
   padY: number;
+  scrollTop: number;
 }) {
   if (revealLine == null || revealLine < 1) return null;
-  const lineH = fontPx * 1.55;
-  const n = Math.max(1, revealCount ?? 1);
+  const text = { fontSize: fontPx, lineHeight: "1.55" } as const;
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute left-0 right-0 bg-[#22c55e]/18"
-      style={{ top: padY + (revealLine - 1) * lineH, height: n * lineH }}
-    />
+      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+      style={{ paddingTop: padY, paddingBottom: padY }}
+    >
+      <div style={{ transform: `translateY(${-scrollTop}px)`, ...text }}>
+        {Array.from({ length: lines }, (_, n) => {
+          const ln = n + 1;
+          const hi = lineHighlighted(ln, revealLine, revealCount);
+          return (
+            <div
+              key={n}
+              className="w-full"
+              style={hi ? { background: REVEAL_BG } : undefined}
+            >
+              &nbsp;
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -79,11 +106,13 @@ export function CodeEditor({
 }) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
   const segs = useMemo(() => highlightCode(value, lang), [value, lang]);
   const lines = Math.max(1, value.split("\n").length);
   const sync = useCallback(() => {
     const ta = textareaRef.current;
     if (!ta) return;
+    setScrollTop(ta.scrollTop);
     if (preRef.current) {
       preRef.current.scrollTop = ta.scrollTop;
       preRef.current.scrollLeft = ta.scrollLeft;
@@ -104,7 +133,6 @@ export function CodeEditor({
       sync();
     };
     go();
-    // layout do dock pode atrasar a altura: tenta de novo no próximo frame
     const id = window.requestAnimationFrame(go);
     return () => window.cancelAnimationFrame(id);
   }, [revealLine, revealCount, revealKey, value, fontPx, textareaRef, sync]);
@@ -116,7 +144,7 @@ export function CodeEditor({
           const ln = n + 1;
           const hi = lineHighlighted(ln, revealLine, revealCount);
           return (
-            <div key={n} className={cn("relative pl-1.5", hi && "bg-[#22c55e]/20 text-[#86efac]")}>
+            <div key={n} className={cn("relative pl-1.5", hi && REVEAL_GUTTER)} style={hi ? { background: REVEAL_BG } : undefined}>
               {hi && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#22c55e]" aria-hidden />}
               {hi ? <span className="mr-0.5 text-[#22c55e]">+</span> : null}
               {ln}
@@ -125,11 +153,11 @@ export function CodeEditor({
         })}
       </div>
       <div className="relative min-w-0 flex-1">
-        <RevealBand revealLine={revealLine} revealCount={revealCount} fontPx={fontPx} padY={padY} />
+        <RevealLines lines={lines} revealLine={revealLine} revealCount={revealCount} fontPx={fontPx} padY={padY} scrollTop={scrollTop} />
         <pre
           ref={preRef}
           aria-hidden
-          className={`pointer-events-none absolute inset-0 overflow-auto p-3 font-mono ${wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre"}`}
+          className={`pointer-events-none absolute inset-0 z-[1] overflow-auto bg-transparent p-3 font-mono ${wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre"}`}
           style={text}
         >
           {segs.map((s, i) => (
@@ -159,7 +187,7 @@ export function CodeEditor({
               ta.selectionStart = ta.selectionEnd = a + 2;
             });
           }}
-          className={`absolute inset-0 h-full w-full resize-none bg-transparent p-3 font-mono text-transparent caret-white outline-none ${wrap ? "" : "whitespace-pre"}`}
+          className={`absolute inset-0 z-[2] h-full w-full resize-none bg-transparent p-3 font-mono text-transparent caret-white outline-none ${wrap ? "" : "whitespace-pre"}`}
           style={text}
         />
       </div>
@@ -205,7 +233,7 @@ export function CodeView({
           const ln = n + 1;
           const hi = lineHighlighted(ln, revealLine, revealCount);
           return (
-            <div key={n} className={cn("relative pl-1.5", hi && "bg-[#22c55e]/20 text-[#86efac]")}>
+            <div key={n} className={cn("relative pl-1.5", hi && REVEAL_GUTTER)} style={hi ? { background: REVEAL_BG } : undefined}>
               {hi && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#22c55e]" aria-hidden />}
               {hi ? <span className="mr-0.5 text-[#22c55e]">+</span> : null}
               {ln}
@@ -213,9 +241,23 @@ export function CodeView({
           );
         })}
       </div>
+      {/*
+        No CodeView o scroll é do container pai: as faixas verdes vão no fluxo
+        (não absolute com -scrollTop), uma por linha, largura total.
+      */}
       <div className="relative min-w-0 flex-1">
-        <RevealBand revealLine={revealLine} revealCount={revealCount} fontPx={fontPx} padY={0} />
-        <pre className={`min-w-0 flex-1 p-0 pl-3 font-mono ${wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre"}`} style={text}>
+        <div className="pointer-events-none absolute inset-0 z-0" aria-hidden style={text}>
+          {Array.from({ length: lines }, (_, n) => {
+            const ln = n + 1;
+            const hi = lineHighlighted(ln, revealLine, revealCount);
+            return (
+              <div key={n} className="w-full" style={hi ? { background: REVEAL_BG } : undefined}>
+                &nbsp;
+              </div>
+            );
+          })}
+        </div>
+        <pre className={`relative z-[1] min-w-0 flex-1 bg-transparent p-0 pl-3 font-mono ${wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre"}`} style={text}>
           {segs.map((s, i) => (
             <span key={i} className={COLOR[s.tok]}>
               {s.text}

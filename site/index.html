@@ -605,6 +605,9 @@
         <article class="card"><h3>BethStudio-&lt;versão&gt;-windows-x64.zip</h3><p>Versão portátil: descompacte e abra <code>bethstudio-web.exe</code>.</p></article>
       </div>
       <p><a class="btn" href="https://github.com/rodrigo-mcu/beth-studio/releases/latest">Abrir a página de Releases</a></p>
+      <p class="note">Ou no PowerShell, sem baixar na mão:<br>
+        <code>irm https://raw.githubusercontent.com/rodrigo-mcu/beth-studio/main/scripts/get.ps1 | iex</code><br>
+        Depois: <code>winget install -e --id MCU.BethStudio</code> (quando o pacote estiver no winget).</p>
       <ol class="steps">
         <li>Baixe o <code>BethStudio-Setup.exe</code> e confira o arquivo com o <code>SHA256SUMS.txt</code>.</li>
         <li>Execute, escolha a pasta e clique em <strong>Instalar</strong>.</li>

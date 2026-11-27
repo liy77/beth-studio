@@ -1,0 +1,74 @@
+#!/bin/bash
+# Instalação fácil do Beth Studio — um comando para macOS e Linux.
+# No Windows use: scripts\install.cmd
+#
+#   ./scripts/install
+#   ./scripts/install --skip-rust
+#   ./scripts/install --skip-frontend   # só macOS (pack)
+#   ./scripts/install --help
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$root"
+
+usage() {
+  cat <<'EOF'
+Beth Studio — install (macOS / Linux)
+
+  ./scripts/install                 # build + instala neste SO
+  ./scripts/install --skip-rust     # reusa host/CLI já compilados
+  ./scripts/install --skip-frontend # (macOS) não reconstrói o React
+  ./scripts/install --help
+
+Windows:  scripts\install.cmd
+          powershell -File scripts\install.ps1
+
+Catálogo: scripts/README.md
+EOF
+}
+
+skip_rust=0
+skip_frontend=0
+for arg in "$@"; do
+  case "$arg" in
+    --skip-rust) skip_rust=1 ;;
+    --skip-frontend) skip_frontend=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      echo "opção desconhecida: $arg" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+os="$(uname -s)"
+case "$os" in
+  Darwin)
+    args=(--install)
+    [[ "$skip_rust" -eq 1 ]] && args+=(--skip-rust)
+    [[ "$skip_frontend" -eq 1 ]] && args+=(--skip-frontend)
+    echo "==> macOS: pack-bethstudio-macos.sh ${args[*]}"
+    exec "$root/pack-bethstudio-macos.sh" "${args[@]}"
+    ;;
+  Linux)
+    args=(--install)
+    [[ "$skip_rust" -eq 1 ]] && args+=(--skip-rust)
+    if [[ "$skip_frontend" -eq 1 ]]; then
+      echo "(aviso: --skip-frontend não se aplica ao pacote Linux host/CLI)" >&2
+    fi
+    echo "==> Linux: scripts/pack-linux.sh ${args[*]}"
+    exec "$root/scripts/pack-linux.sh" "${args[@]}"
+    ;;
+  MINGW*|MSYS*|CYGWIN*)
+    echo "Neste shell use o instalador Windows:" >&2
+    echo "  scripts\\install.cmd" >&2
+    echo "  powershell -File scripts\\install.ps1" >&2
+    exit 2
+    ;;
+  *)
+    echo "SO não suportado por este script: $os" >&2
+    echo "Windows → scripts\\install.cmd" >&2
+    exit 2
+    ;;
+esac

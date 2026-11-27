@@ -100,6 +100,11 @@ host and owns the tray icon. Build it first with
 
 `run-bethstudio-debug.cmd` is only for traces: it sets `WEZTERM_LOG=debug`.
 
+**Scripts catalog:** root launch/pack/install scripts stay where they are.
+The index and the one-shot installer live under `scripts/` — start with
+`scripts/README.md`, `./scripts/install` (macOS/Linux) or `scripts\install.cmd`
+(Windows). Do not delete the legacy root scripts when adding wrappers.
+
 Do not copy over a running installed copy, and do not kill a
 `bethstudio-web.exe` or `bethstudio-host.exe` the user is using unless they
 explicitly ask.

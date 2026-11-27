@@ -1,0 +1,39 @@
+{
+  "version": "0.4.1",
+  "description": "Beth Studio — terminal e estúdio com host persistente",
+  "homepage": "https://rodrigo-mcu.github.io/beth-studio/",
+  "license": "Proprietary",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/rodrigo-mcu/beth-studio/releases/download/v0.4.1/BethStudio-0.4.1-windows-x64.zip",
+      "hash": "7df34f44e5e39fabe40cabf03dc0523544db528e6ca0fc62120a2156e56ef4e9",
+      "extract_dir": "BethStudio-0.4.1"
+    }
+  },
+  "bin": [
+    "bethstudio-web.exe",
+    "bethstudio.exe",
+    "bethstudio-host.exe"
+  ],
+  "shortcuts": [
+    [
+      "bethstudio-web.exe",
+      "Beth Studio"
+    ]
+  ],
+  "checkver": {
+    "github": "https://github.com/rodrigo-mcu/beth-studio"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/rodrigo-mcu/beth-studio/releases/download/v$version/BethStudio-$version-windows-x64.zip",
+        "extract_dir": "BethStudio-$version"
+      }
+    },
+    "hash": {
+      "url": "https://github.com/rodrigo-mcu/beth-studio/releases/download/v$version/SHA256SUMS.txt"
+    }
+  },
+  "notes": "Instale também via: irm https://raw.githubusercontent.com/rodrigo-mcu/beth-studio/main/scripts/get.ps1 | iex"
+}

@@ -824,13 +824,31 @@ xterm screen. Remote access from the phone is not wired on the PC yet.
   builds the Studio (React + Go/WKWebView), packs `Beth Studio.app` with
   host and CLI, writes `dist/macos/BethStudio-macOS.dmg`, and with
   `--install` copies the app into `/Applications`.
-- ⚪ Linux builds of the Studio window.
+- 🟢 **Instalação unificada** (2026-11-27). `./scripts/install` (macOS/Linux)
+  or `scripts\install.cmd` (Windows) — one entry that builds and installs for
+  the current OS. On Windows it fills `%LOCALAPPDATA%\Beth Studio` (or `-Setup`
+  for `BethStudio-Setup.exe`); on macOS it calls the DMG/`/Applications` pack;
+  on Linux it installs host + CLI under `~/.local`. The old root scripts
+  (`pack-bethstudio-*.*`, `install-bethstudio-release.*`, `run-bethstudio.*`)
+  stay in place; `scripts/README.md` is the catalog.
+- 🟢 **Instalar pelo release (usuário)** (2026-11-27). Windows one-liner
+  `irm …/scripts/get.ps1 | iex` downloads `BethStudio-Setup.exe` from the
+  latest GitHub release (SHA checked). Winget manifests live under
+  `scripts/winget/MCU.BethStudio/` (`winget-gen.ps1` refreshes them; local
+  install with `winget install --manifest …`; community id `MCU.BethStudio`
+  after the winget-pkgs PR). Scoop JSON in `scripts/scoop/bethstudio.json`.
+  macOS: `curl …/scripts/get.sh | bash` when a DMG is on the release.
+- ⚪ Linux builds of the Studio window (host+CLI install via `scripts/pack-linux.sh`).
 
 ---
 
 ## Build & run
 
 ```sh
+# Easy install (any OS) — see scripts/README.md
+./scripts/install                 # macOS / Linux
+scripts\install.cmd               # Windows
+
 # From upstream-wezterm/. Strawberry Perl MUST be on PATH (openssl-sys).
 export PATH="/c/Strawberry/perl/bin:$PATH"
 cargo +nightly build --release -p wezterm -p wezterm-mux-server

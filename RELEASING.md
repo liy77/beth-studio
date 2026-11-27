@@ -67,6 +67,14 @@ No GitHub, abra o rascunho, revise as notas e clique em **Publish release**. Anu
 
 - `git push` da wiki, se mudou (`docs/WIKI-PUBLICAR.md`).
 - Atualização para quem já usa: o instalador mantém o host rodando; só marque *Encerrar tudo* se o release mudou o host (isso está nas notas).
+- Atualize os manifests winget/Scoop do repo:
+  ```powershell
+  powershell -File scripts\winget-gen.ps1 -Tag v0.2.0
+  # revise scripts\winget\MCU.BethStudio\<versão>\ e scripts\scoop\bethstudio.json
+  ```
+  Para o community repo (`winget install MCU.BethStudio`), abra um PR em
+  [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) com a pasta
+  `manifests/m/MCU/BethStudio/<versão>/` (cópia dos YAML gerados).
 
 ## Problemas comuns
 

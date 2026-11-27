@@ -1,0 +1,5 @@
+#!/bin/bash
+# Atalho na raiz → scripts/install (não remove os install-bethstudio-release.*).
+set -euo pipefail
+root="$(cd "$(dirname "$0")" && pwd)"
+exec "$root/scripts/install" "$@"

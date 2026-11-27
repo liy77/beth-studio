@@ -26,10 +26,14 @@ Operational files at the repository root:
 - `run-bethstudio.cmd` (same as `run-bethstudio-release.cmd`) and
   `run-bethstudio-debug.cmd` are the supported Windows launchers for manual
   testing. They start `bethstudio-web.exe` (Beth Studio) from this checkout;
-  build it first with `powershell -File bethstudio-webuild.ps1`.
+  build it first with `powershell -File bethstudio-web\build.ps1`.
   The `run-wezterminator-*.cmd` names are compatibility wrappers.
 - `bethstudio-web/` is Beth Studio (Go + React); `pack-bethstudio-setup.ps1`
   builds the installer.
+- `scripts/` is the **catalog and unified installer** (`scripts/README.md`,
+  `scripts/install` / `scripts/install.cmd`). Root `install` / `install.cmd`
+  are thin wrappers. Legacy pack/run/install scripts remain at the root —
+  do not delete them when adding wrappers.
 
 ```
 bethstudio/

@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: MCU.BethStudio
+PackageVersion: 0.4.1
+MinimumOSVersion: 10.0.17763.0
+InstallerType: zip
+NestedInstallerType: portable
+UpgradeBehavior: install
+ReleaseDate: 2026-11-24
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/rodrigo-mcu/beth-studio/releases/download/v0.4.1/BethStudio-0.4.1-windows-x64.zip
+  InstallerSha256: 7DF34F44E5E39FABE40CABF03DC0523544DB528E6CA0FC62120A2156E56EF4E9
+  NestedInstallerFiles:
+  - RelativeFilePath: BethStudio-0.4.1\bethstudio-web.exe
+    PortableCommandAlias: bethstudio-web
+  - RelativeFilePath: BethStudio-0.4.1\bethstudio.exe
+    PortableCommandAlias: bethstudio
+  - RelativeFilePath: BethStudio-0.4.1\bethstudio-host.exe
+    PortableCommandAlias: bethstudio-host
+ManifestType: installer
+ManifestVersion: 1.6.0
