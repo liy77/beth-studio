@@ -36,6 +36,8 @@ type LayoutTab struct {
 	ID   string      `json:"id"`
 	Name string      `json:"name"`
 	Root *LayoutNode `json:"root"`
+	// Pasta da guia aberta nesta aba (a UI grava; volta no próximo início).
+	FilesOpen bool `json:"files_open,omitempty"`
 	// So' em Closed: quando a aba foi fechada e desde quando todos os
 	// terminais dela estao encerrados (some 14 dias depois).
 	ClosedAt  string `json:"closed_at,omitempty"`
@@ -139,7 +141,7 @@ func sanitizeLayout(in *WebLayout) (*WebLayout, error) {
 		seenTab[t.ID] = true
 		// Nome vazio = a aba acompanha o titulo do terminal (a UI decide).
 		name := clip(strings.TrimSpace(t.Name), 60)
-		out.Tabs = append(out.Tabs, LayoutTab{ID: t.ID, Name: name, Root: node(t.Root, 0)})
+		out.Tabs = append(out.Tabs, LayoutTab{ID: t.ID, Name: name, Root: node(t.Root, 0), FilesOpen: t.FilesOpen})
 	}
 	if len(out.Tabs) == 0 {
 		return nil, errors.New("layout sem abas válidas")
@@ -160,7 +162,7 @@ func sanitizeLayout(in *WebLayout) (*WebLayout, error) {
 		}
 		seenTab[t.ID] = true
 		out.Closed = append(out.Closed, LayoutTab{ID: t.ID, Name: clip(strings.TrimSpace(t.Name), 60), Root: root,
-			ClosedAt: clip(t.ClosedAt, 40), GoneSince: clip(t.GoneSince, 40)})
+			FilesOpen: t.FilesOpen, ClosedAt: clip(t.ClosedAt, 40), GoneSince: clip(t.GoneSince, 40)})
 	}
 	out.Active = out.Tabs[0].ID
 	for _, t := range out.Tabs {

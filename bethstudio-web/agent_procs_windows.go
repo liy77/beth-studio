@@ -186,6 +186,12 @@ func (h *hub) scanProcesses(lastMonitor *time.Time) {
 	}
 
 	h.publishPaneAgents(agents)
+	var live []apNode
+	live = append(live, win...)
+	for _, nodes := range linux {
+		live = append(live, nodes...)
+	}
+	persistLiveAgents(agentSessionsDir(), settings.hostID(), live)
 
 	cfg := settings.agentProcs()
 	if cfg.Off || now.Sub(*lastMonitor) < apEvery-time.Second {

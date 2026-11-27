@@ -52,6 +52,29 @@ export function sameShellId(pane: Pick<PaneInfo, "kind" | "distro"> | undefined,
   }
 }
 
+const LOCAL_UNIX = ["login", "zsh", "bash", "sh"] as const;
+const LOCAL_WIN = ["pwsh", "powershell", "cmd"] as const;
+
+/** Shell para abrir pasta/agente: mesmo tipo do pane, senão login/zsh/… ou o 1º da lista. */
+export function pickShellForPane(
+  pane: Pick<PaneInfo, "kind" | "distro" | "wsl"> | undefined,
+  shells: ShellInfo[] | null,
+): string | null {
+  if (!shells?.length) return null;
+  const hasWsl = shells.some((s) => s.id.startsWith("wsl"));
+  // wsl=true em cwd Unix no Mac era falso positivo; só trate como WSL se existir shell wsl.*.
+  const asWsl = !!(pane && (pane.kind === "wsl" || pane.wsl) && hasWsl);
+  const same = sameShellId(asWsl ? { kind: "wsl", distro: pane?.distro } : pane, shells);
+  if (same) return same;
+  if (asWsl) return null;
+  return (
+    shells.find((s) => (LOCAL_UNIX as readonly string[]).includes(s.id))?.id ??
+    shells.find((s) => (LOCAL_WIN as readonly string[]).includes(s.id))?.id ??
+    shells[0]?.id ??
+    null
+  );
+}
+
 let seq = 0;
 /** Id provisorio (negativo) do marcador "abrindo…". */
 export function nextPlaceholderId(): number {

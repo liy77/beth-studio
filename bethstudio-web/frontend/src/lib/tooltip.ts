@@ -10,14 +10,17 @@ export interface TipText {
 /**
  * "Nome: descricao" / "Nome — descricao" / "Nome (descricao)" / "Nome\ndescricao"
  * -> nome em negrito + descricao na linha de baixo.
+ * Não parte em hífen solto dentro da frase ("Parar de editar" fica inteiro).
  */
 export function parseTip(raw: string): TipText {
   const text = raw.trim();
   const nl = text.indexOf("\n");
   if (nl > 0) return { title: text.slice(0, nl).trim(), desc: text.slice(nl + 1).trim() };
-  const m = /^(.{1,40}?)(?::\s+| — | - )(.+)$/s.exec(text);
-  if (m) return { title: m[1].trim(), desc: m[2].trim() };
-  const p = /^([^()]{1,40}?)\s*\((.+)\)$/s.exec(text);
+  // Só ":" / " — " (em dash) / " - " com espaços; título curto (rótulo).
+  const m = /^(.{1,48}?)(?::\s+| — )(.+)$/s.exec(text);
+  if (m && !/[()]/.test(m[1])) return { title: m[1].trim(), desc: m[2].trim() };
+  // Atalho no fim: "Fechar (Esc)" / "… (selecione um trecho primeiro)".
+  const p = /^([^()]{1,48}?)\s*\(([^()]{1,80})\)$/s.exec(text);
   if (p) return { title: p[1].trim(), desc: p[2].trim() };
   return { title: text, desc: "" };
 }

@@ -1,11 +1,11 @@
 import { useState } from "react";
 import type { Connection } from "@/lib/connection";
-import { dismissResume, resumeBannerText, runResume, type ResumeOffer } from "@/lib/agentResume";
+import { agentResumeLabel, dismissResume, resumeBannerText, runResume, type ResumeOffer } from "@/lib/agentResume";
 
 const BTN = "shrink-0 rounded bg-bg-hover px-2 py-0.5 text-text-1 hover:bg-border disabled:opacity-50";
 const BTN_MAIN = "shrink-0 rounded bg-accent px-2 py-0.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-50";
 
-/** Faixa "Retomar sessões do Claude" depois que o host reinicia (agent_resume.go). */
+/** Faixa "Retomar sessões" depois que o host reinicia (agent_resume.go). */
 export function ResumeBanner({ conn, offers, nameOf }: { conn: Connection; offers: ResumeOffer[]; nameOf: (paneId: number) => string | undefined }) {
   const [open, setOpen] = useState(false);
   const [working, setWorking] = useState(false);
@@ -40,10 +40,11 @@ export function ResumeBanner({ conn, offers, nameOf }: { conn: Connection; offer
         <ul className="mt-1 space-y-1">
           {offers.map((o) => (
             <li key={o.pane_id} className="flex flex-wrap items-center gap-2">
-              <span className="min-w-0 flex-1 truncate" title={`${o.cwd ?? ""}\nsessão ${o.session_id}`}>
+              <span className="min-w-0 flex-1 truncate" title={`${o.cwd ?? ""}\n${o.agent} ${o.session_id}`}>
                 <b>{nameOf(o.pane_id) || o.title || `Terminal ${o.pane_id}`}</b>
+                <span className="ml-2 text-text-2">{agentResumeLabel(o.agent)}</span>
                 {o.cwd && <span className="text-text-2"> — {o.cwd}</span>}
-                {o.ended && <span className="ml-2 text-text-3">(você tinha saído do Claude)</span>}
+                {o.ended && <span className="ml-2 text-text-3">(você tinha saído)</span>}
               </span>
               <button className={BTN_MAIN} disabled={working} onClick={() => run(() => runResume(conn, [o.pane_id]))}>
                 Retomar

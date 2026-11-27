@@ -85,7 +85,7 @@ type webSettings struct {
 	Ponte *PonteSettings `json:"ponte,omitempty"`
 	// Limpeza automatica dos temporarios do Studio (tempclean.go).
 	TempClean *TempCleanSettings `json:"temp_clean,omitempty"`
-	// Retomar sessões do Claude depois que o host reinicia (agent_resume.go).
+	// Retomar sessões de agentes depois que o host reinicia (agent_resume.go).
 	AgentResume *AgentResumeSettings `json:"agent_resume,omitempty"`
 	// Processos deixados pelos agentes (agent_procs.go).
 	AgentProcs *AgentProcSettings `json:"agent_procs,omitempty"`
@@ -99,6 +99,16 @@ type webSettings struct {
 	Shortcuts map[string]string `json:"shortcuts,omitempty"`
 	// Pré-visualizar imagem antes de colar no terminal (nil = ligado).
 	PasteImagePreview *bool `json:"paste_image_preview,omitempty"`
+	// Abrir arquivo na lateral mantendo a árvore (nil = desligado).
+	FilesSideEditor *bool `json:"files_side_editor,omitempty"`
+	// Seguir o arquivo que o agente edita, em tempo real (nil = desligado).
+	FollowAgentFile *bool `json:"follow_agent_file,omitempty"`
+	// Mostrar imagens Kitty/iTerm no terminal (nil = ligado).
+	TermInlineImages *bool `json:"term_inline_images,omitempty"`
+	// Reduzir animações da interface (nil = desligado).
+	ReduceMotion *bool `json:"reduce_motion,omitempty"`
+	// Idioma da interface: "pt" (padrão) ou "en".
+	UILocale string `json:"ui_locale,omitempty"`
 }
 
 type SidebarPrefs struct {
@@ -162,6 +172,16 @@ type SettingsSnapshot struct {
 	Shortcuts      map[string]string `json:"shortcuts,omitempty"`
 	// Pré-visualizar imagem antes de colar. Ausente no JSON antigo = ligado.
 	PasteImagePreview bool `json:"paste_image_preview"`
+	// Editor na lateral com a pasta (opt-in).
+	FilesSideEditor bool `json:"files_side_editor"`
+	// Seguir edição do agente no painel (opt-in).
+	FollowAgentFile bool `json:"follow_agent_file"`
+	// Imagens Kitty/iTerm no terminal. Ausente = ligado.
+	TermInlineImages bool `json:"term_inline_images"`
+	// Menos animação na interface (opt-in).
+	ReduceMotion bool `json:"reduce_motion"`
+	// Idioma da UI: pt | en.
+	UILocale string `json:"ui_locale"`
 }
 
 type paneMeta struct{ title, cwd string }
@@ -451,13 +471,69 @@ func (st *settingsStore) snapshotLocked() SettingsSnapshot {
 	}
 	// Ausente ou true = ligado (padrão); só false desliga.
 	snap.PasteImagePreview = st.s.PasteImagePreview == nil || *st.s.PasteImagePreview
+	// Opt-in: ausente ou false = desligado.
+	snap.FilesSideEditor = st.s.FilesSideEditor != nil && *st.s.FilesSideEditor
+	snap.FollowAgentFile = st.s.FollowAgentFile != nil && *st.s.FollowAgentFile
+	snap.TermInlineImages = st.s.TermInlineImages == nil || *st.s.TermInlineImages
+	snap.ReduceMotion = st.s.ReduceMotion != nil && *st.s.ReduceMotion
+	snap.UILocale = normalizeUILocale(st.s.UILocale)
 	return snap
+}
+
+func normalizeUILocale(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "en", "en-us", "en_us":
+		return "en"
+	default:
+		return "pt"
+	}
 }
 
 // setPasteImagePreview liga/desliga a pré-visualização ao colar imagem.
 func (st *settingsStore) setPasteImagePreview(on bool) (SettingsSnapshot, error) {
 	return st.mutate(func() error {
 		st.s.PasteImagePreview = &on
+		return st.saveLocked()
+	})
+}
+
+// setFilesSideEditor: arquivo abre na lateral junto com a árvore (estilo Cursor).
+func (st *settingsStore) setFilesSideEditor(on bool) (SettingsSnapshot, error) {
+	return st.mutate(func() error {
+		st.s.FilesSideEditor = &on
+		return st.saveLocked()
+	})
+}
+
+// setFollowAgentFile: o painel acompanha o arquivo que o agente está editando.
+func (st *settingsStore) setFollowAgentFile(on bool) (SettingsSnapshot, error) {
+	return st.mutate(func() error {
+		st.s.FollowAgentFile = &on
+		return st.saveLocked()
+	})
+}
+
+// setTermInlineImages: overlay Kitty/iTerm no terminal web.
+func (st *settingsStore) setTermInlineImages(on bool) (SettingsSnapshot, error) {
+	return st.mutate(func() error {
+		st.s.TermInlineImages = &on
+		return st.saveLocked()
+	})
+}
+
+// setReduceMotion: menos animação na interface.
+func (st *settingsStore) setReduceMotion(on bool) (SettingsSnapshot, error) {
+	return st.mutate(func() error {
+		st.s.ReduceMotion = &on
+		return st.saveLocked()
+	})
+}
+
+// setUILocale: idioma da interface (pt | en).
+func (st *settingsStore) setUILocale(locale string) (SettingsSnapshot, error) {
+	locale = normalizeUILocale(locale)
+	return st.mutate(func() error {
+		st.s.UILocale = locale
 		return st.saveLocked()
 	})
 }

@@ -21,13 +21,15 @@ export interface RestorePendingItem {
 
 export interface RestoreEvent {
   ev: "restore";
-  stage: "start" | "wsl" | "ask_init" | "init" | "spawn" | "done" | "finished";
+  stage: "start" | "wsl" | "ask_init" | "ask_restore" | "init" | "spawn" | "done" | "finished";
   total: number;
   done: number;
   distro?: string;
   message?: string;
   /** estagio ask_init: as pastas que faltam */
   missing?: string[];
+  /** estagio ask_restore: titulos dos terminais da sessao anterior */
+  titles?: string[];
   failed?: RestoreFailure[];
   pending?: RestorePendingItem[];
   warnings?: string[];
@@ -41,6 +43,8 @@ export interface RestoreBannerInfo {
   details: string[];
   /** pergunta aberta: "executar o init do WSL?" (so' presente enquanto ha pergunta) */
   ask?: { distro: string; missing: string[] };
+  /** pergunta: reabrir a sessão anterior depois que o host caiu */
+  askRestore?: { total: number; titles: string[] };
   /** init em andamento: "continuar assim mesmo" */
   init?: { distro: string };
   /** terminais aguardando a pasta (so' presente quando ha algum) */
@@ -52,6 +56,15 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 /** O que mostrar (null = nada). `now` e `finishedAt` deixam o resumo sumir sozinho. */
 export function restoreBanner(r: RestoreEvent | null, now = Date.now(), finishedAt = 0): RestoreBannerInfo | null {
   if (!r) return null;
+  if (r.stage === "ask_restore") {
+    const total = r.total || (r.titles?.length ?? 0);
+    const text =
+      r.message ||
+      (total === 1
+        ? "A sessão anterior tinha 1 terminal. Quer reabrir?"
+        : `A sessão anterior tinha ${total} terminais. Quer reabrir todos?`);
+    return { text, busy: false, details: [], askRestore: { total, titles: r.titles ?? [] } };
+  }
   if (r.stage === "ask_init") {
     const distro = r.distro ?? "";
     const missing = r.missing ?? [];
@@ -95,6 +108,11 @@ export type PendingAction = "retry" | "default" | "keep" | "discard";
 /** Responde a pergunta do init ("run" / "skip") ou manda seguir sem esperar o init ("continue"). */
 export async function answerRestoreInit(conn: Connection, distro: string, action: InitAnswer): Promise<void> {
   await conn.api("/api/restore/answer", { distro, action });
+}
+
+/** Responde se deve reabrir a sessão anterior (terminais da receita). */
+export async function answerSessionRestore(conn: Connection, restore: boolean): Promise<void> {
+  await conn.api("/api/restore/answer", { action: restore ? "restore" : "skip_restore" });
 }
 
 /** Acao do usuario sobre um terminal que aguarda a pasta; `opened` diz se ele abriu agora. */

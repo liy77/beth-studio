@@ -1,19 +1,17 @@
 package main
 
-// agent_resume.go — "Retomar sessões do Claude" depois que o host reinicia.
+// agent_resume.go — retomar sessões de agentes depois que o host reinicia.
 //
-// Um hook do Claude Code (`bethstudio-tool.exe agent-hook`, nos eventos
-// SessionStart e SessionEnd) grava, para cada terminal, qual sessão do Claude
-// roda nele: o terminal vem de WEZTERM_PANE (o host põe essa variável em todo
-// terminal; o patch 0205 a leva também para dentro do WSL) e o host vem do
-// host.pid, como em toda identidade de pane do Studio. Um arquivo por terminal
-// em <dados>\agent-sessions.
+// Duas fontes alimentam <dados>/agent-sessions (um arquivo por terminal):
 //
-// A receita da restauração (pane_specs.go) leva o id da sessão de cada
-// terminal. Quando o host volta vazio e o Studio recria os terminais, cada
-// terminal que tinha uma sessão vira uma oferta: a faixa do Studio mostra
-// "Retomar" (ou o Studio retoma sozinho, se a pessoa escolheu isso), que
-// digita `claude --resume <id>` no terminal novo.
+//  1. Hook do Claude Code (`bethstudio-tool agent-hook`, SessionStart/SessionEnd):
+//     id preciso da conversa via WEZTERM_PANE.
+//  2. Scan de processos (a cada ~15 s): qualquer agente vivo no terminal
+//     (Claude, Cursor, Codex, Grok, Gemini, OpenCode). Se o argv não trouxer
+//     o id, grava "last" e na retomada usa o continue/`--last` daquela CLI.
+//
+// A receita (pane_specs.go) leva Agent + SessionID. Depois da restauração o
+// Studio digita o comando certo no terminal novo (auto por padrão).
 
 import (
 	"encoding/json"
@@ -33,17 +31,43 @@ import (
 
 const agentHookFlag = "agent-hook"
 
+// sessionLast: sem id conhecido — na retomada usa o continue/`--last` do agente.
+const sessionLast = "last"
+
 var agentSessionIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{7,79}$`)
 
-// agentRecord: o que o hook grava por terminal.
+func validAgentSessionID(s string) bool {
+	return s == sessionLast || agentSessionIDRe.MatchString(s)
+}
+
+// Comandos por agente. {id} só nos que retomam por id; "last" usa agentContinueCmd.
+var agentResumeCmd = map[string]string{
+	"claude":   "claude --resume {id}",
+	"cursor":   "cursor-agent --resume={id}",
+	"codex":    "codex resume {id}",
+	"grok":     "grok --resume {id}",
+	"gemini":   "gemini --resume {id}",
+	"opencode": "opencode --session {id}",
+}
+
+var agentContinueCmd = map[string]string{
+	"claude":   "claude --continue",
+	"cursor":   "cursor-agent --continue",
+	"codex":    "codex resume --last",
+	"grok":     "grok --continue",
+	"gemini":   "gemini --resume latest",
+	"opencode": "opencode --continue",
+}
+
+// agentRecord: o que o hook / o scan grava por terminal.
 type agentRecord struct {
-	Agent     string `json:"agent"` // "claude"
+	Agent     string `json:"agent"` // claude | cursor | codex | grok | gemini | opencode
 	SessionID string `json:"session_id"`
 	Pane      int    `json:"pane"`
 	Host      string `json:"host"`
 	Cwd       string `json:"cwd,omitempty"`
 	Side      string `json:"side,omitempty"` // windows | wsl
-	At        int64  `json:"at"`             // unix: último SessionStart
+	At        int64  `json:"at"`             // unix: último SessionStart / scan
 	Ended     int64  `json:"ended,omitempty"`
 }
 
@@ -163,7 +187,7 @@ func agentRecordsFor(dir, host string) []agentRecord {
 			}
 			continue
 		}
-		if agentSessionIDRe.MatchString(r.SessionID) {
+		if validAgentSessionID(r.SessionID) {
 			out = append(out, r)
 		}
 	}
@@ -238,8 +262,8 @@ func attachAgentSessions(specs []paneSpec, recs []agentRecord) []paneSpec {
 // resumeSpec: a sessão do agente que rodava no terminal (na receita).
 type resumeSpec struct {
 	Agent     string `json:"agent"`
-	SessionID string `json:"session_id"`
-	Ended     bool   `json:"ended,omitempty"` // a pessoa tinha saído do Claude
+	SessionID string `json:"session_id"` // id real ou "last"
+	Ended     bool   `json:"ended,omitempty"` // a pessoa tinha saído (só Claude/hook)
 	At        int64  `json:"at,omitempty"`
 }
 
@@ -247,28 +271,64 @@ type resumeSpec struct {
 
 // AgentResumeSettings: Configurações > Retomar sessões.
 type AgentResumeSettings struct {
-	// ask (padrão): a faixa oferece "Retomar"; auto: retoma sozinho as sessões
-	// que estavam abertas; off: não oferece.
+	// auto (padrão): retoma sozinho as sessões que estavam abertas; ask: a faixa
+	// oferece "Retomar"; off: não oferece.
 	Mode string `json:"mode,omitempty"`
-	// Comando digitado no terminal; {id} vira o id da sessão.
+	// Override por agente do comando com id ({id} obrigatório). Vazio = padrão da CLI.
+	Commands map[string]string `json:"commands,omitempty"`
+	// Override por agente do continue/`--last` (sem {id}). Vazio = padrão da CLI.
+	Continue map[string]string `json:"continue,omitempty"`
+	// Legado: um único comando do Claude. Migrado para Commands["claude"].
 	Command string `json:"command,omitempty"`
 }
 
 const defaultResumeCommand = "claude --resume {id}"
 
+// Ordem na UI / API de padrões.
+var agentResumeOrder = []string{"claude", "cursor", "codex", "grok", "gemini", "opencode"}
+
 func (a AgentResumeSettings) normalized() AgentResumeSettings {
 	switch a.Mode {
 	case "ask", "auto", "off":
 	default:
-		a.Mode = "ask"
+		a.Mode = "auto"
 	}
-	if strings.TrimSpace(a.Command) == "" {
+	if a.Commands == nil {
+		a.Commands = map[string]string{}
+	}
+	if a.Continue == nil {
+		a.Continue = map[string]string{}
+	}
+	// Migra o campo antigo (só Claude).
+	if c := strings.TrimSpace(a.Command); c != "" && strings.TrimSpace(a.Commands["claude"]) == "" {
+		a.Commands["claude"] = c
+	}
+	a.Commands = cleanAgentCmdMap(a.Commands, true)
+	a.Continue = cleanAgentCmdMap(a.Continue, false)
+	if c := a.Commands["claude"]; c != "" {
+		a.Command = c
+	} else {
 		a.Command = defaultResumeCommand
 	}
 	return a
 }
 
-func validResumeCommand(c string) error {
+func cleanAgentCmdMap(in map[string]string, needID bool) map[string]string {
+	out := map[string]string{}
+	for _, id := range agentResumeOrder {
+		c := strings.TrimSpace(in[id])
+		if c == "" {
+			continue
+		}
+		if err := validAgentCmd(c, needID); err != nil {
+			continue
+		}
+		out[id] = c
+	}
+	return out
+}
+
+func validAgentCmd(c string, needID bool) error {
 	c = strings.TrimSpace(c)
 	switch {
 	case c == "":
@@ -277,21 +337,151 @@ func validResumeCommand(c string) error {
 		return errors.New("comando grande demais (até 200 caracteres)")
 	case strings.ContainsAny(c, "\r\n\x00"):
 		return errors.New("o comando tem que ser uma linha só")
-	case !strings.Contains(c, "{id}"):
-		return errors.New("o comando precisa ter {id} no lugar do id da sessão")
+	case needID && !strings.Contains(c, "{id}"):
+		return errors.New("o comando com id precisa ter {id}")
+	case !needID && strings.Contains(c, "{id}"):
+		return errors.New("o comando de continuar não usa {id}")
 	}
 	return nil
 }
 
+func validResumeCommand(c string) error { return validAgentCmd(c, true) }
+
+func validResumeSettings(a AgentResumeSettings) error {
+	for id, c := range a.Commands {
+		if err := validAgentCmd(c, true); err != nil {
+			return fmt.Errorf("%s (com id): %w", id, err)
+		}
+	}
+	for id, c := range a.Continue {
+		if err := validAgentCmd(c, false); err != nil {
+			return fmt.Errorf("%s (continuar): %w", id, err)
+		}
+	}
+	if a.Command != "" {
+		if err := validAgentCmd(a.Command, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// resumeDefaultsJSON: catálogo embutido para a UI (rótulo + padrões).
+func resumeDefaultsJSON() []map[string]string {
+	labels := map[string]string{
+		"claude": "Claude", "cursor": "Cursor", "codex": "Codex",
+		"grok": "Grok", "gemini": "Gemini", "opencode": "OpenCode",
+	}
+	out := make([]map[string]string, 0, len(agentResumeOrder))
+	for _, id := range agentResumeOrder {
+		out = append(out, map[string]string{
+			"id": id, "label": labels[id],
+			"resume": agentResumeCmd[id], "continue": agentContinueCmd[id],
+		})
+	}
+	return out
+}
+
 // resumeCommandFor: o texto digitado no terminal (sem o Enter).
-func resumeCommandFor(tmpl, sid string) (string, error) {
-	if !agentSessionIDRe.MatchString(sid) {
+// sid "last" (ou vazio) → continue/`--last`; senão resume com id.
+// cfg.Commands / cfg.Continue sobrescrevem o padrão da CLI.
+func resumeCommandFor(agent string, cfg AgentResumeSettings, sid string) (string, error) {
+	agent = strings.ToLower(strings.TrimSpace(agent))
+	if agent == "" {
+		agent = "claude"
+	}
+	cfg = cfg.normalized()
+	useLast := sid == "" || sid == sessionLast
+	if !useLast && !agentSessionIDRe.MatchString(sid) {
 		return "", errors.New("id de sessão inválido")
 	}
-	if tmpl = strings.TrimSpace(tmpl); tmpl == "" {
-		tmpl = defaultResumeCommand
+	if useLast {
+		if c := strings.TrimSpace(cfg.Continue[agent]); c != "" {
+			return c, nil
+		}
+		cmd := agentContinueCmd[agent]
+		if cmd == "" {
+			return "", fmt.Errorf("agente %q sem comando de continuar", agent)
+		}
+		return cmd, nil
+	}
+	tmpl := strings.TrimSpace(cfg.Commands[agent])
+	if tmpl == "" {
+		tmpl = agentResumeCmd[agent]
+	}
+	if tmpl == "" {
+		return "", fmt.Errorf("agente %q sem comando de retomar", agent)
 	}
 	return strings.ReplaceAll(tmpl, "{id}", sid), nil
+}
+
+// sessionIDFromCmd: tenta achar o id no argv do agente; senão "last".
+func sessionIDFromCmd(agent, cmd string) string {
+	fields := strings.Fields(cmd)
+	for i, f := range fields {
+		switch {
+		case f == "--resume" || f == "-r" || f == "--session" || f == "-s":
+			if i+1 < len(fields) && !strings.HasPrefix(fields[i+1], "-") && agentSessionIDRe.MatchString(fields[i+1]) {
+				return fields[i+1]
+			}
+		case strings.HasPrefix(f, "--resume="):
+			if id := strings.TrimPrefix(f, "--resume="); agentSessionIDRe.MatchString(id) {
+				return id
+			}
+		case strings.HasPrefix(f, "--session="):
+			if id := strings.TrimPrefix(f, "--session="); agentSessionIDRe.MatchString(id) {
+				return id
+			}
+		case agent == "codex" && f == "resume" && i+1 < len(fields):
+			if agentSessionIDRe.MatchString(fields[i+1]) {
+				return fields[i+1]
+			}
+		}
+	}
+	return sessionLast
+}
+
+// persistLiveAgents anota, a partir dos processos vivos, qual agente está em
+// cada terminal. Não apaga registro quando o agente sai (vale para o próximo
+// restore). Não troca um id preciso do hook do Claude por "last".
+func persistLiveAgents(dir, host string, nodes []apNode) {
+	if host == "" || len(nodes) == 0 {
+		return
+	}
+	_ = os.MkdirAll(dir, 0o755)
+	now := time.Now().Unix()
+	seen := map[int]bool{}
+	for _, n := range nodes {
+		agent := agentOfNode(n)
+		if agent == "" || !n.HasPane || n.Pane < 0 || seen[n.Pane] {
+			continue
+		}
+		seen[n.Pane] = true
+		sid := sessionIDFromCmd(agent, n.Cmd)
+		file := agentRecordFile(dir, host, n.Pane)
+		if raw, err := os.ReadFile(file); err == nil {
+			var old agentRecord
+			if json.Unmarshal(raw, &old) == nil && old.Host == host && old.Agent == agent &&
+				agentSessionIDRe.MatchString(old.SessionID) && !agentSessionIDRe.MatchString(sid) {
+				old.Ended = 0
+				old.At = now
+				if old.Cwd == "" && n.Cwd != "" {
+					old.Cwd = n.Cwd
+				}
+				if out, err := json.Marshal(old); err == nil {
+					_ = writeAtomic(file, out)
+				}
+				continue
+			}
+		}
+		rec := agentRecord{Agent: agent, SessionID: sid, Pane: n.Pane, Host: host, Cwd: n.Cwd, At: now}
+		if out, err := json.Marshal(rec); err == nil {
+			_ = writeAtomic(file, out)
+		}
+	}
+	agentRecCache.mu.Lock()
+	agentRecCache.recs = nil
+	agentRecCache.mu.Unlock()
 }
 
 func (st *settingsStore) agentResume() AgentResumeSettings {
@@ -328,7 +518,7 @@ type resumeOffer struct {
 func resumeOffers(specs []paneSpec, m map[int]int) []resumeOffer {
 	var out []resumeOffer
 	for _, s := range specs {
-		if s.Resume == nil || !agentSessionIDRe.MatchString(s.Resume.SessionID) {
+		if s.Resume == nil || !validAgentSessionID(s.Resume.SessionID) {
 			continue
 		}
 		nid, ok := m[s.PaneID]
@@ -381,11 +571,11 @@ func (h *hub) takeResumeOffers(ids []int, all bool) []resumeOffer {
 
 // resumeIn digita o comando de retomar no terminal e depois o Enter (separado,
 // para o shell não tomar o Enter como parte de uma colagem).
-func (h *hub) resumeIn(o resumeOffer, tmpl string) error {
+func (h *hub) resumeIn(o resumeOffer, cfg AgentResumeSettings) error {
 	if h.bridge == nil {
 		return errBridgeDown
 	}
-	cmd, err := resumeCommandFor(tmpl, o.SessionID)
+	cmd, err := resumeCommandFor(o.Agent, cfg, o.SessionID)
 	if err != nil {
 		return err
 	}
@@ -424,7 +614,7 @@ func (h *hub) afterRestoreResume(specs []paneSpec, m map[int]int) {
 		go func() {
 			time.Sleep(3 * time.Second) // o shell novo ainda está subindo (perfil do PowerShell, WSL)
 			for _, o := range run {
-				_ = h.resumeIn(o, cfg.Command)
+				_ = h.resumeIn(o, cfg)
 			}
 		}()
 		return
@@ -436,8 +626,8 @@ func (h *hub) afterRestoreResume(specs []paneSpec, m map[int]int) {
 
 // serveAgentResume:
 //
-//	GET  /api/agent-resume                  -> {settings, offers, tool}
-//	POST /api/agent-resume/settings {mode, command}
+//	GET  /api/agent-resume                  -> {settings, offers, tool, defaults}
+//	POST /api/agent-resume/settings {mode, commands, continue}
 //	POST /api/agent-resume/run      {pane_ids, all}   (retoma)
 //	POST /api/agent-resume/dismiss  {pane_ids, all}   (esquece a oferta)
 //	POST /api/agent-resume/setup    {target, distro, action: add|remove|check}
@@ -451,7 +641,11 @@ func (s *server) serveAgentResume(w http.ResponseWriter, r *http.Request) {
 		if distros == nil {
 			distros = []string{}
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"settings": settings.agentResume(), "offers": offers, "tool": ponteToolPath(), "default_command": defaultResumeCommand, "distros": distros})
+		cfg := settings.agentResume()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"settings": cfg, "offers": offers, "tool": ponteToolPath(),
+			"default_command": cfg.Command, "defaults": resumeDefaultsJSON(), "distros": distros,
+		})
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -465,11 +659,11 @@ func (s *server) serveAgentResume(w http.ResponseWriter, r *http.Request) {
 	switch path {
 	case "/settings":
 		var body AgentResumeSettings
-		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body) != nil {
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body) != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "pedido inválido"})
 			return
 		}
-		if err := validResumeCommand(body.Command); err != nil {
+		if err := validResumeSettings(body); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
@@ -489,9 +683,9 @@ func (s *server) serveAgentResume(w http.ResponseWriter, r *http.Request) {
 		}
 		taken := s.hub.takeResumeOffers(body.PaneIDs, body.All)
 		if path == "/run" {
-			tmpl := settings.agentResume().Command
+			cfg := settings.agentResume()
 			for _, o := range taken {
-				if err := s.hub.resumeIn(o, tmpl); err != nil {
+				if err := s.hub.resumeIn(o, cfg); err != nil {
 					writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
 					return
 				}

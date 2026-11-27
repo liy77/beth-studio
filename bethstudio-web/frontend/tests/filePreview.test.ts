@@ -87,6 +87,9 @@ test("painel: ações pedidas estão ligadas (fonte do componente)", () => {
   assert.match(src, /onContextMenu/);
   assert.match(src, /data-local-href/);
   assert.match(src, /md-remote-img/);
+  // imagem: getBlob + blob: (WebKit não manda cookie no <img src="/api/...">)
+  assert.match(src, /createObjectURL/);
+  assert.match(src, /kind === "image"/);
   // botões só com ícone (tooltip), sem rótulo de texto
   assert.ok(!/>\s*[A-Za-zÀ-ú][^<>{}]*<\/IconButton>/.test(src));
 });

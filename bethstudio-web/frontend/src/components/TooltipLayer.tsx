@@ -21,15 +21,20 @@ export function TooltipLayer() {
     let timer: number | undefined;
     let current: Element | null = null;
     const textOf = (el: Element) => {
+      // data-tip é a fonte canônica (IconButton); title nativo vira data-tip-title.
+      const tip = el.getAttribute("data-tip");
+      if (tip) return tip;
       const t = el.getAttribute("title");
       if (t) {
         el.setAttribute("data-tip-title", t);
         el.removeAttribute("title"); // sem o nativo junto
       }
-      return el.getAttribute("data-tip") || el.getAttribute("data-tip-title") || "";
+      return el.getAttribute("data-tip-title") || "";
     };
     const target = (n: EventTarget | null) => {
-      const el = (n as Element | null)?.closest?.("button[title],button[data-tip-title],[data-tip],[role=button][title],[role=button][data-tip-title],.bt-tab[title],.bt-tab[data-tip-title]");
+      const el = (n as Element | null)?.closest?.(
+        "button[data-tip],button[title],button[data-tip-title],[data-tip],[role=button][data-tip],[role=button][title],[role=button][data-tip-title],.bt-tab[title],.bt-tab[data-tip],.bt-tab[data-tip-title]",
+      );
       return el ?? null; // desabilitado tambem mostra (explica por que)
     };
     const hide = () => {

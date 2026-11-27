@@ -328,6 +328,22 @@ html:not(.dark) .bt-worktree .bt-worktree-btn:hover {
   overflow: hidden;
   background: var(--bt-topbar);
 }
+/* Pasta + editor empilhados: dois cards separados (vão = cor da faixa). */
+.bt-files-split {
+  gap: 10px;
+  min-height: 0;
+}
+.bt-files-split__card {
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  corner-shape: superellipse(1.6);
+}
+.bt-files-split__card > .bt-worktree,
+.bt-files-split__card > .bt-preview {
+  border-radius: 12px;
+  height: 100%;
+}
 .bt-side-slot-right > .relative {
   min-width: 0;
   max-width: 100%;
@@ -783,8 +799,8 @@ html.bt-vibrancy .bt-sidebar .overflow-y-auto {
   background-color: transparent !important;
   background-image: none !important;
 }
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode,
+html.bt-vibrancy .bt-sidebar button.h-7,
+html.bt-vibrancy .bt-sidebar .bt-mode,
 html.bt-acrylic .bt-sidebar button.h-7,
 html.bt-acrylic .bt-sidebar .bt-mode {
   color: rgb(var(--bt-text-1));
@@ -796,17 +812,17 @@ html.bt-acrylic .bt-sidebar .bt-mode.bt-glass-on * {
   color: #fff !important;
 }
 /* Busca, modo e chip selecionado: fundo transparente — tinta só na placa nativa. */
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search input,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chip,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7 {
+html.bt-vibrancy .bt-sidebar .bt-search,
+html.bt-vibrancy .bt-sidebar .bt-search input,
+html.bt-vibrancy .bt-sidebar .bt-mode,
+html.bt-vibrancy .bt-sidebar .bt-chip,
+html.bt-vibrancy .bt-sidebar button.h-7 {
   background: transparent !important;
   background-color: transparent !important;
   box-shadow: none !important;
   border-color: transparent !important;
 }
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search svg {
+html.bt-vibrancy .bt-sidebar .bt-search svg {
   color: rgb(var(--bt-text-2));
 }
 /* Cabeçalho de pasta: sem fundo. O chevron, o ícone e o nome ficam na página. */
@@ -823,41 +839,41 @@ html.bt-vibrancy .bt-sidebar .bt-folder.bt-glass-on {
   border-radius: 16px;
   corner-shape: superellipse(1.7);
 }
-html.dark.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat {
+html.dark.bt-vibrancy .bt-sidebar .bt-chat {
   background: rgb(var(--bt-bg-hover) / 0.55) !important;
   background-color: rgb(var(--bt-bg-hover) / 0.55) !important;
   opacity: 1;
   color: rgb(var(--bt-text-1));
 }
-html.dark.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat:hover {
+html.dark.bt-vibrancy .bt-sidebar .bt-chat:hover {
   background: rgb(var(--bt-bg-card) / 0.72) !important;
   background-color: rgb(var(--bt-bg-card) / 0.72) !important;
 }
 /* Tema claro: véu leve — o vibrancy do fundo tem de aparecer entre os chats. */
-html:not(.dark).bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat {
+html:not(.dark).bt-vibrancy .bt-sidebar .bt-chat {
   background: rgb(255 255 255 / 0.42) !important;
   background-color: rgb(255 255 255 / 0.42) !important;
   box-shadow: inset 0 0 0 1px rgb(15 23 41 / 0.1);
   opacity: 1;
   color: rgb(var(--bt-text-1));
 }
-html:not(.dark).bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat:hover {
+html:not(.dark).bt-vibrancy .bt-sidebar .bt-chat:hover {
   background: rgb(255 255 255 / 0.62) !important;
   background-color: rgb(255 255 255 / 0.62) !important;
   box-shadow: inset 0 0 0 1px rgb(15 23 41 / 0.14);
 }
 /* Selecionado: fundo transparente — o liquid glass (igual ao Ver) fica
    atrás do WebView; nome / na aba / badge pintam por cima. */
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on:hover {
+html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on,
+html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on:hover {
   background: transparent !important;
   background-color: transparent !important;
   box-shadow: none !important;
   color: white;
 }
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on .text-text-1,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on .text-text-3,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chat.bt-glass-on .text-accent-text {
+html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on .text-text-1,
+html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on .text-text-3,
+html.bt-vibrancy .bt-sidebar .bt-chat.bt-glass-on .text-accent-text {
   color: #fff !important;
 }
 /* Chip idle: texto na página. Chip selecionado: some (placa nativa desenha). */
@@ -868,8 +884,8 @@ html.bt-vibrancy .bt-sidebar .bt-chip:not(.bt-glass-on):hover {
   color: rgb(var(--bt-text-1));
   opacity: 1;
 }
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chip.bt-glass-on,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chip.bt-glass-on * {
+html.bt-vibrancy .bt-sidebar .bt-chip.bt-glass-on,
+html.bt-vibrancy .bt-sidebar .bt-chip.bt-glass-on * {
   opacity: 0;
 }
 .bt-tip,
@@ -904,16 +920,16 @@ html.bt-vibrancy.bt-native-menu .bt-menu button.text-status-err {
 .bt-tip {
   z-index: 10000;
 }
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-tab:not(.bt-tab-active) *:not(.bt-tab-close):not(.bt-tab-close *),
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-tab-tool *,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-mode *,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar button.h-7 *,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-search *,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chip.bt-glass-on,
-html.bt-vibrancy:not(:has(.bt-preview)) .bt-sidebar .bt-chip.bt-glass-on * {
+html.bt-vibrancy .bt-tab:not(.bt-tab-active) *:not(.bt-tab-close):not(.bt-tab-close *),
+html.bt-vibrancy .bt-tab-tool *,
+html.bt-vibrancy .bt-sidebar .bt-mode,
+html.bt-vibrancy .bt-sidebar .bt-mode *,
+html.bt-vibrancy .bt-sidebar button.h-7,
+html.bt-vibrancy .bt-sidebar button.h-7 *,
+html.bt-vibrancy .bt-sidebar .bt-search,
+html.bt-vibrancy .bt-sidebar .bt-search *,
+html.bt-vibrancy .bt-sidebar .bt-chip.bt-glass-on,
+html.bt-vibrancy .bt-sidebar .bt-chip.bt-glass-on * {
   opacity: 0;
 }
 /* O X de fechar fica na página, mesmo com a aba inativa virando placa nativa. */
@@ -1298,6 +1314,36 @@ html:not(.dark) .bt-termbar > button:hover:not(:disabled) {
 .bt-preview-tools {
   border-color: rgb(var(--bt-border-strong) / 0.58);
 }
+/* Hover dos ícones do preview/título: fundo bem visível no próprio botão. */
+.bt-preview-title .bt-icon-btn,
+.bt-preview-tools .bt-icon-btn {
+  position: relative;
+  isolation: isolate;
+  background-clip: padding-box;
+}
+.bt-preview-title .bt-icon-btn:hover,
+.bt-preview-tools .bt-icon-btn:hover {
+  background: rgb(var(--bt-text-1) / 0.16);
+  color: rgb(var(--bt-text-1));
+}
+.bt-preview-title .bt-icon-btn:hover:disabled,
+.bt-preview-tools .bt-icon-btn:hover:disabled {
+  background: rgb(var(--bt-text-1) / 0.1);
+  color: rgb(var(--bt-text-3));
+}
+.bt-preview-title .bt-icon-btn.bt-icon-btn--on,
+.bt-preview-tools .bt-icon-btn.bt-icon-btn--on {
+  background: rgb(var(--bt-accent) / 0.2);
+  color: rgb(var(--bt-accent-text));
+}
+.bt-preview-title .bt-icon-btn.bt-icon-btn--on:hover,
+.bt-preview-tools .bt-icon-btn.bt-icon-btn--on:hover {
+  background: rgb(var(--bt-accent) / 0.3);
+}
+.bt-preview-title .bt-icon-btn > svg,
+.bt-preview-tools .bt-icon-btn > svg {
+  pointer-events: none;
+}
 html.bt-vibrancy .bt-preview {
   --preview-glass-fill: var(--bt-preview-vibrancy-opacity, 0.56);
   border-color: rgb(var(--bt-text-1) / 0.22);
@@ -1307,9 +1353,54 @@ html.bt-vibrancy .bt-preview {
   backdrop-filter: blur(20px) saturate(130%);
 }
 html.bt-vibrancy .bt-preview-title,
-html.bt-vibrancy .bt-preview-tools,
-html.bt-vibrancy .bt-preview-notes {
+html.bt-vibrancy .bt-preview-tools {
   background: rgb(var(--bt-bg-panel) / 0.12);
+}
+
+/* Reduzir movimento (Configurações + prefers-reduced-motion). */
+html.bt-reduce-motion *,
+html.bt-reduce-motion *::before,
+html.bt-reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+html.bt-reduce-motion .bt-side-panel-slide,
+html.bt-reduce-motion .bt-side-col,
+html.bt-reduce-motion .bt-side-slot-right.bt-side-anim {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Lista de notas: coluna opaca e legível (não o mesmo véu da barra de ferramentas). */
+.bt-preview-notes {
+  background: rgb(var(--bt-bg-panel));
+}
+.bt-preview-notes__head {
+  border-bottom: 1px solid rgb(var(--bt-border) / 0.85);
+  background: rgb(var(--bt-bg-card) / 0.55);
+}
+.bt-preview-notes__item {
+  border-radius: 8px;
+}
+.bt-preview-notes__item:hover {
+  background: rgb(var(--bt-bg-hover) / 0.7);
+}
+.bt-preview-notes__item--on {
+  background: rgb(var(--bt-accent) / 0.16);
+  box-shadow: inset 2px 0 0 rgb(var(--bt-accent));
+}
+.bt-preview-notes__item--on:hover {
+  background: rgb(var(--bt-accent) / 0.22);
+}
+html.bt-vibrancy .bt-preview-notes {
+  background: rgb(var(--bt-bg-card) / 0.72);
+  border-right-color: rgb(var(--bt-text-1) / 0.14);
+}
+html.bt-vibrancy .bt-preview-notes__head {
+  background: rgb(var(--bt-bg-panel) / 0.28);
+  border-bottom-color: rgb(var(--bt-text-1) / 0.12);
 }
 html.bt-vibrancy .bt-preview-code {
   background: rgb(20 21 25 / 0.18);

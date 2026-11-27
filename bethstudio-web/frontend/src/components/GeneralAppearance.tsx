@@ -10,9 +10,11 @@ import { isDefaultZoom, resetPageZoom, usePageZoom, zoomLabel } from "@/lib/page
 import { isMacTitlebar, isWinAcrylicHost, winCommand } from "@/lib/windowFrame";
 import { applyGlassPatch, glassSlidersVisible, vibrancyClick, vibrancyShownAfterSave } from "@/lib/appearanceTune";
 import type { NotifyPrefs } from "@/lib/notify";
+import { applyUILocale, normalizeUILocale, t, type UILocale } from "@/lib/uiLocale";
 import { FontPicker, Swatch, ThemePicker } from "./Pickers";
 import {
   SettingsBtn,
+  SettingsChoice,
   SettingsGroup,
   SettingsHint,
   SettingsPage,
@@ -60,6 +62,8 @@ export function GeneralAppearance({
 }: Props) {
   const show = (k: "ui" | "voice" | "notify" | "terminals") => !sections || sections.includes(k);
   const ui = { mode: normalizeUIMode(settings?.ui_theme?.mode), theme_id: settings?.ui_theme?.theme_id };
+  const locale = normalizeUILocale(settings?.ui_locale);
+  const reduceMotion = !!settings?.reduce_motion;
   const [pickUI, setPickUI] = useState(ui.mode === "theme");
   const [pendingVibrancy, setPendingVibrancy] = useState<boolean | null>(null);
   const vibrancyOn = pendingVibrancy !== null ? pendingVibrancy : vibrancyShownAfterSave(settings?.ui_theme, false);
@@ -82,8 +86,26 @@ export function GeneralAppearance({
       conn.api<SettingsEvent>("/api/settings/ui", { mode, theme_id }).then((s) => conn.setSettings(s)),
       "Tema da interface salvo",
     );
+  const setLocale = (next: UILocale) =>
+    void conn
+      .api<SettingsEvent>("/api/settings/ui-locale", { locale: next })
+      .then((s) => {
+        conn.setSettings(s);
+        applyUILocale(normalizeUILocale(s.ui_locale));
+        onMessage(t(next, "settings.lang.saved"));
+      })
+      .catch((e: Error) => onMessage(`Erro: ${e.message}`));
+  const setReduceMotion = (on: boolean) =>
+    void conn
+      .api<SettingsEvent>("/api/settings/reduce-motion", { enabled: on })
+      .then((s) => {
+        conn.setSettings(s);
+        document.documentElement.classList.toggle("bt-reduce-motion", on);
+        onMessage(on ? t(locale, "settings.motion.on") : t(locale, "settings.motion.off"));
+      })
+      .catch((e: Error) => onMessage(`Erro: ${e.message}`));
   const preview = (c: UIColors | null) => onPreviewUI(c);
-  const derive = (t?: ThemeInfo) => (t ? deriveUI(t) : VSCODE_DARK);
+  const derive = (theme?: ThemeInfo) => (theme ? deriveUI(theme) : VSCODE_DARK);
 
   const toggleMaterial = () => {
     const on = vibrancyClick(vibrancyOn).next;
@@ -218,6 +240,34 @@ export function GeneralAppearance({
               )}
             </div>
           )}
+
+          <div>
+            <SettingsSectionLabel>{t(locale, "settings.lang")}</SettingsSectionLabel>
+            <SettingsHint className="mb-2">{t(locale, "settings.lang.hint")}</SettingsHint>
+            <div className="bt-settings-choice-grid">
+              <SettingsChoice
+                on={locale === "pt"}
+                onClick={() => setLocale("pt")}
+                title={t(locale, "settings.lang.pt")}
+                sub="pt-BR"
+              />
+              <SettingsChoice
+                on={locale === "en"}
+                onClick={() => setLocale("en")}
+                title={t(locale, "settings.lang.en")}
+                sub="en"
+              />
+            </div>
+          </div>
+
+          <div>
+            <SettingsSectionLabel>{t(locale, "settings.motion")}</SettingsSectionLabel>
+            <SettingsGroup>
+              <SettingsRow label={t(locale, "settings.motion.reduce")} hint={t(locale, "settings.motion.hint")}>
+                <SettingsSwitch on={reduceMotion} onChange={setReduceMotion} label={t(locale, "settings.motion.reduce")} />
+              </SettingsRow>
+            </SettingsGroup>
+          </div>
         </div>
       )}
 

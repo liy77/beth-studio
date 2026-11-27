@@ -188,7 +188,9 @@ func (h *hub) skipInit(distro string) bool {
 	return true
 }
 
-// restoreAnswerHandler: POST /api/restore/answer {"distro","action":"run"|"skip"|"continue"}.
+// restoreAnswerHandler: POST /api/restore/answer
+//   {"action":"restore"|"skip_restore"} — reabrir sessão anterior
+//   {"distro","action":"run"|"skip"|"continue"} — init do WSL
 func restoreAnswerHandler(h *hub, readOnly bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -207,7 +209,20 @@ func restoreAnswerHandler(h *hub, readOnly bool) http.Handler {
 			Distro string `json:"distro"`
 			Action string `json:"action"`
 		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil || !distroRe.MatchString(req.Distro) {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON inválido"})
+			return
+		}
+		switch req.Action {
+		case "restore", "skip_restore":
+			if !h.answerSessionRestore(req.Action == "restore") {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "não há pergunta de restauração aberta"})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+			return
+		}
+		if !distroRe.MatchString(req.Distro) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON inválido"})
 			return
 		}

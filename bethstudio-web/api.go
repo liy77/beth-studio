@@ -51,6 +51,7 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		Kinds       []string   `json:"kinds"`
 		Collapsed   bool       `json:"collapsed"`
 		Width       int        `json:"width"`
+		FilesWidth  int        `json:"files_width"`
 		ThemeID     string     `json:"theme_id"`
 		Theme       string     `json:"theme"`
 		Family      string     `json:"font_family"`
@@ -66,6 +67,7 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		Glass       *int       `json:"glass"`
 		GlassAlpha  *int       `json:"glass_alpha"`
 		Enabled     *bool      `json:"enabled"`
+		Locale      string     `json:"locale"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON inválido"})
@@ -97,8 +99,8 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 	case "/api/settings/pane-names":
 		snap, err = settings.setPaneNames(req.PaneIDs, req.Name)
 	case "/api/settings/sidebar":
-		snap, err = settings.setSidebar(SidebarPrefs{Collapsed: req.Collapsed, Width: req.Width, View: req.View, Kinds: req.Kinds,
-			KindOrder: req.KindOrder, SplitByKind: req.SplitByKind})
+		snap, err = settings.setSidebar(SidebarPrefs{Collapsed: req.Collapsed, Width: req.Width, FilesWidth: req.FilesWidth,
+			View: req.View, Kinds: req.Kinds, KindOrder: req.KindOrder, SplitByKind: req.SplitByKind})
 	case "/api/settings/ui":
 		// Vibrancy e os sliders do liquid glass vão por campos próprios;
 		// mode/theme_id continuam trocando o tema da interface.
@@ -126,6 +128,36 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		snap, err = settings.setPasteImagePreview(*req.Enabled)
+	case "/api/settings/files-side-editor":
+		if req.Enabled == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "enabled obrigatório"})
+			return
+		}
+		snap, err = settings.setFilesSideEditor(*req.Enabled)
+	case "/api/settings/follow-agent-file":
+		if req.Enabled == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "enabled obrigatório"})
+			return
+		}
+		snap, err = settings.setFollowAgentFile(*req.Enabled)
+	case "/api/settings/term-inline-images":
+		if req.Enabled == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "enabled obrigatório"})
+			return
+		}
+		snap, err = settings.setTermInlineImages(*req.Enabled)
+	case "/api/settings/reduce-motion":
+		if req.Enabled == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "enabled obrigatório"})
+			return
+		}
+		snap, err = settings.setReduceMotion(*req.Enabled)
+	case "/api/settings/ui-locale":
+		if strings.TrimSpace(req.Locale) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "locale obrigatório"})
+			return
+		}
+		snap, err = settings.setUILocale(req.Locale)
 	default:
 		http.Error(w, "método não permitido", http.StatusMethodNotAllowed)
 		return

@@ -13,16 +13,20 @@ import {
   wslUncPath,
 } from "../src/lib/localFile.ts";
 
-test("localFileKind: por extensão, sem distinguir maiúsculas", () => {
+test("localFileKind: texto por padrão; imagem; só binário conhecido fica null", () => {
   assert.equal(localFileKind("relatorio.md"), "text");
   assert.equal(localFileKind("RELATORIO.TXT"), "text");
   assert.equal(localFileKind("app.log"), "text");
+  assert.equal(localFileKind("run-bethstudio-macos.command"), "text");
+  assert.equal(localFileKind("semextensao"), "text");
+  assert.equal(localFileKind("/proj/app.bundle"), "text");
+  assert.equal(localFileKind("Dockerfile"), "text");
   assert.equal(localFileKind("foto.PNG"), "image");
   assert.equal(localFileKind("img.jpeg"), "image");
   assert.equal(localFileKind("icone.svg"), "image");
   assert.equal(localFileKind("app.exe"), null);
-  assert.equal(localFileKind("/proj/app.bundle"), "text");
-  assert.equal(localFileKind("semextensao"), null);
+  assert.equal(localFileKind("lib.dylib"), null);
+  assert.equal(localFileKind("pack.zip"), null);
 });
 
 test("classificação de forma do caminho", () => {
@@ -66,6 +70,24 @@ test("resolveLinkPath: POSIX absoluto só resolve em pane WSL", () => {
   assert.equal(resolveLinkPath("/home/user/repo/relatorio.md", { paneKind: "wsl" }), null);
   assert.equal(resolveLinkPath("/home/user/repo/relatorio.md", { paneKind: "powershell" }), null);
   assert.equal(resolveLinkPath("/home/user/repo/relatorio.md", {}), null);
+});
+
+test("resolveLinkPath: no Mac (posixLocal) o POSIX absoluto abre direto", () => {
+  assert.equal(resolveLinkPath("/Users/brian/repo/a.ts", { posixLocal: true }), "/Users/brian/repo/a.ts");
+  assert.equal(
+    resolveLinkPath("src/a.ts", { posixLocal: true, paneCwd: "file://localhost/Users/brian/repo" }),
+    "/Users/brian/repo/src/a.ts",
+  );
+  assert.equal(
+    resolveLinkPath("../lib/a.ts", { posixLocal: true, paneCwd: "file://localhost/Users/brian/repo/frontend" }),
+    "/Users/brian/repo/lib/a.ts",
+  );
+  // cwd POSIX no Mac não é WSL
+  assert.ok(!paneIsWsl({ posixLocal: true, paneCwd: "file://localhost/Users/brian/repo" }));
+  assert.equal(
+    resolveLinkPath("/Users/brian/repo/a.ts", { posixLocal: true, paneCwd: "file://localhost/Users/brian/repo" }),
+    "/Users/brian/repo/a.ts",
+  );
 });
 
 test("resolveLinkPath: relativo, resolvido contra o cwd do pane", () => {

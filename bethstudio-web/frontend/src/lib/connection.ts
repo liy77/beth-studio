@@ -35,7 +35,7 @@ export interface ConnectionSnapshot {
   restore: RestoreEvent | null;
   /** quando a restauracao terminou (ms; 0 = nao terminou) */
   restoreFinishedAt: number;
-  /** terminais recriados que tinham uma sessão do Claude (agent_resume.go) */
+  /** terminais recriados que tinham uma sessão de agente (agent_resume.go) */
   resumeOffers: ResumeOffer[];
   /** processos deixados pelos agentes rodando há muito tempo (agent_procs.go) */
   agentProcs: AgentProc[];

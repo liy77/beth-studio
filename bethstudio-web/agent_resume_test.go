@@ -94,15 +94,35 @@ func TestResumeOffersFromSpecs(t *testing.T) {
 }
 
 func TestResumeCommand(t *testing.T) {
-	c, err := resumeCommandFor("", testSID)
+	c, err := resumeCommandFor("claude", AgentResumeSettings{}, testSID)
 	if err != nil || c != "claude --resume "+testSID {
 		t.Fatal(c, err)
 	}
-	c, _ = resumeCommandFor("claude --dangerously-skip-permissions --resume {id}", testSID)
+	c, _ = resumeCommandFor("claude", AgentResumeSettings{Commands: map[string]string{"claude": "claude --dangerously-skip-permissions --resume {id}"}}, testSID)
 	if c != "claude --dangerously-skip-permissions --resume "+testSID {
 		t.Fatal(c)
 	}
-	if _, err := resumeCommandFor("", "x; rm -rf /"); err == nil {
+	c, err = resumeCommandFor("cursor", AgentResumeSettings{}, sessionLast)
+	if err != nil || c != "cursor-agent --continue" {
+		t.Fatal(c, err)
+	}
+	c, _ = resumeCommandFor("cursor", AgentResumeSettings{Continue: map[string]string{"cursor": "agent --continue"}}, sessionLast)
+	if c != "agent --continue" {
+		t.Fatal(c)
+	}
+	c, _ = resumeCommandFor("codex", AgentResumeSettings{}, testSID)
+	if c != "codex resume "+testSID {
+		t.Fatal(c)
+	}
+	c, _ = resumeCommandFor("grok", AgentResumeSettings{}, sessionLast)
+	if c != "grok --continue" {
+		t.Fatal(c)
+	}
+	c, _ = resumeCommandFor("gemini", AgentResumeSettings{}, sessionLast)
+	if c != "gemini --resume latest" {
+		t.Fatal(c)
+	}
+	if _, err := resumeCommandFor("claude", AgentResumeSettings{}, "x; rm -rf /"); err == nil {
 		t.Fatal("id inválido aceito")
 	}
 	for _, bad := range []string{"claude --resume", "a\nb {id}", strings.Repeat("x", 201) + "{id}"} {
@@ -113,8 +133,61 @@ func TestResumeCommand(t *testing.T) {
 	if validResumeCommand("") != nil || validResumeCommand("claude -r {id}") != nil {
 		t.Fatal("recusou comando bom")
 	}
-	if (AgentResumeSettings{Mode: "x"}).normalized().Mode != "ask" {
-		t.Fatal("modo padrão")
+	if validAgentCmd("claude --continue", false) != nil || validAgentCmd("x {id}", false) == nil {
+		t.Fatal("validação de continuar")
+	}
+	n := (AgentResumeSettings{Mode: "x", Command: "claude -r {id}"}).normalized()
+	if n.Mode != "auto" || n.Commands["claude"] != "claude -r {id}" {
+		t.Fatalf("migração legado: %+v", n)
+	}
+}
+
+func TestSessionIDFromCmd(t *testing.T) {
+	if got := sessionIDFromCmd("cursor", "cursor-agent --resume "+testSID); got != testSID {
+		t.Fatal(got)
+	}
+	if got := sessionIDFromCmd("cursor", "cursor-agent --resume="+testSID); got != testSID {
+		t.Fatal(got)
+	}
+	if got := sessionIDFromCmd("codex", "codex resume "+testSID); got != testSID {
+		t.Fatal(got)
+	}
+	if got := sessionIDFromCmd("claude", "claude"); got != sessionLast {
+		t.Fatal(got)
+	}
+}
+
+func TestPersistLiveAgents(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BETHSTUDIO_DATA_DIR", dir)
+	sess := filepath.Join(dir, "agent-sessions")
+	host := "1@1"
+	nodes := []apNode{
+		{Name: "cursor-agent", Cmd: "cursor-agent", Pane: 3, HasPane: true},
+		{Name: "claude", Cmd: "claude --resume " + testSID, Pane: 4, HasPane: true},
+	}
+	persistLiveAgents(sess, host, nodes)
+	agentRecCache.recs = nil
+	recs := agentRecordsFor(sess, host)
+	byPane := map[int]agentRecord{}
+	for _, r := range recs {
+		byPane[r.Pane] = r
+	}
+	if byPane[3].Agent != "cursor" || byPane[3].SessionID != sessionLast {
+		t.Fatalf("cursor: %+v", byPane[3])
+	}
+	if byPane[4].Agent != "claude" || byPane[4].SessionID != testSID {
+		t.Fatalf("claude: %+v", byPane[4])
+	}
+	// hook preciso não é sobrescrito por "last"
+	_ = writeAtomic(agentRecordFile(sess, host, 3), []byte(`{"agent":"cursor","session_id":"`+testSID+`","pane":3,"host":"`+host+`","at":1}`))
+	persistLiveAgents(sess, host, []apNode{{Name: "cursor-agent", Cmd: "cursor-agent", Pane: 3, HasPane: true}})
+	agentRecCache.recs = nil
+	r := agentRecordsFor(sess, host)
+	for _, x := range r {
+		if x.Pane == 3 && x.SessionID != testSID {
+			t.Fatalf("perdeu id preciso: %+v", x)
+		}
 	}
 }
 

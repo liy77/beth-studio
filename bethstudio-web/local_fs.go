@@ -73,12 +73,17 @@ func (s *server) serveLocalFS(w http.ResponseWriter, r *http.Request) {
 		}
 		out := make([]localFSEntry, 0, len(infos))
 		for _, e := range infos {
+			name := e.Name()
+			// AppleDouble (._foto.png) e pasta __MACOSX: metadados do Mac, não a imagem.
+			if strings.HasPrefix(name, "._") || name == "__MACOSX" {
+				continue
+			}
 			info, err := e.Info()
 			if err != nil {
 				continue
 			}
 			out = append(out, localFSEntry{
-				Name:  e.Name(),
+				Name:  name,
 				Size:  info.Size(),
 				IsDir: e.IsDir(),
 				Mode:  info.Mode().String(),

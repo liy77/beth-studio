@@ -97,7 +97,7 @@ func structKey(specs []paneSpec) string {
 			tool = s.Tool.Kind + ":" + s.Tool.ID
 		}
 		resume := ""
-		if s.Resume != nil { // sessão do Claude nova ou encerrada também regrava a receita na hora
+		if s.Resume != nil { // sessão de agente nova ou encerrada também regrava a receita na hora
 			resume = s.Resume.SessionID + strconv.FormatBool(s.Resume.Ended)
 		}
 		fmt.Fprintf(&b, "%d|%s|%s|%s|%s|%s;", s.PaneID, s.ShellID, s.Distro, s.Cwd, tool, resume)
@@ -123,13 +123,16 @@ func (c *restoreCoordinator) onList(list []byte) {
 	if host == "" {
 		// Sem a identidade do host nao da' para decidir. Se ha uma receita aproveitavel e o host
 		// esta vazio, o reconcile NAO pode rodar (apagaria o layout): congela e reavalia.
-		if have && panes == 0 && len(file.Specs) > 0 && recentSpecs(file, c.d.now()) {
-			c.mu.Lock()
-			first := !c.pendFrozen
-			c.pendFrozen = true
-			c.mu.Unlock()
-			if first {
-				c.d.freeze(true)
+		if have && panes == 0 {
+			_, _, rs := restoreRecipe(file)
+			if len(rs) > 0 && recentSpecs(file, c.d.now()) {
+				c.mu.Lock()
+				first := !c.pendFrozen
+				c.pendFrozen = true
+				c.mu.Unlock()
+				if first {
+					c.d.freeze(true)
+				}
 			}
 		}
 		c.retryLater(list)
@@ -158,6 +161,10 @@ func (c *restoreCoordinator) onList(list []byte) {
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
+			// Specs pode estar vazio se só last_session restou depois de um flush vazio.
+			if _, _, specs := restoreRecipe(file); len(specs) > 0 {
+				file.Specs = append([]paneSpec(nil), specs...)
+			}
 			c.d.start(file)
 		}()
 		return
@@ -173,7 +180,11 @@ func (c *restoreCoordinator) onList(list []byte) {
 
 // recentSpecs: a receita ainda vale (menos de 7 dias).
 func recentSpecs(f specsFile, now time.Time) bool {
-	t, err := time.Parse(time.RFC3339, f.SavedAt)
+	_, savedAt, specs := restoreRecipe(f)
+	if len(specs) == 0 {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, savedAt)
 	return err == nil && now.Sub(t) <= specsMaxAge
 }
 
@@ -207,8 +218,9 @@ func (c *restoreCoordinator) note(panes int, host string, f specsFile, have, res
 	if panes != 0 && !restore {
 		return // caso comum (host com terminais): sem barulho
 	}
+	rh, savedAt, specs := restoreRecipe(f)
 	n := fmt.Sprintf("restore: lista com %d terminais; host atual %q; receita %s (host %q, %d terminais, salva %s); restaurar=%v",
-		panes, host, map[bool]string{true: "lida", false: "ausente ou ilegivel"}[have], f.HostID, len(f.Specs), f.SavedAt, restore)
+		panes, host, map[bool]string{true: "lida", false: "ausente ou ilegivel"}[have], rh, len(specs), savedAt, restore)
 	c.mu.Lock()
 	same := n == c.lastNote
 	c.lastNote = n
@@ -267,7 +279,19 @@ func (c *restoreCoordinator) flush() {
 		return
 	}
 	c.mu.Unlock()
-	f := specsFile{Version: specsVersion, SavedAt: now.Format(time.RFC3339), HostID: p.host, Specs: specs}
+	savedAt := now.Format(time.RFC3339)
+	f := specsFile{Version: specsVersion, SavedAt: savedAt, HostID: p.host, Specs: specs}
+	// Lista vazia não apaga a última sessão boa: é o que restaura os chats
+	// depois que o host cai e o flush grava Specs=[].
+	prev, have := c.d.loadSpecs()
+	switch {
+	case len(specs) > 0:
+		f.LastSession = &specsSession{HostID: p.host, SavedAt: savedAt, Specs: append([]paneSpec(nil), specs...)}
+	case have && prev.LastSession != nil && len(prev.LastSession.Specs) > 0:
+		f.LastSession = prev.LastSession
+	case have && len(prev.Specs) > 0:
+		f.LastSession = &specsSession{HostID: prev.HostID, SavedAt: prev.SavedAt, Specs: append([]paneSpec(nil), prev.Specs...)}
+	}
 	if err := c.d.saveSpecs(f); err != nil {
 		return
 	}

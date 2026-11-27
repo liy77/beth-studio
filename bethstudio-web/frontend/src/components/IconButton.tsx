@@ -10,22 +10,24 @@ interface Props {
   className?: string;
 }
 
-/** Botao so' com icone; o texto aparece no tooltip (title). */
+/** Botão só com ícone; o texto vai no tooltip (`data-tip`) e no aria-label. */
 export function IconButton({ label, onClick, disabled, active, children, className }: Props) {
   return (
     <button
       type="button"
-      title={label}
+      data-tip={label}
       aria-label={label}
+      aria-pressed={active || undefined}
       disabled={disabled}
       onClick={(e) => {
         e.stopPropagation();
         onClick(e);
       }}
       className={cn(
-        "bt-glass inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-2 transition-colors",
-        "hover:bg-bg-hover hover:text-text-1 disabled:cursor-default disabled:text-text-3 disabled:hover:bg-transparent",
-        active && "bg-accent-soft text-accent-text",
+        "bt-glass bt-icon-btn inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-2",
+        // Desabilitado também mostra hover leve (o tooltip explica o porquê).
+        "disabled:cursor-default disabled:text-text-3",
+        active ? "bt-icon-btn--on bg-accent-soft text-accent-text" : "hover:bg-bg-hover hover:text-text-1",
         className,
       )}
     >

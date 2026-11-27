@@ -161,6 +161,25 @@ func TestSaveAndLoadSpecs(t *testing.T) {
 	}
 }
 
+func TestRestoreRecipeFallsBackToLastSession(t *testing.T) {
+	now := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	good := []paneSpec{{PaneID: 3, ShellID: "zsh", Kind: "other", Cwd: "/Users/brian", Title: "Cursor", Order: 0}}
+	f := specsFile{
+		Version: 1, SavedAt: now.Format(time.RFC3339), HostID: "200@2", Specs: nil,
+		LastSession: &specsSession{HostID: "100@1", SavedAt: now.Add(-time.Minute).Format(time.RFC3339), Specs: good},
+	}
+	rh, _, specs := restoreRecipe(f)
+	if rh != "100@1" || len(specs) != 1 || specs[0].Title != "Cursor" {
+		t.Fatalf("restoreRecipe = %q %+v", rh, specs)
+	}
+	if !shouldRestore(f, "200@2", 0, now) {
+		t.Fatal("host novo + last_session deveria restaurar")
+	}
+	if shouldRestore(f, "100@1", 0, now) {
+		t.Fatal("mesmo host da last_session não restaura")
+	}
+}
+
 func TestLoadSpecsCorruptedOrMissing(t *testing.T) {
 	dir := t.TempDir()
 	if _, ok := loadSpecs(filepath.Join(dir, "nao-existe.json")); ok {

@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import type { Connection } from "@/lib/connection";
 import { cn } from "@/lib/utils";
 import { SideBadge, stateAfter, type SideState } from "./SideStatus";
-import type { AgentResumeView, ResumeMode } from "@/lib/agentResume";
+import {
+  effectiveAgentCmd,
+  type AgentResumeDefault,
+  type AgentResumeSettings,
+  type AgentResumeView,
+  type ResumeMode,
+} from "@/lib/agentResume";
 import type { AgentProcSettings } from "@/lib/agentProcs";
 import { isMacOS } from "@/lib/windowFrame";
 import {
@@ -26,9 +32,9 @@ interface SetupResult {
 }
 
 const MODES: { id: ResumeMode; label: string; hint: string }[] = [
-  { id: "ask", label: "Perguntar", hint: "Depois da restauração, uma faixa mostra os terminais que tinham Claude, com Retomar." },
-  { id: "auto", label: "Retomar sozinho", hint: "As sessões que estavam abertas voltam sozinhas; as que você tinha encerrado ficam na faixa." },
-  { id: "off", label: "Não oferecer", hint: "Os terminais voltam sem o Claude, como antes." },
+  { id: "auto", label: "Retomar sozinho", hint: "Claude, Cursor, Codex, Grok, Gemini… que estavam abertos voltam sozinhos; os que você tinha encerrado ficam na faixa." },
+  { id: "ask", label: "Perguntar", hint: "Depois da restauração, uma faixa mostra os terminais que tinham agente, com Retomar." },
+  { id: "off", label: "Não oferecer", hint: "Os terminais voltam sem retomar o agente." },
 ];
 
 function HookCard(p: { title: string; state: SideState; busy: boolean; result: SetupResult | null; onRun: (a: "add" | "remove" | "check") => void; children?: React.ReactNode }) {
@@ -60,9 +66,49 @@ function HookCard(p: { title: string; state: SideState; busy: boolean; result: S
   );
 }
 
+function AgentCmdRow(p: {
+  def: AgentResumeDefault;
+  resume: string;
+  cont: string;
+  onResume: (v: string) => void;
+  onContinue: (v: string) => void;
+  onReset: () => void;
+  dirty: boolean;
+}) {
+  return (
+    <SettingsPanel className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[13px] font-semibold text-text-1">{p.def.label}</div>
+        <SettingsBtn disabled={!p.dirty} onClick={p.onReset}>
+          Padrão
+        </SettingsBtn>
+      </div>
+      <label className="block space-y-1">
+        <span className="text-[11px] text-text-3">Com id da sessão (<code className="font-mono">{"{id}"}</code>)</span>
+        <input
+          className="w-full rounded border border-border bg-bg-term px-2 py-1 font-mono text-[12px]"
+          value={p.resume}
+          spellCheck={false}
+          placeholder={p.def.resume}
+          onChange={(e) => p.onResume(e.target.value)}
+        />
+      </label>
+      <label className="block space-y-1">
+        <span className="text-[11px] text-text-3">Continuar a mais recente (sem id)</span>
+        <input
+          className="w-full rounded border border-border bg-bg-term px-2 py-1 font-mono text-[12px]"
+          value={p.cont}
+          spellCheck={false}
+          placeholder={p.def.continue}
+          onChange={(e) => p.onContinue(e.target.value)}
+        />
+      </label>
+    </SettingsPanel>
+  );
+}
+
 export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMessage: (m: string) => void }) {
   const [view, setView] = useState<AgentResumeView | null>(null);
-  const [command, setCommand] = useState("");
   const [distro, setDistro] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, SetupResult>>({});
@@ -70,6 +116,9 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
   const [err, setErr] = useState<string | null>(null);
   const [procs, setProcs] = useState<AgentProcSettings | null>(null);
   const [minutes, setMinutes] = useState("30");
+  const [cmdsOpen, setCmdsOpen] = useState(false);
+  const [draftResume, setDraftResume] = useState<Record<string, string>>({});
+  const [draftContinue, setDraftContinue] = useState<Record<string, string>>({});
 
   useEffect(() => {
     conn
@@ -93,29 +142,70 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
   };
 
+  const applyDrafts = (v: AgentResumeView) => {
+    const resume: Record<string, string> = {};
+    const cont: Record<string, string> = {};
+    for (const d of v.defaults ?? []) {
+      resume[d.id] = effectiveAgentCmd(v.settings.commands, d.id, d.resume);
+      cont[d.id] = effectiveAgentCmd(v.settings.continue, d.id, d.continue);
+    }
+    setDraftResume(resume);
+    setDraftContinue(cont);
+  };
+
   const load = useCallback(() => {
     conn
       .api<AgentResumeView>("/api/agent-resume")
       .then((v) => {
-        setView(v);
-        setCommand(v.settings.command);
+        setView({ ...v, defaults: v.defaults ?? [] });
+        applyDrafts(v);
         setDistro((d) => d || v.distros[0] || "");
       })
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
   }, [conn]);
   useEffect(load, [load]);
 
-  const save = (mode: ResumeMode, cmd: string) => {
+  const saveSettings = (next: AgentResumeSettings) => {
     setErr(null);
     conn
-      .api<{ settings: AgentResumeView["settings"] }>("/api/agent-resume/settings", { mode, command: cmd })
+      .api<{ settings: AgentResumeSettings }>("/api/agent-resume/settings", next)
       .then((r) => {
-        setView((v) => (v ? { ...v, settings: r.settings } : v));
-        setCommand(r.settings.command);
+        setView((v) => {
+          if (!v) return v;
+          const nv = { ...v, settings: r.settings };
+          applyDrafts(nv);
+          return nv;
+        });
         onMessage("Salvo");
       })
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
   };
+
+  const saveMode = (mode: ResumeMode) => {
+    if (!view) return;
+    saveSettings({ ...view.settings, mode });
+  };
+
+  const saveCommands = () => {
+    if (!view) return;
+    const commands: Record<string, string> = {};
+    const cont: Record<string, string> = {};
+    for (const d of view.defaults) {
+      const r = (draftResume[d.id] ?? "").trim();
+      const c = (draftContinue[d.id] ?? "").trim();
+      if (r && r !== d.resume) commands[d.id] = r;
+      if (c && c !== d.continue) cont[d.id] = c;
+    }
+    saveSettings({ ...view.settings, commands, continue: cont, command: commands.claude || "" });
+  };
+
+  const cmdsDirty = !!view?.defaults.some((d) => {
+    const r = (draftResume[d.id] ?? "").trim() || d.resume;
+    const c = (draftContinue[d.id] ?? "").trim() || d.continue;
+    const er = effectiveAgentCmd(view.settings.commands, d.id, d.resume);
+    const ec = effectiveAgentCmd(view.settings.continue, d.id, d.continue);
+    return r !== er || c !== ec;
+  });
 
   const setup = (target: "windows" | "wsl", action: "add" | "remove" | "check") => {
     const key = target === "wsl" ? `wsl:${distro}` : "windows";
@@ -133,7 +223,6 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
       .finally(() => setBusy(null));
   };
 
-  // Ao abrir (e ao trocar a distro): confere sozinho. WSL só se já estiver rodando.
   const loaded = !!view;
   useEffect(() => {
     if (!loaded) return;
@@ -171,23 +260,24 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
   }
   const mode = view.settings.mode;
   const wslKey = `wsl:${distro}`;
+  const defaults = view.defaults ?? [];
 
   return (
     <div className="space-y-5 text-[13px] text-text-1">
       <div className="space-y-1.5">
         <SettingsHint>
-          Quando o host reinicia (queda, <b>Encerrar tudo</b>, troca de versão, reboot), o Studio recria os terminais nas mesmas pastas. Com isto ligado, ele também
-          sabe qual sessão do Claude Code estava em cada terminal e digita <code className="font-mono">claude --resume &lt;id&gt;</code> no terminal certo: a conversa
-          volta com o histórico.
+          Quando o host reinicia (queda, <b>Encerrar tudo</b>, troca de versão, reboot), o Studio recria os terminais nas mesmas pastas e retoma o agente que estava em
+          cada um (Claude, Cursor, Codex, Grok, Gemini, OpenCode), digitando o <code className="font-mono">resume</code>/<code className="font-mono">continue</code> da CLI.
         </SettingsHint>
         <SettingsHint>
-          Ligue o registro abaixo onde você usa o Claude. Vale para as sessões do Claude abertas depois de ligar
+          Cursor, Codex e os outros são anotados sozinhos pelo processo no terminal. Para o Claude, ligue o hook abaixo se quiser o id preciso da conversa (senão ele usa{" "}
+          <code className="font-mono">claude --continue</code>)
           {isMacOS() ? "." : "; no WSL, só em terminais abertos depois que o host foi atualizado."}
         </SettingsHint>
       </div>
 
       <div className="space-y-2">
-        <SettingsSectionLabel>1. Registrar as sessões</SettingsSectionLabel>
+        <SettingsSectionLabel>1. Claude: registrar o id da sessão</SettingsSectionLabel>
         {isMacOS() ? (
           <HookCard title="macOS" state={st.windows ?? null} busy={busy === "windows"} result={results.windows ?? null} onRun={(a) => setup("windows", a)} />
         ) : (
@@ -219,30 +309,71 @@ export function AgentResumeSection({ conn, onMessage }: { conn: Connection; onMe
         <SettingsSectionLabel>2. Depois da restauração</SettingsSectionLabel>
         <div className="bt-settings-choice-grid">
           {MODES.map((m) => (
-            <SettingsChoice key={m.id} on={mode === m.id} onClick={() => save(m.id, command)} title={m.label} sub={m.hint} />
+            <SettingsChoice key={m.id} on={mode === m.id} onClick={() => saveMode(m.id)} title={m.label} sub={m.hint} />
           ))}
         </div>
       </div>
 
-      <div>
-        <SettingsSectionLabel>3. Comando de retomar</SettingsSectionLabel>
-        <SettingsGroup>
-          <SettingsRow label="Comando">
-            <input
-              className="min-w-0 flex-1 rounded border border-border bg-bg-term px-2 py-1 font-mono text-[12px]"
-              value={command}
-              spellCheck={false}
-              onChange={(e) => setCommand(e.target.value)}
-            />
-            <SettingsBtn disabled={command === view.settings.command} onClick={() => save(mode, command)}>
-              Salvar
-            </SettingsBtn>
-            <SettingsBtn onClick={() => save(mode, view.default_command)}>Padrão</SettingsBtn>
-          </SettingsRow>
-        </SettingsGroup>
-        <SettingsHint className="mt-2">
-          <code className="font-mono">{"{id}"}</code> vira o id da sessão. Ex.: <code className="font-mono">claude --dangerously-skip-permissions --resume {"{id}"}</code>
+      <div className="space-y-2">
+        <SettingsSectionLabel>3. Comandos de retomar</SettingsSectionLabel>
+        <SettingsHint>
+          Por padrão cada agente usa o comando da própria CLI (<code className="font-mono">claude --continue</code>,{" "}
+          <code className="font-mono">cursor-agent --continue</code>, <code className="font-mono">codex resume --last</code>…). Personalize só se precisar.
         </SettingsHint>
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-lg border border-border bg-bg-panel px-3 py-2 text-left text-[13px] hover:bg-bg-hover"
+          onClick={() => setCmdsOpen((o) => !o)}
+        >
+          {cmdsOpen ? <ChevronDown size={16} className="shrink-0 text-text-2" /> : <ChevronRight size={16} className="shrink-0 text-text-2" />}
+          <span className="flex-1 font-medium">{cmdsOpen ? "Esconder configuração por agente" : "Configurar por agente"}</span>
+          <span className="text-[11px] text-text-3">{defaults.length} agentes</span>
+        </button>
+        {cmdsOpen && (
+          <div className="space-y-3">
+            {defaults.map((d) => {
+              const resume = draftResume[d.id] ?? d.resume;
+              const cont = draftContinue[d.id] ?? d.continue;
+              const dirty = resume.trim() !== d.resume || cont.trim() !== d.continue;
+              return (
+                <AgentCmdRow
+                  key={d.id}
+                  def={d}
+                  resume={resume}
+                  cont={cont}
+                  dirty={dirty}
+                  onResume={(v) => setDraftResume((m) => ({ ...m, [d.id]: v }))}
+                  onContinue={(v) => setDraftContinue((m) => ({ ...m, [d.id]: v }))}
+                  onReset={() => {
+                    setDraftResume((m) => ({ ...m, [d.id]: d.resume }));
+                    setDraftContinue((m) => ({ ...m, [d.id]: d.continue }));
+                  }}
+                />
+              );
+            })}
+            <div className="flex flex-wrap gap-2">
+              <SettingsBtn tone="accent" disabled={!cmdsDirty} onClick={saveCommands}>
+                Salvar comandos
+              </SettingsBtn>
+              <SettingsBtn
+                disabled={!cmdsDirty && !Object.keys(view.settings.commands ?? {}).length && !Object.keys(view.settings.continue ?? {}).length}
+                onClick={() => {
+                  const resume: Record<string, string> = {};
+                  const cont: Record<string, string> = {};
+                  for (const d of defaults) {
+                    resume[d.id] = d.resume;
+                    cont[d.id] = d.continue;
+                  }
+                  setDraftResume(resume);
+                  setDraftContinue(cont);
+                  saveSettings({ ...view.settings, commands: {}, continue: {}, command: "" });
+                }}
+              >
+                Restaurar todos os padrões
+              </SettingsBtn>
+            </div>
+          </div>
+        )}
       </div>
       {procs && (
         <div>

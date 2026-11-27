@@ -93,7 +93,15 @@ sync_webui_dist() {
     [[ "$(basename "$f")" == ".gitkeep" ]] && continue
     rm -rf "$f"
   done
-  cp -R "$src"/. "$dst"/
+  # NFS/MCUDevDisk: AppleDouble (._*) quebra cp -R e codesign.
+  find "$src" \( -name '._*' -o -name '.DS_Store' \) -delete 2>/dev/null || true
+  # rsync evita copiar ._* recém-criados pelo Finder no volume.
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete --exclude '.gitkeep' --exclude '._*' --exclude '.DS_Store' "$src"/ "$dst"/
+  else
+    cp -R "$src"/. "$dst"/
+    find "$dst" \( -name '._*' -o -name '.DS_Store' \) -delete 2>/dev/null || true
+  fi
   [[ -f "$dst/index.html" ]] || {
     echo "webui/dist/index.html ausente após a cópia" >&2
     exit 1
@@ -251,10 +259,17 @@ cat > "$bundle/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
+# NFS/MCUDevDisk deixa arquivos AppleDouble (._*) que quebram o codesign
+# ("unsealed contents" / app abre e fecha). Tira antes de assinar.
+echo "==> limpando AppleDouble (._*)"
+find "$bundle" \( -name '._*' -o -name '.DS_Store' \) -delete 2>/dev/null || true
+
 # ad-hoc sign so Gatekeeper is a little less angry on local installs
 if command -v codesign >/dev/null 2>&1; then
   echo "==> codesign ad-hoc"
-  codesign --force --deep --sign - "$bundle" 2>/dev/null || true
+  codesign --force --deep --options runtime --sign - \
+    --identifier "br.com.mcu.bethstudio" "$bundle" 2>/dev/null || true
+  codesign -vv --deep --strict "$bundle" 2>&1 | tail -3 || true
 fi
 
 # --- DMG --------------------------------------------------------------------
@@ -286,9 +301,12 @@ if [[ "$do_install" -eq 1 ]]; then
     # não mata host do usuário; só troca o app
     rm -rf "$dest"
   fi
+  # cp -R no volume local a partir do NFS pode recriar ._* — limpa de novo.
   cp -R "$bundle" "$dest"
+  find "$dest" \( -name '._*' -o -name '.DS_Store' \) -delete 2>/dev/null || true
   if command -v codesign >/dev/null 2>&1; then
-    codesign --force --deep --sign - "$dest" 2>/dev/null || true
+    codesign --force --deep --options runtime --sign - \
+      --identifier "br.com.mcu.bethstudio" "$dest" 2>/dev/null || true
   fi
   echo "OK: instalado. Abra com: open -a 'Beth Studio'"
 fi

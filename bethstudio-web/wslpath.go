@@ -11,10 +11,10 @@ package main
 // registro nao inicia nenhuma distro (ao contrario de rodar wsl.exe).
 
 import (
+	"runtime"
 	"strings"
 	"sync"
 	"time"
-
 )
 
 const lxssKey = `Software\Microsoft\Windows\CurrentVersion\Lxss`
@@ -73,7 +73,13 @@ func wslDistroFromUNC(p string) string {
 }
 
 // paneWSL: o pane roda no WSL e, se der para saber, em qual distro.
+// No macOS/Linux o cwd Unix (/Users/…, /home/…) parece Linux — sem este
+// corte o Studio marca wsl=true e "abrir agente na pasta" exige shell WSL
+// inexistente ("nenhum shell compatível").
 func paneWSL(k PaneKind, cwd string) (bool, string) {
+	if runtime.GOOS != "windows" {
+		return false, ""
+	}
 	uncDistro := wslDistroFromUNC(cwdPath(cwd))
 	switch k.Kind {
 	case "wsl":

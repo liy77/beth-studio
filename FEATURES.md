@@ -13,7 +13,7 @@
 > When a user-facing feature is added, changed, or removed, update this
 > file in the same change (`.cursor/rules/features-catalog.mdc`).
 
-Atualizado: 2026-11-25.
+Atualizado: 2026-11-27.
 
 ---
 
@@ -66,7 +66,7 @@ Status legend: 🟢 shipped · ⚪ planned.
 
 - 🟢 **Interface atualizável sem reiniciar** — the Beth Studio screen can be replaced on its own: `bethstudio-web\deploy-ui.ps1` installs a new interface package under `%APPDATA%\bethstudio\ui\current`, and **Configurações > Sobre > Recarregar interface** (or F5) applies it. The Studio process, the host and the terminals are not restarted. The previous package is kept for `-Rollback`. A package that needs a newer Studio, or a broken one, is ignored and the interface built into the executable is used.
 - 🟢 **Verificar atualização** — **Configurações > Sobre > Verificar atualização** compares the running version with the latest published GitHub release. If a newer one exists, you choose: install only the interface (no restart) or download the installer for the Studio and the host. Nothing is installed until you confirm. Read-only mode and the remote browser only say that a newer version exists. The phone page does not have this.
-- 🟢 **Imagens no terminal (Kitty / iTerm2)** (2026-11-26) — like Ghostty on **Windows and macOS**: when a program (Cursor Agent, `imgcat`, etc.) draws inline graphics via the Kitty graphics protocol or iTerm2 OSC 1337, the host (ConPTY / PTY) already parses them; the bridge forwards placements and the web terminal overlays them on the cell grid. Caps kept modest (8 images / ~900 KB each) so the JSON line stays safe on Windows pipes too. Older Studio builds simply omit `images` and keep working.
+- 🟢 **Imagens no terminal (Kitty / iTerm2)** (2026-11-27) — like Ghostty on **Windows and macOS**: when a program (Cursor Agent, `imgcat`, etc.) draws inline graphics via the Kitty graphics protocol or iTerm2 OSC 1337, the host (ConPTY / PTY) already parses them; the bridge forwards placements and the web terminal overlays them on the cell grid. Prints keep their aspect ratio (the cell box sometimes under-reports height or width; the overlay grows to match the image instead of squashing or clipping it). The overlay shares the terminal’s CSS scale and the same padding as the cell grid, so images stay aligned when the font is tiny. Caps kept modest (8 images / ~900 KB each) so the JSON line stays safe on Windows pipes too. The web side keeps a blob URL per image hash (no base64 re-parse on scroll) and downscales the bitmap to the on-screen box; if the blob fails in WebKit it falls back to a data URL. Older Studio builds simply omit `images` and keep working.
 - 🟢 **Desempenho em PC lento** (2026-10-24; TUI/agent paint coalesce 2026-11-25) — three changes for slow computers, in **Configurações > Terminais > Desempenho**. (1) The terminal is drawn with WebGL on the graphics card when there is a real one, and falls back to the compatible mode on its own if WebGL is missing, runs in software or fails; you can force *Sempre WebGL* or *Modo compatível* (this screen only, stored in the browser). At most 8 terminals use WebGL at once. (2) Only the screen lines that changed are redrawn (the host sends the whole screen every time); agent TUIs (Cursor, Claude) paint on the display refresh and keep incremental redraw longer so the terminal does not freeze. (3) With the window hidden in the tray or minimized, the Studio's WebView2 stops painting and gives memory back; set `BETHSTUDIO_WEBVIEW_NO_BG=1` to turn this off. It does not pause the page, so notifications still arrive. Escape hatches, set in the browser console of the Studio page: `localStorage.setItem('bethstudio.renderer','dom')` (or `webgl`) and `localStorage.setItem('bethstudio.screenwrite','full')` to go back to writing the whole screen every frame.
 - 🟢 **Antivírus: exclusões do Windows Defender** (2026-10-24) — **Configurações > Terminais > Desempenho** lists the two folders the Studio uses (the program and the data folder, which holds the WebView2 profile) and offers a step-by-step guide, a button that opens Windows Security, and a button that adds (or removes) the exclusions for you. The button asks for your confirmation, then Windows shows its administrator prompt (UAC); the Studio never runs as administrator, only one PowerShell command with those two folders does, and it checks afterwards that the exclusion took effect (company policy or Tamper Protection can refuse). It lowers protection for those folders. Only on the PC, never in the remote browser or read-only mode; with another antivirus it only shows the guide.
 - 🟢 **Log de latência sem títulos** (2026-10-24) — `bridge-latency.log` no longer records terminal titles (they are free text and could hold a typed password). Lines end with `prog=<program>` from a fixed list. Old logs with titles are deleted once.
@@ -119,25 +119,22 @@ and users can add their own entries in `%APPDATA%\bethstudio\shells.json`
   updating Beth Studio does not kill agents. Reopening attaches to the same
   panes (patch 0121). The Studio also recreates terminals after a host crash
   (see section 7).
-- 🟢 **Retomar sessões do Claude** (2026-11-21). When the host restarts
+- 🟢 **Retomar sessões de agentes** (2026-11-21; multi-agente e comandos por CLI 2026-11-27). When the host restarts
   (crash, **Encerrar tudo**, new version, reboot) the Studio already recreates
-  the terminals in their folders; now it also knows which Claude Code session
-  ran in each one and types `claude --resume <id>` in the right terminal, so
-  the conversation comes back with its history. Configurações → **Sessões e
-  processos** → Retomar: **Ligar** for Windows and for each WSL distro writes a Claude hook
-  (SessionStart and SessionEnd, `bethstudio-tool.exe agent-hook`, with a
-  backup of `settings.json`) that only records the session id and the
-  terminal (`WEZTERM_PANE`; patch 0205 carries it into WSL). After a restore,
-  **Perguntar** (default) shows a bar with **Retomar todas**, **Escolher**
-  (one by one, marking sessions you had already left) and **Agora não**;
-  **Retomar sozinho** resumes the sessions that were open; **Não oferecer**
-  turns it off. The typed command is editable (`{id}` = session id, e.g. to
-  add `--dangerously-skip-permissions`). A session opened before the hook
-  was on is recorded when you leave Claude (SessionEnd). A WSL terminal
-  opened by a host without patch 0205 has no pane id: the session is
-  recorded by folder and goes to the only terminal of that side in that
-  folder (none if there are two). Only on the PC. Each resume goes to
-  `host-life.log`.
+  the terminals in their folders; now it also resumes Claude, Cursor, Codex,
+  Grok, Gemini and OpenCode — typing each CLI’s `resume` / `continue` (or
+  `--last`) in the right terminal. Live agents are recorded from the process
+  scan; Claude can also use a hook for a precise session id. Configurações →
+  **Sessões e processos** → Retomar: **Ligar** the Claude hook (Windows /
+  each WSL distro / macOS) writes SessionStart/SessionEnd
+  (`bethstudio-tool agent-hook`, with a backup of `settings.json`). After a
+  restore, **Retomar sozinho** (default) resumes open sessions; **Perguntar**
+  shows a bar with **Retomar todas** / **Escolher** / **Agora não**; **Não
+  oferecer** turns it off. **Configurar por agente** overrides the built-in
+  command per CLI (with `{id}` or continue-without-id); empty = that CLI’s
+  default. A Claude session opened before the hook was on is recorded on
+  SessionEnd. WSL without pane id matches by folder when unique. Only on the
+  PC. Each resume goes to `host-life.log`.
 - 🟢 **Qual agente roda em cada terminal** (Atualizado 2026-11-24). A colored chip —
   **Claude**, **Codex**, **OpenCode**, **Cursor**, **Grok**, **Gemini** — on
   the terminal grid, the sidebar, the tab bar, the phone list and the phone grid, so a
@@ -575,14 +572,17 @@ ends the shell together with everything it started (patch 0203).
   (the two overlapping squares) from the copper-lang MUI editor, the same
   logo as mocida. The same icons appear in the folder browser,
   the file panel title, and the SFTP lists.
-- 🟢 **Abrir arquivo** (Pasta da guia, links no terminal, 2026-11-25). Open a
+- 🟢 **Abrir arquivo** (Pasta da guia, links no terminal, 2026-11-25; imagens e liquid glass 2026-11-27). Open a
   file from the right-hand folder panel or from a path in the terminal; the
   old tab-bar file dialog button was removed (the panel already lists the
   folder). The file panel opens text, not only
   `.md` / `.txt` / `.log`: code (`.crs`, `.mika`, `.mui`, `app.bundle`, Rust, Go, C, C++, Java,
   Python, TypeScript and the other common source extensions) and config
   (JSON, YAML, TOML) open in the editor with colored syntax, line numbers
-  and Tab inserting spaces. Ctrl+S writes the file itself. Markdown still
+  and Tab inserting spaces; images (PNG, JPEG, …) show in the same panel.
+  macOS AppleDouble sidecars (`._foto.png`) are hidden in the folder list and
+  refused in the preview with a clear message. Opening the panel no longer
+  turns off the sidebar liquid glass. Ctrl+S writes the file itself. Markdown still
   toggles source / formatted.
   **Editar**, **Salvar** / Ctrl+S write the file itself (line endings and
   symlinks kept), Markdown toggles source / formatted (formatted shows the
@@ -609,6 +609,9 @@ ends the shell together with everything it started (patch 0203).
   the right sidebar (same height as the terminal, slides in from the right
   and pushes the layout). Esc or the close button returns the folder list
   with the same animation.
+- 🟢 **Editor na lateral + seguir o agente** (2026-11-27) — **Configurações > Terminais > Arquivos na lateral**. *Abrir na lateral (com a pasta)* keeps the folder tree above and the editor below (Cursor-style) instead of swapping them; the two cards stay separated by a gap. *Seguir o que o agente edita* opens the file from the latest `Edited`/`Write` (Cursor basename like `Edited foo.ts +204`, not a prior Grep/Read path), jumps to the hunk and paints added lines in green, and live-reloads on mtime change; if the basename alone misses the cwd it resolves via git status. **Mudanças** opens the file beside; a small diff button still shows the patch vs HEAD. Both options off by default.
+- 🟢 **Preview abre qualquer não-binário** (2026-11-27) — the file panel opens every text-like file (`.command`, no extension, `Dockerfile`, …). Only known binaries (exe/zip/pdf/…) and content with a NUL byte are refused; images still use the image viewer.
+- 🟢 **Imagens no terminal, reduzir movimento e idioma** (2026-11-27) — **Configurações > Terminais > Imagens no terminal** turns Kitty/iTerm inline image overlays on or off (on by default). **Configurações > Aparência > Reduzir movimento** cuts UI animations (also respects the system preference). **Configurações > Aparência > Idioma** switches the Settings chrome between Portuguese and English (`ui_locale`).
 - 🟢 **Reparar visualização** no topo de cada terminal reconstrói apenas o
   xterm.js local. Não envia `reset` nem altera o host; pode ser usado com
   Claude Code em execução. Quadros de tela recebidos rapidamente são

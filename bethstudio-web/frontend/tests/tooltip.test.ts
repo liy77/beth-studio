@@ -10,6 +10,20 @@ test("texto: nome em negrito + descrição", () => {
   assert.deepEqual(parseTip("Diminuir a fonte (A−)"), { title: "Diminuir a fonte", desc: "A−" });
   assert.deepEqual(parseTip("Minimizar"), { title: "Minimizar", desc: "" });
   assert.deepEqual(parseTip("Linha 1\nLinha 2"), { title: "Linha 1", desc: "Linha 2" });
+  assert.deepEqual(parseTip("Ajustar ao painel"), { title: "Ajustar ao painel", desc: "" });
+  assert.deepEqual(parseTip("Tamanho real (100%)"), { title: "Tamanho real", desc: "100%" });
+  // não parte no meio da frase
+  assert.deepEqual(parseTip("Parar de editar"), { title: "Parar de editar", desc: "" });
+  assert.deepEqual(parseTip("Copiar a seleção (selecione um trecho primeiro)"), {
+    title: "Copiar a seleção",
+    desc: "selecione um trecho primeiro",
+  });
+});
+
+test("IconButton usa data-tip (não title) para o balão", () => {
+  const src = fs.readFileSync("src/components/IconButton.tsx", "utf8");
+  assert.match(src, /data-tip=\{label\}/);
+  assert.ok(!/title=\{label\}/.test(src));
 });
 
 test("posição: abaixo e centralizado; empurrado para dentro nas bordas; acima se não couber", () => {

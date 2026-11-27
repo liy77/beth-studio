@@ -38,20 +38,21 @@ import { GitDiffPanel } from "@/components/GitDiffPanel";
 import { FolderBrowser, type FolderBrowserMode } from "@/components/FolderBrowser";
 import { UNTITLED_PATH } from "@/lib/folderBrowser";
 import { StartupOverlay } from "@/components/StartupOverlay";
-import { resolveLinkPath } from "@/lib/localFile";
-import { paneFolder } from "@/lib/worktree";
+import { latestAgentEdit } from "@/lib/agentFiles";
+import { changeAbsPath, paneFolder } from "@/lib/worktree";
 import { glassPlateFields, nativeGlassPlates, toggleFolderPanel } from "@/lib/sidebarFrame";
 import { shellVibrancyOn } from "@/lib/appearanceTune";
+import { applyUILocale, normalizeUILocale } from "@/lib/uiLocale";
 import { installLinkGuard } from "@/lib/links";
 import { SshScreen, type ToolKind } from "@/components/SshScreen";
 import { TopResizeEdges } from "@/components/WindowControls";
 import { AppTitle } from "@/components/AppTitle";
 import { TooltipLayer } from "@/components/TooltipLayer";
-import { dragMacWindow, isMacTitlebar, isWinAcrylicHost, useWindowState, winCommand, zoomMacWindow } from "@/lib/windowFrame";
+import { dragMacWindow, isMacOS, isMacTitlebar, isWinAcrylicHost, useWindowState, winCommand, zoomMacWindow } from "@/lib/windowFrame";
 import { isRemote, openRemoteTab } from "@/lib/remote";
 import { RemoteConnectedBadge } from "@/components/RemoteStudioSection";
-import { returnFocus, withTabFocus } from "@/lib/termFocus";
-import { sameShellId, splitAround, splitSpawn, type SplitZone } from "@/lib/splitSpawn";
+import { returnFocus, termHandle, withTabFocus } from "@/lib/termFocus";
+import { pickShellForPane, sameShellId, splitAround, splitSpawn, type SplitZone } from "@/lib/splitSpawn";
 import { restartPane } from "@/lib/restartPane";
 import { Loader2 } from "lucide-react";
 import { KillDialog, type KillMode } from "@/components/KillDialog";
@@ -299,6 +300,10 @@ export function App() {
     });
   };
   const [filePreviewPath, setFilePreviewPath] = useState<string | null>(null);
+  /** Follow do agent: linha a destacar; null = abertura manual. */
+  const [fileReveal, setFileReveal] = useState<{ line?: number; count?: number; key: number } | null>(null);
+  /** false = follow: não rouba o foco do terminal */
+  const [previewAutoFocus, setPreviewAutoFocus] = useState(true);
   const [gitDiff, setGitDiff] = useState<{ path: string; folder: string } | null>(null);
   // arquivo recém-criado: o painel já abre em "Editar"
   const [editPath, setEditPath] = useState<string | null>(null);
@@ -310,6 +315,8 @@ export function App() {
   const newScratch = (dir: string) => {
     setUntitledDir(dir);
     setEditPath(null);
+    setPreviewAutoFocus(true);
+    setFileReveal(null);
     setFilePreviewPath(UNTITLED_PATH);
   };
   const winState = useWindowState();
@@ -431,27 +438,122 @@ export function App() {
   const agentWorkingRef = useRef<Record<number, boolean>>({});
   /** Última cauda de tela por pane — evita regex a cada poll se o texto não mudou. */
   const agentTailRef = useRef<Record<number, string>>({});
+  const paneByIdRef = useRef(paneById);
+  paneByIdRef.current = paneById;
+  const followAgentFile = !!snap.settings?.follow_agent_file;
+  const filesSideEditor = !!snap.settings?.files_side_editor;
+  const followAgentRef = useRef(followAgentFile);
+  followAgentRef.current = followAgentFile;
+  const filesSideEditorRef = useRef(filesSideEditor);
+  filesSideEditorRef.current = filesSideEditor;
+  const agentFollowKeyRef = useRef<Record<number, string>>({});
+  const focusedPaneRef = useRef(focusedPane);
+  focusedPaneRef.current = focusedPane;
+  /** Agents visíveis na aba ativa — seguir edição mesmo sem o xterm focado. */
+  const visibleAgentRef = useRef<Set<number>>(new Set());
+  visibleAgentRef.current = new Set(
+    activeLeaves.filter((l) => !l.leaf.gone && agentPaneIds.includes(l.leaf.pane)).map((l) => l.leaf.pane),
+  );
+  /** Preenchido depois que setFilesOpen existe (abaixo). */
+  const openFilesPanelRef = useRef<() => void>(() => {});
   useEffect(() => {
     const visible = activeLeaves.filter((l) => !l.leaf.gone && paneById.has(l.leaf.pane)).map((l) => l.leaf.pane);
     conn.setWatched([...new Set([...visible, ...agentPaneIds])]);
   }, [activeLeaves, paneById, agentPaneIds]);
   useEffect(() => {
     let t = 0;
+    let followT = 0;
     const stops = agentPaneIds.map((id) =>
       conn.onScreen(id, (s) => {
         const text = s.text ?? "";
         const tail = text.length > 2400 ? text.slice(-2400) : text;
-        if (agentTailRef.current[id] === tail) return;
-        agentTailRef.current[id] = tail;
-        const working = screenLooksWorking(text);
-        if (agentWorkingRef.current[id] === working) return;
-        agentWorkingRef.current[id] = working;
-        window.clearTimeout(t);
-        t = window.setTimeout(() => setAgentScreenRev((n) => n + 1), 100);
+        if (agentTailRef.current[id] !== tail) {
+          agentTailRef.current[id] = tail;
+          const working = screenLooksWorking(text);
+          if (agentWorkingRef.current[id] !== working) {
+            agentWorkingRef.current[id] = working;
+            window.clearTimeout(t);
+            t = window.setTimeout(() => setAgentScreenRev((n) => n + 1), 100);
+          }
+        }
+        if (!followAgentRef.current) return;
+        // Qualquer agent (mesmo noutra aba): a opção é global.
+        const focused = focusedPaneRef.current;
+        const inActiveTab = visibleAgentRef.current.has(id);
+        const p = paneByIdRef.current.get(id);
+        const hit = latestAgentEdit(text, {
+          paneKind: p?.kind,
+          paneWsl: p?.wsl,
+          paneDistro: p?.wsl_distro || p?.distro,
+          paneCwd: p?.cwd,
+          posixLocal: isMacOS(),
+        });
+        if (!hit) return;
+        const followKey = `${hit.path}:${hit.line ?? ""}:${hit.lineCount ?? ""}`;
+        if (agentFollowKeyRef.current[id] === followKey) return;
+        window.clearTimeout(followT);
+        followT = window.setTimeout(() => {
+          void (async () => {
+            let path = hit.path;
+            try {
+              await conn.api<{ mtime?: string }>("/api/local-file/stat", { path });
+            } catch {
+              // Basename no cwd errado (Cursor: "Edited foo.ts"): resolve via git status.
+              const pane = paneByIdRef.current.get(id);
+              const cwd = pane?.cwd ?? "";
+              const folder = cwd
+                ? paneFolder(
+                    cwd,
+                    {
+                      paneKind: pane?.kind,
+                      paneWsl: pane?.wsl,
+                      paneDistro: pane?.wsl_distro || pane?.distro,
+                      paneCwd: cwd,
+                      posixLocal: isMacOS(),
+                    },
+                    isMacOS(),
+                  )
+                : "";
+              const base = path.replace(/^.*[/\\]/, "");
+              if (!folder || !base) return;
+              try {
+                const wt = await conn.api<{ root?: string; changes?: { path: string }[] }>("/api/worktree", {
+                  path: folder,
+                });
+                const rel = (wt.changes ?? []).map((c) => c.path).find((p) => p.replace(/^.*[/\\]/, "") === base);
+                if (!rel) return;
+                const abs = changeAbsPath(wt.root || folder, rel);
+                if (!abs) return;
+                await conn.api<{ mtime?: string }>("/api/local-file/stat", { path: abs });
+                path = abs;
+              } catch {
+                return;
+              }
+            }
+            const key = `${path}:${hit.line ?? ""}:${hit.lineCount ?? ""}`;
+            agentFollowKeyRef.current[id] = key;
+            setGitDiff(null);
+            setPreviewAutoFocus(false);
+            setFileReveal({
+              line: hit.line,
+              count: hit.lineCount,
+              key: Date.now(),
+            });
+            setFilePreviewPath(path);
+            openFilesPanelRef.current();
+            if (inActiveTab || id === focused) {
+              const pane = id;
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => termHandle(pane)?.focus());
+              });
+            }
+          })();
+        }, 120);
       }),
     );
     return () => {
       window.clearTimeout(t);
+      window.clearTimeout(followT);
       stops.forEach((stop) => stop());
     };
   }, [agentPaneIds, conn]);
@@ -478,9 +580,13 @@ export function App() {
   // pasta do terminal em foco, como caminho do Windows (\\wsl.localhost\... no WSL)
   const focusedFolder = () => {
     const p = focusedPane !== null ? paneById.get(focusedPane) : undefined;
-    return p?.cwd
-      ? paneFolder(p.cwd, { paneKind: p.kind, paneWsl: p.wsl, paneDistro: p.wsl_distro || p.distro, paneCwd: p.cwd }, !/Windows/.test(navigator.userAgent))
-      : "";
+    if (!p?.cwd) return "";
+    const posix = isMacOS();
+    return paneFolder(
+      p.cwd,
+      { paneKind: p.kind, paneWsl: p.wsl, paneDistro: p.wsl_distro || p.distro, paneCwd: p.cwd, posixLocal: posix },
+      posix,
+    );
   };
   const focusPane = (tabId: string, pane: number) => setFocus((f) => withTabFocus(f, tabId, pane));
 
@@ -515,10 +621,10 @@ export function App() {
     void (async () => {
       if (info.kind === "ssh" || info.kind === "serial") throw new Error("esta ação requer um terminal local");
       const shells = await conn.ensureShells();
-      const localShell = shells.find((s) => ["login", "zsh", "bash", "sh"].includes(s.id))?.id;
-      const wsl = info.wsl || info.kind === "wsl";
-      const sameShell = sameShellId(wsl ? { kind: "wsl", distro: info.wsl_distro ?? info.distro } : info, shells);
-      const shell = sameShell ?? (wsl ? null : localShell ?? shells.find((s) => ["pwsh", "powershell", "cmd"].includes(s.id))?.id);
+      const shell = pickShellForPane(
+        { kind: info.kind, distro: info.wsl_distro ?? info.distro, wsl: info.wsl },
+        shells,
+      );
       if (!shell) throw new Error("nenhum shell compatível disponível");
       const cwd = agentFolder(dest, info.cwd, shell);
       if (!cwd) throw new Error("o caminho informado não é válido para este shell");
@@ -929,8 +1035,7 @@ export function App() {
   const [sidebarLocal, setSidebarLocal] = useState<SidebarPrefs | null>(null);
   // Pasta da guia: gravada no layout (web-settings.json), não no localStorage.
   // O WebView do macOS não guarda o localStorage entre aberturas.
-  // Aberto nesta sessão. O layout gravado também vale, mas o botão não
-  // pode depender só dele: um servidor antigo descarta files_open.
+  // filesNow cobre o estado nesta sessão até o layout gravado voltar.
   const [filesNow, setFilesNow] = useState<Record<string, boolean>>({});
   // Mantém a pasta montada até a animação de fechar terminar; filesExpand
   // sobe no frame seguinte para a largura animar de 0 → aberta.
@@ -943,6 +1048,7 @@ export function App() {
     setFilesNow((cur) => ({ ...cur, [activeTab.id]: open }));
     if (layout) commit(L.setTabFilesOpen(layout, activeTab.id, open));
   };
+  openFilesPanelRef.current = () => setFilesOpen(true);
   // Só anima depois do 1º quadro — senão a abertura da janela “desliza”.
   const [sideAnim, setSideAnim] = useState(false);
   useEffect(() => {
@@ -996,6 +1102,14 @@ export function App() {
   // Evita reenviar vibrancy/sidebar/gutter a cada re-render (status de
   // agente etc.): o nativo reaplicava máscara e travava a UI no Mac.
   const lastNativeShell = useRef({ vib: "", tune: "", side: "", gutter: "" });
+  const uiLocale = normalizeUILocale(snap.settings?.ui_locale);
+  const reduceMotion = !!snap.settings?.reduce_motion;
+  useEffect(() => {
+    applyUILocale(uiLocale);
+  }, [uiLocale]);
+  useEffect(() => {
+    document.documentElement.classList.toggle("bt-reduce-motion", reduceMotion);
+  }, [reduceMotion]);
   useEffect(() => {
     document.documentElement.classList.toggle("bt-vibrancy", vibrancy);
     document.documentElement.classList.toggle("bt-acrylic", acrylic);
@@ -1047,8 +1161,10 @@ export function App() {
     }
   }, [vibrancy, acrylic, sideMaterial, sidebarCollapsed, sidebarWidth, snap.settings?.ui_theme?.glass, snap.settings?.ui_theme?.glass_alpha, uiColors, uiPreview]);
   const previewOpen = !!filePreviewPath;
+  // Liquid glass: NÃO reinicia o efeito ao abrir o preview (antes postava
+  // "[]" / remontava e o vidro sumia). Só remede as placas no resize.
   useEffect(() => {
-    if (!isMacTitlebar() || !vibrancy || previewOpen) {
+    if (!isMacTitlebar() || !vibrancy) {
       const off = window as unknown as { webkit?: { messageHandlers?: { bethGlass?: { postMessage: (v: string) => void } } } };
       off.webkit?.messageHandlers?.bethGlass?.postMessage("[]");
       return;
@@ -1262,10 +1378,12 @@ export function App() {
         sendFull();
       });
     };
-    // Enquanto redimensiona, posta a cada frame — senão o vidro atrasa ~120 ms.
+    // Enquanto redimensiona, posta a cada frame (nativo só move as placas).
     let resizeLive = 0;
     let resizeIdle = 0;
     const onResize = () => {
+      // Primeiro frame já manda — não espera o próximo rAF do loop.
+      if (!resizeLive) sendFast();
       if (!resizeLive) {
         const tick = () => {
           sendFast();
@@ -1278,7 +1396,7 @@ export function App() {
         if (resizeLive) window.cancelAnimationFrame(resizeLive);
         resizeLive = 0;
         sendFull();
-      }, 90);
+      }, 60);
     };
     kick();
     // Rede de segurança: mutações/hover cobrem o normal. 200 ms + mouseover
@@ -1329,13 +1447,22 @@ export function App() {
       if (resizeLive) window.cancelAnimationFrame(resizeLive);
       window.removeEventListener("resize", onResize);
       window.visualViewport?.removeEventListener("resize", onResize);
-      document.removeEventListener("mouseover", kick);
-      document.removeEventListener("mouseout", kick);
+      document.removeEventListener("mouseover", onGlassHover);
+      document.removeEventListener("mouseout", onGlassHover);
       document.removeEventListener("input", kick);
       document.removeEventListener("transitionrun", kick);
       watch.disconnect();
     };
-  }, [vibrancy, previewOpen]);
+  }, [vibrancy]);
+  // Abrir/fechar o preview muda a largura do stage: remede o glass sem
+  // desligar as placas (não posta "[]", não remonta o efeito).
+  useEffect(() => {
+    if (!isMacTitlebar() || !vibrancy) return;
+    const id = window.requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [previewOpen, vibrancy]);
   const saveSidebar = (patch: Partial<SidebarPrefs>) => {
     const next = { ...sidebarPrefs, ...patch };
     setSidebarLocal(next);
@@ -1687,7 +1814,10 @@ export function App() {
                       }}
                       onOpenFile={(path) => {
                         setGitDiff(null);
+                        setPreviewAutoFocus(true);
+                        setFileReveal(null);
                         setFilePreviewPath(path);
+                        if (filesSideEditor) setFilesOpen(true);
                       }}
                       onAgentFolder={readOnly ? undefined : (dest) => openAgentFolder(pane, dest)}
                     />
@@ -1705,7 +1835,7 @@ export function App() {
                 !filesExpand && !rightOverlay && "pointer-events-none",
               )}
               style={{
-                width: filesExpand || rightOverlay ? Math.max(filesWidth, rightOverlay ? 480 : 0) + 16 : 0,
+                width: filesExpand || rightOverlay ? Math.max(filesWidth, rightOverlay ? (filesSideEditor ? 560 : 480) : 0) + 16 : 0,
                 background: "var(--bt-topbar)",
               }}
               aria-hidden={!filesExpand && !rightOverlay}
@@ -1718,7 +1848,7 @@ export function App() {
                   filesWidth+16 aqui comia o vão/radius da direita (overflow). */}
               <div
                 className="relative h-full w-full"
-                style={{ width: Math.max(filesWidth, rightOverlay ? 480 : 0) }}
+                style={{ width: Math.max(filesWidth, rightOverlay ? (filesSideEditor ? 560 : 480) : 0) }}
               >
                 <div
                   className="absolute -left-1 top-2 z-20 h-[calc(100%-1rem)] w-2 cursor-col-resize hover:bg-accent/40"
@@ -1726,7 +1856,7 @@ export function App() {
                   onMouseDown={(e) => {
                     e.preventDefault();
                     const x0 = e.clientX;
-                    const w0 = Math.max(filesWidth, rightOverlay ? 480 : 0);
+                    const w0 = Math.max(filesWidth, rightOverlay ? (filesSideEditor ? 560 : 480) : 0);
                     let w = w0;
                     const move = (ev: MouseEvent) => {
                       w = Math.max(200, Math.min(720, w0 - (ev.clientX - x0)));
@@ -1743,8 +1873,8 @@ export function App() {
                     window.addEventListener("mouseup", up);
                   }}
                   onDoubleClick={() => {
-                    setFilesWidth(rightOverlay ? 520 : 308);
-                    saveSidebar({ files_width: rightOverlay ? 520 : 308 });
+                    setFilesWidth(rightOverlay ? (filesSideEditor ? 560 : 520) : 308);
+                    saveSidebar({ files_width: rightOverlay ? (filesSideEditor ? 560 : 520) : 308 });
                   }}
                 />
                 {gitDiff ? (
@@ -1755,6 +1885,61 @@ export function App() {
                     folder={gitDiff.folder}
                     onClose={() => setGitDiff(null)}
                   />
+                ) : filesSideEditor && (filesOpen || filesKeep) ? (
+                  <div className="bt-files-split flex h-full min-h-0 flex-col">
+                    <div
+                      key={`files:${activeTab.id}`}
+                      className={cn(
+                        "bt-files-split__card bt-side-panel-slide min-h-0",
+                        filePreviewPath ? "basis-[38%] shrink-0" : "flex-1",
+                      )}
+                    >
+                      <WorktreePanel
+                        conn={conn}
+                        folder={focusedFolder()}
+                        folderLabel={focusedPane !== null ? shortCwd(paneById.get(focusedPane)?.cwd ?? "", 2) : ""}
+                        onClose={() => setFilesOpen(false)}
+                        onOpenFile={(path) => {
+                          setGitDiff(null);
+                          setPreviewAutoFocus(true);
+                          setFileReveal(null);
+                          setFilePreviewPath(path);
+                        }}
+                        onOpenDiff={(path) => {
+                          setFilePreviewPath(null);
+                          setFileReveal(null);
+                          setGitDiff({ path, folder: focusedFolder() });
+                        }}
+                      />
+                    </div>
+                    {filePreviewPath && (
+                      <div className="bt-files-split__card min-h-0 flex-1">
+                        <FilePreviewPanel
+                          key={panelKey}
+                          conn={conn}
+                          path={filePreviewPath}
+                          editOnOpen={editPath}
+                          docked
+                          liveReload={followAgentFile}
+                          autoFocus={previewAutoFocus}
+                          revealLine={fileReveal?.line}
+                          revealCount={fileReveal?.count}
+                          revealKey={fileReveal?.key}
+                          onClose={() => {
+                            setFilePreviewPath(null);
+                            setFileReveal(null);
+                          }}
+                          onOpen={(path) => {
+                            setPreviewAutoFocus(true);
+                            setFileReveal(null);
+                            setFilePreviewPath(path);
+                          }}
+                          onNewFile={newScratch}
+                          onSaveUntitled={(content) => setBrowser({ mode: "new-file", initial: untitledDir, content })}
+                        />
+                      </div>
+                    )}
+                  </div>
                 ) : filePreviewPath ? (
                   <FilePreviewPanel
                     key={panelKey}
@@ -1762,8 +1947,20 @@ export function App() {
                     path={filePreviewPath}
                     editOnOpen={editPath}
                     docked
-                    onClose={() => setFilePreviewPath(null)}
-                    onOpen={setFilePreviewPath}
+                    liveReload={followAgentFile}
+                    autoFocus={previewAutoFocus}
+                    revealLine={fileReveal?.line}
+                    revealCount={fileReveal?.count}
+                    revealKey={fileReveal?.key}
+                    onClose={() => {
+                      setFilePreviewPath(null);
+                      setFileReveal(null);
+                    }}
+                    onOpen={(path) => {
+                      setPreviewAutoFocus(true);
+                      setFileReveal(null);
+                      setFilePreviewPath(path);
+                    }}
                     onNewFile={newScratch}
                     onSaveUntitled={(content) => setBrowser({ mode: "new-file", initial: untitledDir, content })}
                   />
@@ -1776,10 +1973,14 @@ export function App() {
                       onClose={() => setFilesOpen(false)}
                       onOpenFile={(path) => {
                         setGitDiff(null);
+                        setPreviewAutoFocus(true);
+                        setFileReveal(null);
                         setFilePreviewPath(path);
+                        if (filesSideEditor) setFilesOpen(true);
                       }}
                       onOpenDiff={(path) => {
                         setFilePreviewPath(null);
+                        setFileReveal(null);
                         setGitDiff({ path, folder: focusedFolder() });
                       }}
                     />
@@ -1845,6 +2046,8 @@ export function App() {
             } else {
               setEditPath(null);
             }
+            setPreviewAutoFocus(true);
+            setFileReveal(null);
             setFilePreviewPath(p);
             setBrowser(null);
           }}
@@ -2029,23 +2232,32 @@ function OpeningLeaf({ title }: { title?: string }) {
 }
 
 function Banner({ tone, children, onClose }: { tone: "err" | "warn"; children: ReactNode; onClose?: () => void }) {
+  const mac = isMacTitlebar();
   return (
     <div
+      role="status"
       className={cn(
-        "flex shrink-0 items-center gap-2 border-b px-3 py-1.5 text-[12px]",
-        false && "mt-7",
-        tone === "err" ? "border-status-err/30 bg-status-err/10 text-status-err" : "border-status-warn/30 bg-status-warn/10 text-status-warn",
+        "relative z-50 flex shrink-0 items-center gap-2 border-b px-3 py-2 text-[12px] font-medium",
+        // faixa opaca: /10 por cima do glass ficava ilegível e “por cima de tudo”
+        mac && "pt-9",
+        tone === "err"
+          ? "border-[rgb(var(--bt-err)/0.45)] bg-[rgb(48,24,24)] text-[rgb(var(--bt-err))]"
+          : "border-[rgb(var(--bt-warn)/0.45)] bg-[rgb(48,36,12)] text-[rgb(252,211,140)]",
       )}
       onMouseDown={(e) => {
-        if (!isMacTitlebar() || e.button !== 0) return;
+        if (!mac || e.button !== 0) return;
         if ((e.target as Element).closest("button")) return;
         dragMacWindow();
       }}
     >
-      <AlertTriangle size={14} className="shrink-0" />
-      <div className="flex-1">{children}</div>
+      <AlertTriangle size={14} className="shrink-0 opacity-90" />
+      <div className="min-w-0 flex-1 leading-snug">{children}</div>
       {onClose && (
-        <button className="rounded p-0.5 hover:bg-white/10" onClick={onClose} title="Fechar aviso">
+        <button
+          className="shrink-0 rounded p-0.5 hover:bg-black/25"
+          onClick={onClose}
+          title="Fechar aviso"
+        >
           <X size={14} />
         </button>
       )}

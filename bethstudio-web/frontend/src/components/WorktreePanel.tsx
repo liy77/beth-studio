@@ -291,25 +291,35 @@ export function WorktreePanel({
                   const abs = changeAbsPath(folder, c.path);
                   const label = statusLabel(c.status);
                   return (
-                    <button
+                    <div
                       key={c.path}
-                      type="button"
-                      className="mx-1.5 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-md px-1.5 py-1 text-left hover:bg-bg-hover disabled:hover:bg-transparent"
-                      title={`${label}: ${c.path} — clique para ver o diff`}
-                      disabled={!abs}
-                      onClick={() => {
-                        if (!abs) return;
-                        if (onOpenDiff) onOpenDiff(abs, c.status);
-                        else onOpenFile(abs);
-                      }}
+                      className="mx-1.5 flex w-[calc(100%-12px)] items-center gap-0.5 rounded-md hover:bg-bg-hover"
                     >
-                      <StatusBadge status={c.status} />
-                      <FileKindIcon name={base} size={18} />
-                      <span className="min-w-0 flex-1 truncate text-text-1">
-                        {base}
-                        {dir && <span className="text-text-3"> {dir}</span>}
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 text-left disabled:opacity-50"
+                        title={`${label}: ${c.path} — abrir ao lado`}
+                        disabled={!abs}
+                        onClick={() => abs && onOpenFile(abs)}
+                      >
+                        <StatusBadge status={c.status} />
+                        <FileKindIcon name={base} size={18} />
+                        <span className="min-w-0 flex-1 truncate text-text-1">
+                          {base}
+                          {dir && <span className="text-text-3"> {dir}</span>}
+                        </span>
+                      </button>
+                      {onOpenDiff && abs && c.status !== "apagado" && (
+                        <button
+                          type="button"
+                          className="bt-worktree-btn mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-3 hover:bg-bg-card hover:text-text-1"
+                          title={`Diff vs HEAD: ${c.path}`}
+                          onClick={() => onOpenDiff(abs, c.status)}
+                        >
+                          <GitCompareArrows size={13} />
+                        </button>
+                      )}
+                    </div>
                   );
                 })
               )}

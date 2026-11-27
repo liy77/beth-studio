@@ -5,29 +5,44 @@
 // caminho certo). Funcoes puras, testadas em tests/localFile.test.ts.
 import { apiBase } from "./remote.ts";
 
+/** Extensões com realce / detecção de link (não é lista de permissão do preview). */
 export const TEXT_FILE_EXT = [
   ".md", ".markdown", ".txt", ".log",
   ".crs", ".mika", ".mui", ".rs", ".go", ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
   ".c", ".h", ".cpp", ".cc", ".hpp", ".hh", ".java", ".kt", ".kts", ".cs", ".swift",
   ".rb", ".php", ".lua", ".zig", ".hs", ".ex", ".exs", ".scala", ".pl", ".pm", ".r", ".dart",
-  ".vue", ".svelte", ".sh", ".bash", ".zsh", ".ps1",
+  ".vue", ".svelte", ".sh", ".bash", ".zsh", ".ps1", ".command", ".fish", ".bat", ".cmd",
   ".json", ".jsonl", ".kson", ".kmodel", ".yaml", ".yml", ".toml", ".xml", ".html", ".htm", ".css", ".scss", ".sql",
   ".ini", ".cfg", ".conf", ".env", ".csv", ".mod", ".sum", ".lock", ".gitignore",
 ] as const;
 export const IMAGE_FILE_EXT = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"] as const;
 
+/** Binários conhecidos: o preview não abre (só imagem/texto). */
+export const BINARY_FILE_EXT = [
+  ".exe", ".dll", ".so", ".dylib", ".o", ".a", ".lib", ".wasm", ".bin", ".dat",
+  ".zip", ".7z", ".rar", ".gz", ".bz2", ".xz", ".tar", ".tgz", ".dmg", ".pkg", ".iso", ".img", ".apk",
+  ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+  ".woff", ".woff2", ".ttf", ".otf", ".eot",
+  ".mp3", ".mp4", ".wav", ".flac", ".ogg", ".avi", ".mov", ".mkv", ".webm",
+  ".ico", ".icns", ".psd", ".ai", ".sketch",
+  ".db", ".sqlite", ".sqlite3", ".class", ".jar", ".pyc", ".pyo", ".node", ".pak",
+] as const;
+
 export type LocalFileKind = "text" | "image";
 
-const TEXT_FILE_NAME = ["app.bundle"] as const;
+const TEXT_FILE_NAME = ["app.bundle", "dockerfile", "makefile", "gemfile", "procfile", "license", "readme"] as const;
 
-/** Extensao permitida (texto ou imagem)? So' olha o final do nome, sem tocar no disco. */
+/** Imagem, binário conhecido (null) ou texto (qualquer outra coisa — .command, sem extensão…). */
 export function localFileKind(path: string): LocalFileKind | null {
   const low = path.toLowerCase().replace(/[\\/]+$/, "");
-  const base = low.slice(low.lastIndexOf("/") + 1).slice(low.lastIndexOf("\\") + 1);
+  const slash = Math.max(low.lastIndexOf("/"), low.lastIndexOf("\\"));
+  const base = slash >= 0 ? low.slice(slash + 1) : low;
+  const dot = base.lastIndexOf(".");
+  const ext = dot > 0 ? base.slice(dot) : "";
+  if ((IMAGE_FILE_EXT as readonly string[]).includes(ext)) return "image";
+  if ((BINARY_FILE_EXT as readonly string[]).includes(ext)) return null;
   if ((TEXT_FILE_NAME as readonly string[]).includes(base)) return "text";
-  if (TEXT_FILE_EXT.some((e) => low.endsWith(e))) return "text";
-  if (IMAGE_FILE_EXT.some((e) => low.endsWith(e))) return "image";
-  return null;
+  return "text";
 }
 
 /** URL do /api/local-file para este caminho (relativa: mesma origem da página). */
@@ -106,6 +121,11 @@ export interface PaneLinkCtx {
   paneDistro?: string;
   /** cwd do pane, no formato "file://host/caminho" (o mesmo que vem do host) */
   paneCwd?: string;
+  /**
+   * Host local é macOS/Linux: caminhos POSIX (`/Users/...`) abrem direto.
+   * No Windows só vale em pane WSL (vira UNC). Ver também paneFolder().
+   */
+  posixLocal?: boolean;
 }
 
 /**
@@ -119,6 +139,8 @@ export function paneIsWsl(ctx: PaneLinkCtx): boolean {
   const cwd = ctx.paneCwd ? stripFileScheme(ctx.paneCwd) : "";
   if (!cwd) return false;
   if (distroFromWslUnc(cwd)) return true;
+  // Host Mac/Linux: /Users/... e /home/... são locais, não WSL.
+  if (ctx.posixLocal) return false;
   return isPosixAbsolutePath(cwd) && !windowsDriveInPosixForm(cwd);
 }
 
@@ -149,12 +171,38 @@ export function resolveLinkPath(raw: string, ctx: PaneLinkCtx): string | null {
   const win = windowsDriveInPosixForm(candidate);
   if (win) return win;
   if (isPosixAbsolutePath(candidate)) {
-    if (!paneIsWsl(ctx)) return null; // so' resolvivel com segurança num pane WSL
+    // Mac/Linux nativo: o caminho já é o que o Go abre.
+    if (ctx.posixLocal) return candidate;
+    if (!paneIsWsl(ctx)) return null; // no Windows só com WSL (UNC)
     const distro = paneWslDistro(ctx);
     return distro ? wslUncPath(distro, candidate) : null;
   }
   // relativo: so' resolve se o cwd do pane for claro
   const base = ctx.paneCwd ? resolveLinkPath(ctx.paneCwd, ctx) : null;
   if (!base) return null;
-  return `${base.replace(/[\\/]+$/, "")}\\${candidate.replace(/^\.[\\/]/, "").replace(/\//g, "\\")}`;
+  // "./x" e ".\x" → "x"; ".." no meio o Go limpa no validateLocalPath
+  const rest = candidate.replace(/^\.[\\/]/, "");
+  if (!rest || rest === ".") return null;
+  if (ctx.posixLocal || isPosixAbsolutePath(base)) {
+    return joinPosix(base, rest.replace(/\\/g, "/"));
+  }
+  return `${base.replace(/[\\/]+$/, "")}\\${rest.replace(/\//g, "\\")}`;
+}
+
+/** Junta base + relativo em POSIX, resolvendo "." / ".." no caminho. */
+function joinPosix(base: string, rel: string): string {
+  const parts = `${base.replace(/\/+$/, "")}/${rel}`.split("/");
+  const out: string[] = [];
+  for (const p of parts) {
+    if (p === "" || p === ".") {
+      if (out.length === 0) out.push(""); // leading /
+      continue;
+    }
+    if (p === "..") {
+      if (out.length > 1) out.pop();
+      continue;
+    }
+    out.push(p);
+  }
+  return out.join("/") || "/";
 }

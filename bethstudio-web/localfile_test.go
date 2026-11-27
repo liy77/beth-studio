@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -24,8 +25,14 @@ func TestExpandHomePath(t *testing.T) {
 	if got != want {
 		t.Fatalf("expand = %q, queria %q", got, want)
 	}
-	if _, err := validateLocalPath(`~\..\manual.pdf`); err == nil {
-		t.Fatal("~ com .. deveria ser rejeitado")
+	// "~/../x" limpa para absoluto fora da home — permitido (é o arquivo real).
+	got2, err := validateLocalPath(`~/../manual.pdf`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want2 := filepath.Clean(filepath.Join(home, "..", "manual.pdf"))
+	if got2 != want2 {
+		t.Fatalf("~/.. = %q, queria %q", got2, want2)
 	}
 }
 
@@ -36,14 +43,28 @@ func TestValidateLocalPath(t *testing.T) {
 			t.Errorf("%q deveria ser válido: %v", p, err)
 		}
 	}
+	// ".." no meio: limpa e segue absoluto — tem que abrir no preview.
+	for _, p := range []string{
+		`C:\src\repo\..\README.md`,
+		`/Users/brian/src/../src/FilePreviewPanel.tsx`,
+		`/tmp/a/b/../../c/notes.md`,
+	} {
+		got, err := validateLocalPath(p)
+		if err != nil {
+			t.Errorf("%q deveria limpar e valer: %v", p, err)
+			continue
+		}
+		if hasDotDotSegment(got) {
+			t.Errorf("%q limpo ainda tem ..: %q", p, got)
+		}
+	}
 	bad := map[string]string{
-		"":                                     "vazio",
-		"README.md":                            "relativo",
-		`..\..\Windows\System32\config\SAM`:    "..",
-		`C:\src\..\..\Windows\System32`:        "..",
-		"file:///C:/src/x.md":                  "esquema",
-		"http://example.com/x.png":             "esquema",
-		`C:\src\repo\..\..\..\Windows\win.ini`: "..",
+		"":                                  "vazio",
+		"README.md":                         "relativo",
+		`..\..\Windows\System32\config\SAM`: "relativo com ..",
+		"../notes.md":                       "relativo com ..",
+		"file:///C:/src/x.md":               "esquema",
+		"http://example.com/x.png":          "esquema",
 	}
 	for p, why := range bad {
 		if _, err := validateLocalPath(p); err == nil {
@@ -62,8 +83,9 @@ func TestValidateLocalPathTraversalStaysAbsolute(t *testing.T) {
 func TestLocalFileCategory(t *testing.T) {
 	cases := map[string]string{
 		"a.md": "text", "a.MD": "text", "a.markdown": "text", "a.txt": "text", "a.log": "text",
+		"a.go": "text", "a.command": "text", "a": "text", "Dockerfile": "text",
 		"a.png": "image", "a.JPG": "image", "a.jpeg": "image", "a.gif": "image", "a.webp": "image", "a.bmp": "image", "a.svg": "image",
-		"a.exe": "", "a.go": "", "a": "",
+		"a.exe": "", "a.zip": "", "a.pdf": "", "a.dylib": "",
 	}
 	for name, want := range cases {
 		_, got := localFileCategory(name)
@@ -103,13 +125,25 @@ func TestServeLocalFileTextOkAndTruncated(t *testing.T) {
 func TestServeLocalFileImageOk(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "foto.png")
-	png := []byte{0x89, 'P', 'N', 'G', 1, 2, 3, 4}
+	png := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 1, 2, 3, 4}
 	os.WriteFile(p, png, 0o644)
 	req := httptest.NewRequest("GET", "/api/local-file?path="+urlEnc(p), nil)
 	rr := httptest.NewRecorder()
 	serveLocalFile(rr, req)
 	if rr.Code != 200 || !bytes.Equal(rr.Body.Bytes(), png) || rr.Header().Get("Content-Type") != "image/png" {
 		t.Fatalf("imagem: %d %v %q", rr.Code, rr.Body.Bytes(), rr.Header().Get("Content-Type"))
+	}
+}
+
+func TestServeLocalFileAppleDoubleRejected(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "._foto.png")
+	os.WriteFile(p, []byte{0x00, 0x05, 0x16, 0x07}, 0o644)
+	req := httptest.NewRequest("GET", "/api/local-file?path="+urlEnc(p), nil)
+	rr := httptest.NewRecorder()
+	serveLocalFile(rr, req)
+	if rr.Code != http.StatusUnsupportedMediaType || !strings.Contains(rr.Body.String(), "metadados") {
+		t.Fatalf("AppleDouble: %d %s", rr.Code, rr.Body)
 	}
 }
 

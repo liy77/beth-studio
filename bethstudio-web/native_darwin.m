@@ -125,6 +125,23 @@ extern void goWindowDrag(void);
 }
 @end
 
+@interface BethAppDelegate : NSObject <NSApplicationDelegate>
+@end
+
+@implementation BethAppDelegate
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag {
+	(void)sender;
+	if (bethWindow == nil) return NO;
+	if (!flag || bethHidden) {
+		[bethWindow makeKeyAndOrderFront:nil];
+		bethHidden = 0;
+	}
+	return YES;
+}
+@end
+
+static BethAppDelegate *bethAppDelegate = nil;
+
 // A faixa vazia da barra de abas chama isto. O WebView come o clique, então
 // a janela não anda sozinha; performWindowDragWithEvent move como a barra
 // de título faria.
@@ -384,28 +401,67 @@ static NSImageView *bethGlassIcon(NSString *name, CGFloat side) {
 // (timer 200 ms / hover) e o AppKit destrói+recria NSGlassEffectView a
 // cada vez — main thread trava, cliques morrem, host segue.
 static NSString *bethLastGlassBody = nil;
+// Chaves de conteúdo (sem x/y/w/h): no resize só a geometria muda — move
+// as placas existentes em vez de destruir NSGlassEffectView a cada frame.
+static NSArray<NSString *> *bethGlassContentKeys = nil;
+static NSMutableArray *bethGlassPlates = nil; // BethGlassPlate* na ordem das chaves
+static NSMutableArray *bethGlassPlateHosts = nil; // NSView* host de cada placa
+
+static NSString *bethGlassContentKey(NSDictionary *r) {
+	return [NSString stringWithFormat:@"%d|%d|%d|%d|%d|%d|%d|%@|%@|%@|%@|%d",
+		[r[@"on"] intValue],
+		[r[@"f"] intValue],
+		[r[@"tip"] intValue],
+		[r[@"row"] intValue],
+		[r[@"mono"] intValue],
+		[r[@"wrap"] intValue],
+		[r[@"ph"] intValue],
+		r[@"p"] ?: @"",
+		r[@"t"] ?: @"",
+		r[@"sub"] ?: @"",
+		r[@"side"] ?: @"",
+		[r[@"ax"] intValue]];
+}
 
 // Liquid glass nativo na frente da página, no formato de cada aba e botão.
 // Atrás do WebView o efeito não atravessa a camada da página. Na frente,
 // o texto da página continua visível porque o vidro é translúcido e o
 // clique atravessa.
+static void bethClearGlassCache(void) {
+	[bethGlassContentKeys release];
+	bethGlassContentKeys = nil;
+	[bethGlassPlates release];
+	bethGlassPlates = nil;
+	[bethGlassPlateHosts release];
+	bethGlassPlateHosts = nil;
+}
+
 static void bethApplyGlass(NSString *body) {
 	if (bethGlassHost == nil || bethWeb == nil || bethWindow == nil) return;
 	if (body == nil) body = @"";
 	if (bethLastGlassBody != nil && [bethLastGlassBody isEqualToString:body]) return;
+	[bethLastGlassBody release];
 	bethLastGlassBody = [body copy];
+	@try {
 	if (@available(macOS 26.0, *)) {
-		for (NSView *child in [bethGlassHost.subviews copy]) [child removeFromSuperview];
-		[bethChatHoles removeAllObjects];
-		if (bethRowHost != nil) {
-			for (NSView *child in [bethRowHost.subviews copy]) [child removeFromSuperview];
+		if (body.length == 0) {
+			for (NSView *child in [bethGlassHost.subviews copy]) [child removeFromSuperview];
+			[bethChatHoles removeAllObjects];
+			if (bethRowHost != nil) {
+				for (NSView *child in [bethRowHost.subviews copy]) [child removeFromSuperview];
+			}
+			bethClearGlassCache();
+			return;
 		}
-		if (body.length == 0) return;
 		NSData *data = [body dataUsingEncoding:NSUTF8StringEncoding];
 		id parsed = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
 		if (![parsed isKindOfClass:[NSArray class]]) return;
 		CGFloat pageH = bethWeb.bounds.size.height;
-		NSInteger n = 0;
+		NSMutableArray *items = [NSMutableArray array];
+		NSMutableArray *keys = [NSMutableArray array];
+		NSMutableArray *frames = [NSMutableArray array];
+		NSMutableArray *hosts = [NSMutableArray array];
+		BOOL anyTip = NO;
 		for (id item in (NSArray *)parsed) {
 			if (![item isKindOfClass:[NSDictionary class]]) continue;
 			NSDictionary *r = item;
@@ -413,16 +469,59 @@ static void bethApplyGlass(NSString *body) {
 			CGFloat y = [r[@"y"] doubleValue];
 			CGFloat w = [r[@"w"] doubleValue];
 			CGFloat h = [r[@"h"] doubleValue];
-			CGFloat rad = [r[@"r"] doubleValue];
 			BOOL isRow = [r[@"row"] intValue] == 1;
-			// Chat selecionado passa de 110 px (cwd / na aba / fase).
+			BOOL tip = [r[@"tip"] intValue] == 1;
 			if (w < 6 || h < 4 || w > 480 || h > 200) continue;
 			if (y < 0 || y > pageH) continue;
-			// WKWebView mede de cima para baixo. NSView mede de baixo para
-			// cima, a menos que a view seja flipped.
+			if (tip) anyTip = YES;
 			CGFloat localY = bethWeb.isFlipped ? y : (pageH - y - h);
 			NSRect inWeb = NSMakeRect(x, localY, w, h);
-			NSRect inHost = [bethWeb convertRect:inWeb toView:bethGlassHost];
+			NSView *host = (isRow && bethRowHost != nil) ? bethRowHost : bethGlassHost;
+			NSRect inHost = [bethWeb convertRect:inWeb toView:host];
+			[items addObject:r];
+			[keys addObject:bethGlassContentKey(r)];
+			[frames addObject:[NSValue valueWithRect:inHost]];
+			[hosts addObject:host];
+		}
+		// Só geometria mudou (resize): reposiciona sem recriar o material.
+		if (!anyTip && bethGlassContentKeys != nil && bethGlassPlates != nil
+			&& [keys isEqualToArray:bethGlassContentKeys]
+			&& bethGlassPlates.count == items.count) {
+			for (NSUInteger i = 0; i < items.count; i++) {
+				BethGlassPlate *g = bethGlassPlates[i];
+				if (![g isKindOfClass:[BethGlassPlate class]]) continue;
+				NSDictionary *r = items[i];
+				g.frame = [frames[i] rectValue];
+				BOOL sel = [r[@"on"] intValue] == 1;
+				BOOL hov = [r[@"hov"] intValue] == 1;
+				if (g.bethSelected != sel || g.bethHover != hov) {
+					g.bethSelected = sel;
+					g.bethHover = hov;
+					[g bethApplyTint];
+				}
+			}
+			return;
+		}
+		for (NSView *child in [bethGlassHost.subviews copy]) [child removeFromSuperview];
+		[bethChatHoles removeAllObjects];
+		if (bethRowHost != nil) {
+			for (NSView *child in [bethRowHost.subviews copy]) [child removeFromSuperview];
+		}
+		// CGO compila sem ARC: [NSMutableArray array] morre no drain do
+		// pool e o 2º bethGlass (resize) chama .count em lixo → SIGABRT
+		// ("abre e fecha"). alloc/init mantém as placas entre mensagens.
+		[bethGlassPlates release];
+		bethGlassPlates = [[NSMutableArray alloc] init];
+		[bethGlassPlateHosts release];
+		bethGlassPlateHosts = [[NSMutableArray alloc] init];
+		NSInteger n = 0;
+		for (NSUInteger ii = 0; ii < items.count; ii++) {
+			NSDictionary *r = items[ii];
+			CGFloat w = [r[@"w"] doubleValue];
+			CGFloat h = [r[@"h"] doubleValue];
+			CGFloat rad = [r[@"r"] doubleValue];
+			BOOL isRow = [r[@"row"] intValue] == 1;
+			NSRect inHost = [frames[ii] rectValue];
 			BethGlassPlate *g = [[BethGlassPlate alloc] initWithFrame:inHost];
 			g.cornerRadius = rad > 0 ? rad : 8;
 			g.clipsToBounds = YES;
@@ -437,17 +536,19 @@ static void bethApplyGlass(NSString *body) {
 				// Mesmo material dos botões Ver, mas atrás do WebView: o HTML
 				// (nome, na aba, badge) fica por cima do vidro. Sem rótulo nativo.
 				(void)text;
-				NSView *host = bethRowHost != nil ? bethRowHost : bethGlassHost;
+				NSView *host = hosts[ii];
 				// Garante rowHost acima do vibrancy e abaixo do web.
 				if (host == bethRowHost && bethWeb != nil && bethRowHost.superview != nil) {
 					NSView *parent = bethRowHost.superview;
 					[bethRowHost removeFromSuperview];
 					[parent addSubview:bethRowHost positioned:NSWindowBelow relativeTo:bethWeb];
 				}
-				g.frame = [bethWeb convertRect:inWeb toView:host];
+				g.frame = inHost;
 				g.bethTip = NO;
 				[g bethApplyTint];
 				[host addSubview:g];
+				[bethGlassPlates addObject:g];
+				[bethGlassPlateHosts addObject:host];
 				n++;
 				continue;
 			}
@@ -500,6 +601,7 @@ static void bethApplyGlass(NSString *body) {
 				}
 				g.contentView = box;
 				[bethGlassHost addSubview:g];
+				// Tip tem seta extra — não entra no atalho de resize.
 				n++;
 				continue;
 			}
@@ -527,6 +629,8 @@ static void bethApplyGlass(NSString *body) {
 				[box addSubview:label];
 				g.contentView = box;
 				[bethGlassHost addSubview:g];
+				[bethGlassPlates addObject:g];
+				[bethGlassPlateHosts addObject:bethGlassHost];
 				n++;
 				continue;
 			}
@@ -635,9 +739,24 @@ static void bethApplyGlass(NSString *body) {
 				g.contentView = box;
 			}
 			[bethGlassHost addSubview:g];
+			[bethGlassPlates addObject:g];
+			[bethGlassPlateHosts addObject:bethGlassHost];
 			n++;
 		}
+		// Com tip (seta extra) não dá para só mover no resize.
+		if (anyTip || bethGlassPlates.count != keys.count) {
+			bethClearGlassCache();
+		} else {
+			[bethGlassContentKeys release];
+			bethGlassContentKeys = [keys copy];
+		}
 		NSLog(@"beth glass plates %ld", (long)n);
+	}
+	} @catch (NSException *ex) {
+		NSLog(@"beth glass apply failed: %@", ex);
+		bethClearGlassCache();
+		[bethLastGlassBody release];
+		bethLastGlassBody = nil;
 	}
 }
 
@@ -820,32 +939,48 @@ static void bethApplyTip(NSString *body) {
 		if (aw < 1) aw = 2;
 		if (ah < 1) ah = 2;
 		BOOL preferAbove = [r[@"above"] intValue] == 1;
-		CGFloat textW = 220;
-		NSFont *titleFont = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
-		NSFont *descFont = [NSFont systemFontOfSize:12 weight:NSFontWeightRegular];
-		NSRect titleBox = [title boundingRectWithSize:NSMakeSize(textW, 60) options:NSStringDrawingUsesLineFragmentOrigin attributes:@{ NSFontAttributeName: titleFont }];
-		NSRect descBox = desc.length ? [desc boundingRectWithSize:NSMakeSize(textW, 80) options:NSStringDrawingUsesLineFragmentOrigin attributes:@{ NSFontAttributeName: descFont }] : NSZeroRect;
-		CGFloat labelH = ceil(titleBox.size.height);
-		CGFloat descH = desc.length ? ceil(descBox.size.height) : 0;
+		// Sem preferredMaxLayoutWidth o NSTextField corta no meio da frase
+		// ("Parar de editar" → "Parar"; "selecione um trecho…" → "selecione um").
+		CGFloat textW = 280;
 		CGFloat padX = 12;
 		CGFloat padY = 8;
-		CGFloat gap = descH > 0 ? 2 : 0;
-		CGFloat contentW = MIN(textW, MAX(ceil(titleBox.size.width), ceil(descBox.size.width))) + padX * 2;
-		if (contentW < 80) contentW = 80;
-		CGFloat contentH = padY + labelH + gap + descH + padY;
-		NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, contentW, contentH)];
+		NSFont *titleFont = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
+		NSFont *descFont = [NSFont systemFontOfSize:12 weight:NSFontWeightRegular];
 		NSTextField *label = [NSTextField wrappingLabelWithString:title];
 		label.font = titleFont;
 		label.textColor = [NSColor labelColor];
-		label.maximumNumberOfLines = 3;
-		label.frame = NSMakeRect(padX, contentH - padY - labelH, contentW - padX * 2, labelH);
-		[box addSubview:label];
-		if (descH > 0) {
-			NSTextField *line2 = [NSTextField wrappingLabelWithString:desc];
+		label.maximumNumberOfLines = 4;
+		label.preferredMaxLayoutWidth = textW;
+		NSSize titleSize = [label sizeThatFits:NSMakeSize(textW, 200)];
+		NSTextField *line2 = nil;
+		NSSize descSize = NSZeroSize;
+		if (desc.length > 0) {
+			line2 = [NSTextField wrappingLabelWithString:desc];
 			line2.font = descFont;
 			line2.textColor = [NSColor secondaryLabelColor];
-			line2.maximumNumberOfLines = 4;
-			line2.frame = NSMakeRect(padX, padY, contentW - padX * 2, descH);
+			line2.maximumNumberOfLines = 6;
+			line2.preferredMaxLayoutWidth = textW;
+			descSize = [line2 sizeThatFits:NSMakeSize(textW, 240)];
+		}
+		CGFloat innerW = MAX(ceil(titleSize.width), ceil(descSize.width));
+		if (innerW < 72) innerW = 72;
+		if (innerW > textW) innerW = textW;
+		label.preferredMaxLayoutWidth = innerW;
+		titleSize = [label sizeThatFits:NSMakeSize(innerW, 200)];
+		if (line2) {
+			line2.preferredMaxLayoutWidth = innerW;
+			descSize = [line2 sizeThatFits:NSMakeSize(innerW, 240)];
+		}
+		CGFloat labelH = ceil(titleSize.height);
+		CGFloat descH = line2 ? ceil(descSize.height) : 0;
+		CGFloat gap = descH > 0 ? 3 : 0;
+		CGFloat contentW = innerW + padX * 2;
+		CGFloat contentH = padY + labelH + gap + descH + padY;
+		NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, contentW, contentH)];
+		label.frame = NSMakeRect(padX, contentH - padY - labelH, innerW, labelH);
+		[box addSubview:label];
+		if (line2) {
+			line2.frame = NSMakeRect(padX, padY, innerW, descH);
 			[box addSubview:line2];
 		}
 		if (bethMenuBridge == nil) bethMenuBridge = [BethMenuBridge new];
@@ -1327,6 +1462,10 @@ static void bethInstallEditMenu(void) {
 
 void bethEnsureApp(void) {
 	[NSApplication sharedApplication];
+	if (bethAppDelegate == nil) {
+		bethAppDelegate = [BethAppDelegate new];
+		[NSApp setDelegate:bethAppDelegate];
+	}
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 	NSImage *logo = bethAppIcon();
 	if (logo != nil) {

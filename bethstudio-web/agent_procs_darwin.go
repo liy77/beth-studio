@@ -33,6 +33,7 @@ func (h *hub) runAgentProcs(ctx context.Context) {
 		}
 		if nodes, err := apDarwinNodes(); err == nil {
 			h.publishPaneAgents(paneAgents(nodes, nil))
+			persistLiveAgents(agentSessionsDir(), settings.hostID(), nodes)
 		}
 		t.Reset(apIdentEvery)
 	}

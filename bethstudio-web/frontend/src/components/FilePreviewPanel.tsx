@@ -78,6 +78,18 @@ interface Props {
   onSaveUntitled?: (content: string) => void;
   /** No slot da pasta da guia: mesma altura do terminal, empurra o layout. */
   docked?: boolean;
+  /**
+   * Acompanha mudanças no disco (mtime) e recarrega se não houver edição
+   * local pendente — para seguir o agent em tempo real.
+   */
+  liveReload?: boolean;
+  /** false = follow do agent: não tira o foco do terminal */
+  autoFocus?: boolean;
+  /** 1-based: salta e destaca a linha editada (estilo Cursor) */
+  revealLine?: number;
+  revealCount?: number;
+  /** muda para re-saltar no mesmo arquivo */
+  revealKey?: number | string;
 }
 
 type Doc =
@@ -119,7 +131,21 @@ function initialRect(): Rect {
  * antes de sobrescrever; fechar/abrir outro com alteração pendente pergunta.
  * Fora do modo editar, Ctrl+S salva uma cópia.
  */
-export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editOnOpen, onNewFile, onSaveUntitled, docked = false }: Props) {
+export function FilePreviewPanel({
+  conn,
+  path: requested,
+  onClose,
+  onOpen,
+  editOnOpen,
+  onNewFile,
+  onSaveUntitled,
+  docked = false,
+  liveReload = false,
+  autoFocus = true,
+  revealLine,
+  revealCount,
+  revealKey,
+}: Props) {
   // arquivo mostrado; troca de "requested" com alteração pendente espera a resposta do aviso
   const [path, setPath] = useState(requested);
   const [doc, setDoc] = useState<Doc>({ phase: "loading" });
@@ -160,7 +186,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
   // Notas: o "Sem título" é salvo sozinho em <dados>\notes (um .md com timestamp
   // por nota). A lista lateral abre e apaga notas.
   const [notes, setNotes] = useState<NoteInfo[]>([]);
-  const [notesOpen, setNotesOpen] = useState(() => loadPref(PREF_NOTES, true, isBool));
+  const [notesOpen, setNotesOpen] = useState(() => loadPref(PREF_NOTES, false, isBool));
   const [noteId, setNoteId] = useState<string | null>(null);
   const [savedText, setSavedText] = useState("");
   const [askDelete, setAskDelete] = useState<string | null>(null);
@@ -177,6 +203,8 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
   const dirty = draft !== null && doc.phase === "text" && draft !== editableText(doc.raw);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+  const mtimeRef = useRef("");
+  if (doc.phase === "text") mtimeRef.current = doc.mtime;
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const untitledRef = useRef(untitled);
@@ -298,11 +326,39 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
       return;
     }
     if (kind === "image") {
-      setDoc({ phase: "image", url: localFileURL(path) });
-      return;
+      // AppleDouble do Mac (._foto.png): metadados, não a imagem.
+      if (/(^|[\\/])\._[^\\/]+$/i.test(path)) {
+        setDoc({
+          phase: "error",
+          message: "Isto é um arquivo de metadados do Mac (._…), não a imagem. Abra o arquivo sem o prefixo ._.",
+        });
+        return;
+      }
+      // WebKit do Mac não manda o cookie em <img src="/api/..."> — 401 e
+      // a imagem some. Busca com o token (getBlob) e mostra via blob:.
+      const urls: string[] = [];
+      void (async () => {
+        try {
+          const { blob } = await conn.getBlob(localFileURL(path));
+          if (!alive) return;
+          const objectUrl = URL.createObjectURL(blob);
+          urls.push(objectUrl);
+          if (!alive) {
+            URL.revokeObjectURL(objectUrl);
+            return;
+          }
+          setDoc({ phase: "image", url: objectUrl });
+        } catch (e) {
+          if (alive) setDoc({ phase: "error", message: e instanceof Error ? e.message : String(e) });
+        }
+      })();
+      return () => {
+        alive = false;
+        for (const u of urls) URL.revokeObjectURL(u);
+      };
     }
     if (kind !== "text") {
-      setDoc({ phase: "error", message: "Tipo de arquivo não suportado no preview." });
+      setDoc({ phase: "error", message: "Arquivo binário — não dá para abrir no preview." });
       return;
     }
     void (async () => {
@@ -333,10 +389,35 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
     };
   }, [conn, path, kind, markdown, reloadKey]);
 
-  // foco no painel ao abrir: Esc / Ctrl+A / Ctrl+S valem aqui, não no terminal
+  // Seguir o agent: poll barato de mtime; só recarrega se o usuário não editou.
   useEffect(() => {
+    if (!liveReload || untitled || path === UNTITLED_PATH || kind !== "text") return;
+    let alive = true;
+    const tick = async () => {
+      if (!alive || dirtyRef.current) return;
+      const known = mtimeRef.current;
+      if (!known) return;
+      try {
+        const st = await conn.api<{ mtime?: string }>("/api/local-file/stat", { path });
+        if (!alive || dirtyRef.current) return;
+        if (st.mtime && st.mtime !== known) setReloadKey((n) => n + 1);
+      } catch {
+        /* arquivo sumiu / rede: o próximo load mostra o erro */
+      }
+    };
+    const id = window.setInterval(() => void tick(), 700);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [liveReload, untitled, path, kind, conn]);
+
+  // foco no painel ao abrir: Esc / Ctrl+A / Ctrl+S valem aqui, não no terminal.
+  // Follow do agent passa autoFocus=false para não roubar o terminal.
+  useEffect(() => {
+    if (!autoFocus) return;
     rootRef.current?.focus({ preventScroll: true });
-  }, [path]);
+  }, [path, autoFocus]);
 
   // "Copiar seleção" só com seleção DENTRO do conteúdo do painel
   useEffect(() => {
@@ -710,25 +791,32 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
 
         <div className="flex min-h-0 flex-1">
         {notesOpen && (
-          <div className="bt-preview-notes flex w-[190px] shrink-0 flex-col border-r border-border bg-bg-panel">
-            <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border px-2">
-              <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-text-1">Notas</span>
+          <aside className="bt-preview-notes flex w-[212px] shrink-0 flex-col border-r border-border" aria-label="Lista de notas">
+            <div className="bt-preview-notes__head flex h-9 shrink-0 items-center gap-1.5 px-2.5">
+              <NotebookText size={14} className="shrink-0 text-text-3" aria-hidden />
+              <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-text-2">
+                Notas
+                {notes.length > 0 && (
+                  <span className="ml-1.5 font-mono text-[10px] font-normal normal-case tracking-normal text-text-3">{notes.length}</span>
+                )}
+              </span>
               <IconButton label="Nova nota em branco" onClick={() => void newNote()}>
                 <Plus size={14} />
               </IconButton>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto py-1">
+            <div className="bt-preview-notes__list min-h-0 flex-1 overflow-auto px-1.5 py-1.5">
               {notes.length === 0 && (
-                <div className="px-3 py-2 text-[11px] text-text-3">
-                  Nenhuma nota ainda. O que você escrever em “Novo arquivo” é salvo aqui sozinho, com data e hora.
+                <div className="mx-0.5 rounded-lg px-2.5 py-3 text-[11px] leading-snug text-text-3">
+                  Nenhuma nota ainda. O texto de “Sem título” é salvo aqui sozinho, com data e hora.
                 </div>
               )}
+              <ul className="flex flex-col gap-0.5">
               {notes.map((n) => {
                 const active = untitled && n.id === noteId;
                 return (
-                  <div key={n.id} className={cn("group relative px-2 py-1", active ? "bg-accent-soft" : "hover:bg-bg-hover")}>
+                  <li key={n.id} className={cn("bt-preview-notes__item group relative", active && "bt-preview-notes__item--on")}>
                     {askDelete === n.id ? (
-                      <div className="flex flex-col gap-1 text-[11px] text-text-1">
+                      <div className="flex flex-col gap-1.5 px-2.5 py-2 text-[11px] text-text-1">
                         <span>Apagar esta nota?</span>
                         <div className="flex gap-1">
                           <button className="rounded bg-[#DC2626] px-2 py-0.5 font-semibold text-white hover:bg-[#B91C1C]" onClick={() => void deleteNote(n.id)}>
@@ -741,12 +829,18 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
                       </div>
                     ) : (
                       <>
-                        <button className="block w-full text-left" title={`${n.title}\n${noteWhen(n.at)}`} onClick={() => void openNote(n.id)}>
-                          <div className="truncate pr-5 text-[12px] text-text-1">{n.title}</div>
-                          <div className="font-mono text-[10px] text-text-3">{noteWhen(n.at)}</div>
+                        <button
+                          type="button"
+                          className="block w-full rounded-md px-2.5 py-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/40"
+                          title={`${n.title}\n${noteWhen(n.at)}`}
+                          onClick={() => void openNote(n.id)}
+                        >
+                          <div className="truncate pr-5 text-[12.5px] font-medium leading-snug text-text-1">{n.title}</div>
+                          <div className="mt-0.5 font-mono text-[10px] tabular-nums text-text-3">{noteWhen(n.at)}</div>
                         </button>
                         <button
-                          className="absolute right-1 top-1 hidden rounded p-1 text-text-3 hover:bg-bg-card hover:text-status-err group-hover:block"
+                          type="button"
+                          className="absolute right-1 top-1.5 hidden rounded p-1 text-text-3 hover:bg-bg-card hover:text-status-err group-hover:block"
                           title="Apagar esta nota"
                           onClick={() => setAskDelete(n.id)}
                         >
@@ -754,11 +848,12 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
                         </button>
                       </>
                     )}
-                  </div>
+                  </li>
                 );
               })}
+              </ul>
             </div>
-          </div>
+          </aside>
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* ações */}
@@ -962,13 +1057,7 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
                 className={zoom === "fit" ? "max-h-full max-w-full object-contain" : "max-w-none"}
                 style={zoom !== "fit" && natural ? { width: natural.w * zoom, height: natural.h * zoom } : undefined}
                 onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-                onError={() => {
-                  // a resposta de erro do Go traz a mensagem amigável
-                  conn
-                    .getBlob(doc.url)
-                    .then(() => setDoc({ phase: "error", message: "Não foi possível mostrar a imagem." }))
-                    .catch((e: Error) => setDoc({ phase: "error", message: e.message }));
-                }}
+                onError={() => setDoc({ phase: "error", message: "Não foi possível mostrar a imagem." })}
               />
             </div>
           )}
@@ -1003,6 +1092,9 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
                     fontPx={font}
                     label={`Editar ${name}`}
                     textareaRef={textareaRef}
+                    revealLine={revealLine}
+                    revealCount={revealCount}
+                    revealKey={revealKey}
                   />
                 ) : showSource && draft !== null ? (
                   <textarea
@@ -1016,7 +1108,15 @@ export function FilePreviewPanel({ conn, path: requested, onClose, onOpen, editO
                     aria-label={`Editar ${name}`}
                   />
                 ) : showSource && !markdown ? (
-                  <CodeView value={doc.raw} lang={codeLang} wrap={wrap} fontPx={font} />
+                  <CodeView
+                    value={doc.raw}
+                    lang={codeLang}
+                    wrap={wrap}
+                    fontPx={font}
+                    revealLine={revealLine}
+                    revealCount={revealCount}
+                    revealKey={revealKey}
+                  />
                 ) : showSource ? (
                   <pre
                     className={cn("font-mono text-text-1", wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre")}

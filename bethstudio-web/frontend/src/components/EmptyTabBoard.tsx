@@ -7,6 +7,7 @@ import { paneLabel } from "@/lib/panes";
 import { PANE_MIME, draggedPane, endDrag } from "@/lib/dnd";
 import { isAgentTool, ToolIcon, toolInText } from "./ToolIcon";
 import { KIND_LABEL, SHELL_ICON } from "./NewTerminalDialog";
+import { SettingsChoice } from "./settings/SettingsUI";
 import { cn } from "@/lib/utils";
 import type { ToolKind } from "./SshScreen";
 
@@ -95,52 +96,40 @@ export function EmptyTabBoard({ conn, shells, panes, readOnly, dragging, onDrop,
         {columns.map((c) => (
           <Column key={c.kind} title={c.title} count={(grouped.get(c.kind) ?? []).length}>
             {(grouped.get(c.kind) ?? []).map((s) => {
-              const Icon = SHELL_ICON[shellKind(s.id)];
+              const k = shellKind(s.id);
+              const Icon = SHELL_ICON[k];
               return (
-                <button
+                <SettingsChoice
                   key={s.id}
-                  type="button"
-                  className="bt-settings-choice w-full disabled:opacity-50"
-                  disabled={readOnly || busy !== null}
-                  onClick={() => open(s)}
-                >
-                  <span className="bt-settings-choice__icon flex items-center gap-2">
-                    {busy === s.id ? <Loader2 size={15} className="animate-spin" /> : <Icon size={15} />}
-                    <span className="bt-settings-choice__title truncate">{s.label}</span>
-                  </span>
-                </button>
+                  on={false}
+                  onClick={() => {
+                    if (!readOnly && busy === null) open(s);
+                  }}
+                  icon={busy === s.id ? <Loader2 size={16} className="animate-spin" /> : <Icon size={16} />}
+                  title={s.label}
+                  sub={KIND_LABEL[k]}
+                />
               );
             })}
           </Column>
         ))}
         <Column title="Conectar" count={2}>
-          <button type="button" className="bt-settings-choice w-full" onClick={() => onOpenTools("ssh")}>
-            <span className="bt-settings-choice__icon flex items-center gap-2">
-              <Server size={15} />
-              <span className="bt-settings-choice__title">SSH…</span>
-            </span>
-          </button>
-          <button type="button" className="bt-settings-choice w-full" onClick={() => onOpenTools("serial")}>
-            <span className="bt-settings-choice__icon flex items-center gap-2">
-              <Cable size={15} />
-              <span className="bt-settings-choice__title">Serial…</span>
-            </span>
-          </button>
+          <SettingsChoice on={false} onClick={() => onOpenTools("ssh")} icon={<Server size={16} />} title="SSH…" sub="Host remoto / SFTP" />
+          <SettingsChoice on={false} onClick={() => onOpenTools("serial")} icon={<Cable size={16} />} title="Serial…" sub="Porta COM" />
         </Column>
         {(panes ?? []).length > 0 && (
           <Column title="Já abertos" count={panes?.length ?? 0}>
             {(panes ?? []).map((p) => {
               const tool = isAgentTool(p.tool) ? p.tool : toolInText(paneLabel(p));
               return (
-                <button key={p.pane_id} type="button" className="bt-settings-choice w-full" onClick={() => onOpen(p.pane_id)}>
-                  <span className="bt-settings-choice__icon flex items-center gap-2">
-                    {isAgentTool(tool) ? <ToolIcon tool={tool} size={15} /> : <TerminalSquare size={15} />}
-                    <span className="min-w-0">
-                      <span className="bt-settings-choice__title block truncate">{paneLabel(p)}</span>
-                      <span className="bt-settings-choice__sub block truncate">{p.kind_label || "terminal"}</span>
-                    </span>
-                  </span>
-                </button>
+                <SettingsChoice
+                  key={p.pane_id}
+                  on={false}
+                  onClick={() => onOpen(p.pane_id)}
+                  icon={isAgentTool(tool) ? <ToolIcon tool={tool} size={16} /> : <TerminalSquare size={16} />}
+                  title={paneLabel(p)}
+                  sub={p.kind_label || "terminal"}
+                />
               );
             })}
           </Column>
@@ -153,7 +142,7 @@ export function EmptyTabBoard({ conn, shells, panes, readOnly, dragging, onDrop,
 
 function Column({ title, count, children }: { title: string; count: number; children: ReactNode }) {
   return (
-    <section className="bt-settings-panel flex w-56 shrink-0 flex-col gap-1.5 !p-2">
+    <section className="bt-settings-panel flex w-56 shrink-0 flex-col gap-1.5 !p-2 [&_.bt-settings-choice]:w-full">
       <div className="bt-settings-label flex items-center gap-1.5 !mx-1 !mb-0">
         {title}
         <span className="ml-auto font-normal normal-case tracking-normal">{count}</span>

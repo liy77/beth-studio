@@ -132,6 +132,16 @@ export interface SettingsEvent {
   sidebar?: { collapsed: boolean; width: number; view?: "web" | "host" | "kind" | "folder"; kinds?: string[]; kind_order?: string[]; split_by_kind?: boolean; files_width?: number };
   /** Pré-visualizar imagem antes de colar no terminal (padrão: ligado). */
   paste_image_preview?: boolean;
+  /** Abrir arquivo na lateral mantendo a árvore (padrão: desligado). */
+  files_side_editor?: boolean;
+  /** Seguir o arquivo que o agente edita, em tempo real (padrão: desligado). */
+  follow_agent_file?: boolean;
+  /** Overlay Kitty/iTerm no terminal (padrão: ligado). */
+  term_inline_images?: boolean;
+  /** Menos animação na interface (padrão: desligado). */
+  reduce_motion?: boolean;
+  /** Idioma da UI: pt | en (padrão: pt). */
+  ui_locale?: string;
 }
 
 export interface XtermColors {

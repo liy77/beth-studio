@@ -41,15 +41,25 @@ type paneSpec struct {
 	OrigHost string          `json:"orig_host,omitempty"`
 	OrigName *PaneName       `json:"orig_name,omitempty"`
 	OrigLook *PaneAppearance `json:"orig_look,omitempty"`
-	// Sessão do agente (Claude) que rodava no terminal: agent_resume.go.
+	// Sessão do agente (Claude, Cursor, Codex…) que rodava no terminal: agent_resume.go.
 	Resume *resumeSpec `json:"resume,omitempty"`
 }
 
-type specsFile struct {
-	Version int        `json:"version"`
-	SavedAt string     `json:"saved_at"`
+// specsSession: um instantâneo não-vazio dos terminais (host + receita).
+// last_session sobrevive quando a lista fica vazia e apagaria a receita —
+// senão, na próxima abertura do host não há o que restaurar.
+type specsSession struct {
 	HostID  string     `json:"host_id"`
+	SavedAt string     `json:"saved_at"`
 	Specs   []paneSpec `json:"specs"`
+}
+
+type specsFile struct {
+	Version     int            `json:"version"`
+	SavedAt     string         `json:"saved_at"`
+	HostID      string         `json:"host_id"`
+	Specs       []paneSpec     `json:"specs"`
+	LastSession *specsSession  `json:"last_session,omitempty"`
 }
 
 var (
@@ -216,14 +226,27 @@ func loadSpecs(path string) (specsFile, bool) {
 
 func specsPath() string { return filepath.Join(dataDir(), "pane-specs.json") }
 
+// restoreRecipe: terminais a recriar — Specs atuais, ou a última sessão boa
+// se a lista vazia tiver apagado Specs (queda do host / flush vazio).
+func restoreRecipe(f specsFile) (host string, savedAt string, specs []paneSpec) {
+	if len(f.Specs) > 0 {
+		return f.HostID, f.SavedAt, f.Specs
+	}
+	if f.LastSession != nil && len(f.LastSession.Specs) > 0 {
+		return f.LastSession.HostID, f.LastSession.SavedAt, f.LastSession.Specs
+	}
+	return f.HostID, f.SavedAt, nil
+}
+
 // shouldRestore: o host é OUTRO processo que o da receita, está vazio, a
 // receita não está vazia e tem menos de 7 dias. Terminal fechado de propósito
 // (mesmo host, lista vazia) nunca ressuscita.
 func shouldRestore(f specsFile, hostID string, panes int, now time.Time) bool {
-	if panes != 0 || len(f.Specs) == 0 || hostID == "" || f.HostID == "" || f.HostID == hostID {
+	rh, savedAt, specs := restoreRecipe(f)
+	if panes != 0 || len(specs) == 0 || hostID == "" || rh == "" || rh == hostID {
 		return false
 	}
-	t, err := time.Parse(time.RFC3339, f.SavedAt)
+	t, err := time.Parse(time.RFC3339, savedAt)
 	if err != nil || now.Sub(t) > specsMaxAge {
 		return false
 	}

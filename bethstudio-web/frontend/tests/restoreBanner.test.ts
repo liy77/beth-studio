@@ -21,6 +21,14 @@ test("espera do WSL cita a distro", () => {
   assert.equal(restoreBanner(ev({ stage: "wsl", distro: "Ubuntu" }))?.text, "Aguardando o WSL (Ubuntu)…");
 });
 
+test("pergunta de reabrir a sessão anterior", () => {
+  const b = restoreBanner(ev({ stage: "ask_restore", total: 3, titles: ["Cursor", "~", "api"] }));
+  assert.equal(b?.text, "A sessão anterior tinha 3 terminais. Quer reabrir todos?");
+  assert.equal(b?.busy, false);
+  assert.deepEqual(b?.askRestore, { total: 3, titles: ["Cursor", "~", "api"] });
+  assert.equal(restoreBanner(ev({ stage: "ask_restore", total: 1 }))?.text, "A sessão anterior tinha 1 terminal. Quer reabrir?");
+});
+
 test("pergunta do init: uma pasta ausente", () => {
   const b = restoreBanner(ev({ stage: "ask_init", distro: "Debian", missing: ["/mnt/kingston/mcu/repo"] }));
   assert.equal(b?.text, "A pasta /mnt/kingston/mcu/repo não existe no WSL Debian. Executar o script de inicialização?");

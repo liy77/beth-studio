@@ -14,7 +14,7 @@ import {
   type Layout,
   type LayoutNode,
 } from "../src/lib/layout.ts";
-import { sameShellId, splitAround, splitSpawn, type SplitSpawnDeps } from "../src/lib/splitSpawn.ts";
+import { pickShellForPane, sameShellId, splitAround, splitSpawn, type SplitSpawnDeps } from "../src/lib/splitSpawn.ts";
 import type { SpawnedEvent } from "../src/lib/types.ts";
 
 function show(n: LayoutNode | null): string {
@@ -98,6 +98,15 @@ test("mesmo tipo deste: shell da GUI pelo tipo do terminal", () => {
   const mac = ["login", "zsh", "bash"].map((id) => ({ id, label: id }));
   assert.equal(sameShellId({ kind: "zsh" }, mac), "login");
   assert.equal(sameShellId({ kind: "other" }, mac), "login");
+});
+
+test("pickShellForPane: wsl=true sem shell wsl (falso positivo no Mac) usa zsh/login", () => {
+  const mac = ["zsh", "bash", "container.help"].map((id) => ({ id, label: id }));
+  assert.equal(pickShellForPane({ kind: "other", wsl: true }, mac), "zsh");
+  assert.equal(pickShellForPane({ kind: "other" }, mac), "zsh");
+  const win = ["pwsh", "wsl.ubuntu"].map((id) => ({ id, label: id }));
+  assert.equal(pickShellForPane({ kind: "other", wsl: true, distro: "Ubuntu" }, win), "wsl.ubuntu");
+  assert.equal(pickShellForPane({ kind: "wsl", distro: "Ubuntu" }, win), "wsl.ubuntu");
 });
 
 /** Organizacao em memoria + spawn falso. */

@@ -172,6 +172,8 @@ func (s *server) route(w http.ResponseWriter, r *http.Request, remoteKey string)
 		serveOpenLink(w, r)
 	case "/api/local-file":
 		serveLocalFile(w, r)
+	case "/api/local-file/stat":
+		serveLocalFileStat(w, r)
 	case "/api/local-file/open-default":
 		serveOpenLocalFileDefault(w, r)
 	case "/api/local-file/save-as":
@@ -250,7 +252,7 @@ func (s *server) route(w http.ResponseWriter, r *http.Request, remoteKey string)
 	case "/api/content":
 		s.serveContent(w, r)
 	case "/api/themes", "/api/fonts", "/api/settings", "/api/settings/default", "/api/settings/pane",
-		"/api/favorites/theme", "/api/favorites/font", "/api/layout", "/api/settings/ui", "/api/settings/clear-panes", "/api/settings/sidebar", "/api/settings/pane-names", "/api/settings/search-shortcut", "/api/settings/paste-image-preview":
+		"/api/favorites/theme", "/api/favorites/font", "/api/layout", "/api/settings/ui", "/api/settings/clear-panes", "/api/settings/sidebar", "/api/settings/pane-names", "/api/settings/search-shortcut", "/api/settings/paste-image-preview", "/api/settings/files-side-editor", "/api/settings/follow-agent-file":
 		s.serveAPI(w, r)
 	default:
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {

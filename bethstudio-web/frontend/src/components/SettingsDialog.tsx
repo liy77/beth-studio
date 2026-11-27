@@ -45,6 +45,7 @@ import { LaunchersSection } from "./LaunchersSection";
 import { AgentResumeSection } from "./AgentResumeSection";
 import { isRemote } from "@/lib/remote";
 import { isMacOS } from "@/lib/windowFrame";
+import { normalizeUILocale, t, type UILocale } from "@/lib/uiLocale";
 import {
   SettingsBtn,
   SettingsChoice,
@@ -98,75 +99,70 @@ interface Props {
   onClose: () => void;
 }
 
-type NavItem = { id: SettingsSection; label: string; icon: ReactNode; macHide?: boolean };
+type NavItem = { id: SettingsSection; labelKey: string; icon: ReactNode; macHide?: boolean };
 
-const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
-  {
-    label: "Geral",
-    items: [
-      { id: "aparencia", label: "Aparência", icon: <Monitor size={14} /> },
-      { id: "atalhos", label: "Atalhos", icon: <Keyboard size={14} /> },
-      { id: "barra", label: "Barra lateral", icon: <PanelLeft size={14} /> },
-    ],
-  },
-  {
-    label: "Terminais",
-    items: [
-      { id: "terminais", label: "Terminais", icon: <TerminalSquare size={14} /> },
-      { id: "retomar", label: "Sessões e processos", icon: <History size={14} /> },
-      { id: "temp", label: "Arquivos temporários", icon: <Eraser size={14} /> },
-    ],
-  },
-  {
-    label: "IA e voz",
-    items: [
-      { id: "voz", label: "Voz e IA", icon: <Mic size={14} /> },
-      { id: "provedores", label: "Provedores de IA", icon: <KeyRound size={14} /> },
-      { id: "ponte", label: "Ponte de agentes", icon: <Cable size={14} />, macHide: true },
-      { id: "uso", label: "Uso e custos", icon: <CircleDollarSign size={14} /> },
-    ],
-  },
-  {
-    label: "Conexões",
-    items: [
-      { id: "celular", label: "Celular", icon: <Smartphone size={14} /> },
-      { id: "banco", label: "Banco de dados", icon: <Database size={14} /> },
-    ],
-  },
-  {
-    label: "Sobre",
-    items: [{ id: "sobre", label: "Sobre", icon: <Info size={14} /> }],
-  },
-];
-
-const PAGE_TITLE: Record<SettingsSection, { title: string; subtitle?: string }> = {
-  aparencia: { title: "Aparência", subtitle: "Tema da interface, material da barra e padrões dos terminais." },
-  atalhos: { title: "Atalhos", subtitle: "Teclas do Studio neste computador." },
-  terminais: { title: "Terminais", subtitle: "Tamanho, colar imagem, avisos e desempenho." },
-  celular: { title: "Celular", subtitle: "Acesso remoto pelo telefone e Studio no navegador." },
-  voz: { title: "Voz e IA", subtitle: "Microfone, transcrição e correção." },
-  provedores: { title: "Provedores de IA", subtitle: "Chaves e contas usadas pelo Studio." },
-  ponte: { title: "Ponte de agentes", subtitle: "Como o Studio fala com os agentes neste PC." },
-  retomar: { title: "Sessões e processos", subtitle: "Retomar o que ficou aberto depois de uma queda." },
-  temp: { title: "Arquivos temporários", subtitle: "Limpeza automática de colagens e ditados." },
-  banco: { title: "Banco de dados", subtitle: "Assistente e opções das conexões." },
-  uso: { title: "Uso e custos", subtitle: "Histórico e gasto das chamadas de IA." },
-  barra: { title: "Barra lateral", subtitle: "Visão, filtros e ordem dos tipos de terminal." },
-  sobre: { title: "Sobre", subtitle: "Versão, atualizações e pastas deste Studio." },
-};
-
-function settingsNavGroups() {
+function settingsNavGroups(locale: UILocale) {
   const mac = isMacOS();
-  return NAV_GROUPS.map((g) => ({
-    ...g,
-    items: g.items.filter((n) => !(mac && n.macHide)),
-  })).filter((g) => g.items.length > 0);
+  const groups: { labelKey: string; items: NavItem[] }[] = [
+    {
+      labelKey: "settings.group.general",
+      items: [
+        { id: "aparencia", labelKey: "settings.nav.aparencia", icon: <Monitor size={14} /> },
+        { id: "atalhos", labelKey: "settings.nav.atalhos", icon: <Keyboard size={14} /> },
+        { id: "barra", labelKey: "settings.nav.barra", icon: <PanelLeft size={14} /> },
+      ],
+    },
+    {
+      labelKey: "settings.group.terminals",
+      items: [
+        { id: "terminais", labelKey: "settings.nav.terminais", icon: <TerminalSquare size={14} /> },
+        { id: "retomar", labelKey: "settings.nav.retomar", icon: <History size={14} /> },
+        { id: "temp", labelKey: "settings.nav.temp", icon: <Eraser size={14} /> },
+      ],
+    },
+    {
+      labelKey: "settings.group.ai",
+      items: [
+        { id: "voz", labelKey: "settings.nav.voz", icon: <Mic size={14} /> },
+        { id: "provedores", labelKey: "settings.nav.provedores", icon: <KeyRound size={14} /> },
+        { id: "ponte", labelKey: "settings.nav.ponte", icon: <Cable size={14} />, macHide: true },
+        { id: "uso", labelKey: "settings.nav.uso", icon: <CircleDollarSign size={14} /> },
+      ],
+    },
+    {
+      labelKey: "settings.group.connections",
+      items: [
+        { id: "celular", labelKey: "settings.nav.celular", icon: <Smartphone size={14} /> },
+        { id: "banco", labelKey: "settings.nav.banco", icon: <Database size={14} /> },
+      ],
+    },
+    {
+      labelKey: "settings.group.about",
+      items: [{ id: "sobre", labelKey: "settings.nav.sobre", icon: <Info size={14} /> }],
+    },
+  ];
+  return groups
+    .map((g) => ({
+      label: t(locale, g.labelKey),
+      items: g.items
+        .filter((n) => !(mac && n.macHide))
+        .map((n) => ({ ...n, label: t(locale, n.labelKey) })),
+    }))
+    .filter((g) => g.items.length > 0);
+}
+
+function pageTitle(locale: UILocale, sec: SettingsSection): { title: string; subtitle?: string } {
+  return {
+    title: t(locale, `settings.page.${sec}.title`),
+    subtitle: t(locale, `settings.page.${sec}.sub`),
+  };
 }
 
 /** Tela unica de Configuracoes, com navegacao lateral por secoes. */
 export function SettingsDialog(p: Props) {
   const [sec, setSec] = useState<SettingsSection>(p.initialSection ?? "aparencia");
-  const page = PAGE_TITLE[sec];
+  const locale = normalizeUILocale(p.settings?.ui_locale);
+  const page = pageTitle(locale, sec);
   const common = {
     conn: p.conn,
     catalog: p.catalog,
@@ -194,20 +190,20 @@ export function SettingsDialog(p: Props) {
         className="bt-settings bt-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Configurações"
+        aria-label={t(locale, "settings.title")}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.key === "Escape" && p.onClose()}
       >
         <div className="bt-settings__chrome">
           <Settings size={15} className="text-accent-text" />
-          <div className="bt-settings__chrome-title">Configurações</div>
-          <button type="button" className="bt-settings__chrome-close" title="Fechar" aria-label="Fechar" onClick={p.onClose}>
+          <div className="bt-settings__chrome-title">{t(locale, "settings.title")}</div>
+          <button type="button" className="bt-settings__chrome-close" title={t(locale, "settings.close")} aria-label={t(locale, "settings.close")} onClick={p.onClose}>
             <X size={15} />
           </button>
         </div>
         <div className="bt-settings__body">
-          <nav className="bt-settings-nav" aria-label="Seções">
-            {settingsNavGroups().map((g) => (
+          <nav className="bt-settings-nav" aria-label={t(locale, "settings.nav")}>
+            {settingsNavGroups(locale).map((g) => (
               <SettingsNavGroup key={g.label} label={g.label}>
                 {g.items.map((n) => (
                   <SettingsNavItem key={n.id} active={sec === n.id} icon={n.icon} label={n.label} onClick={() => setSec(n.id)} />
@@ -224,10 +220,9 @@ export function SettingsDialog(p: Props) {
             )}
             {sec === "terminais" && (
               <SettingsPage title={page.title} subtitle={page.subtitle}>
-                <TerminalsSection conn={p.conn} settings={p.settings} onMessage={p.onMessage} />
+                <TerminalsSection conn={p.conn} settings={p.settings} onMessage={p.onMessage} locale={locale} />
                 <PerformanceSection conn={p.conn} onMessage={p.onMessage} />
-                {!isRemote() && !isMacOS() && <WslInitSettings conn={p.conn} onMessage={p.onMessage} />}
-                {!isRemote() && isMacOS() && (
+                {!isRemote() && !isMacOS() && <WslInitSettings conn={p.conn} onMessage={p.onMessage} />}                {!isRemote() && isMacOS() && (
                   <div>
                     <SettingsSectionLabel>Apple Container</SettingsSectionLabel>
                     <SettingsGroup>
@@ -315,9 +310,22 @@ export function SettingsDialog(p: Props) {
   );
 }
 
-function TerminalsSection({ conn, settings, onMessage }: { conn: Connection; settings: SettingsEvent | null; onMessage: (m: string) => void }) {
+function TerminalsSection({
+  conn,
+  settings,
+  onMessage,
+  locale,
+}: {
+  conn: Connection;
+  settings: SettingsEvent | null;
+  onMessage: (m: string) => void;
+  locale: UILocale;
+}) {
   const mode = settings?.default?.size_mode || "fit";
   const pastePreview = settings?.paste_image_preview !== false;
+  const sideEditor = !!settings?.files_side_editor;
+  const followAgent = !!settings?.follow_agent_file;
+  const termImages = settings?.term_inline_images !== false;
   const set = (m: "fit" | "host") =>
     void setDefault(conn, { size_mode: m })
       .then(() => onMessage("Padrão de tamanho salvo"))
@@ -330,8 +338,57 @@ function TerminalsSection({ conn, settings, onMessage }: { conn: Connection; set
         onMessage(on ? "Pré-visualização de imagem ligada" : "Pré-visualização de imagem desligada");
       })
       .catch((e: Error) => onMessage(`Erro: ${e.message}`));
+  const setSideEditor = (on: boolean) =>
+    void conn
+      .api<SettingsEvent>("/api/settings/files-side-editor", { enabled: on })
+      .then((s) => {
+        conn.setSettings(s);
+        onMessage(on ? "Editor na lateral ligado" : "Editor na lateral desligado");
+      })
+      .catch((e: Error) => onMessage(`Erro: ${e.message}`));
+  const setFollowAgent = (on: boolean) =>
+    void conn
+      .api<SettingsEvent>("/api/settings/follow-agent-file", { enabled: on })
+      .then((s) => {
+        conn.setSettings(s);
+        onMessage(on ? "Seguir arquivo do agente ligado" : "Seguir arquivo do agente desligado");
+      })
+      .catch((e: Error) => onMessage(`Erro: ${e.message}`));
+  const setTermImages = (on: boolean) =>
+    void conn
+      .api<SettingsEvent>("/api/settings/term-inline-images", { enabled: on })
+      .then((s) => {
+        conn.setSettings(s);
+        onMessage(on ? t(locale, "settings.term.images.on") : t(locale, "settings.term.images.off"));
+      })
+      .catch((e: Error) => onMessage(`Erro: ${e.message}`));
   return (
     <>
+      <div>
+        <SettingsSectionLabel>Arquivos na lateral</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow
+            label="Abrir na lateral (com a pasta)"
+            hint="Em vez de trocar a árvore pelo arquivo, mantém a pasta em cima e o editor embaixo — como no Cursor. Win e Mac."
+          >
+            <SettingsSwitch on={sideEditor} onChange={setSideEditor} label="Abrir arquivo na lateral com a pasta" />
+          </SettingsRow>
+          <SettingsRow
+            label="Seguir o que o agente edita"
+            hint="Quando o agente grava ou abre um arquivo, o painel lateral acompanha e atualiza sozinho enquanto o disco muda."
+          >
+            <SettingsSwitch on={followAgent} onChange={setFollowAgent} label="Seguir arquivo editado pelo agente" />
+          </SettingsRow>
+        </SettingsGroup>
+      </div>
+      <div>
+        <SettingsSectionLabel>{t(locale, "settings.term.images")}</SettingsSectionLabel>
+        <SettingsGroup>
+          <SettingsRow label={t(locale, "settings.term.images.label")} hint={t(locale, "settings.term.images.hint")}>
+            <SettingsSwitch on={termImages} onChange={setTermImages} label={t(locale, "settings.term.images.label")} />
+          </SettingsRow>
+        </SettingsGroup>
+      </div>
       <div>
         <SettingsSectionLabel>Colar imagem</SettingsSectionLabel>
         <SettingsGroup>

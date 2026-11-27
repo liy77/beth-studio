@@ -11,6 +11,7 @@ import (
 	"log"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -157,6 +158,43 @@ func (e *hubRestoreEnv) Spawn(ctx context.Context, s paneSpec, cwd string) (int,
 
 var distroRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
+// awaitSessionRestore: pergunta "reabrir a sessão?" e espera a resposta da UI.
+func (h *hub) awaitSessionRestore(ctx context.Context) (bool, error) {
+	ch := make(chan bool, 1)
+	h.mu.Lock()
+	h.sessionAsk = ch
+	h.mu.Unlock()
+	defer func() {
+		h.mu.Lock()
+		if h.sessionAsk == ch {
+			h.sessionAsk = nil
+		}
+		h.mu.Unlock()
+	}()
+	select {
+	case ok := <-ch:
+		return ok, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+}
+
+// answerSessionRestore entrega a resposta do banner; false se não há pergunta.
+func (h *hub) answerSessionRestore(ok bool) bool {
+	h.mu.Lock()
+	ch := h.sessionAsk
+	h.sessionAsk = nil
+	h.mu.Unlock()
+	if ch == nil {
+		return false
+	}
+	select {
+	case ch <- ok:
+	default:
+	}
+	return true
+}
+
 // newHubRestore monta o coordenador de verdade para este hub.
 func newHubRestore(h *hub) *restoreCoordinator {
 	var c *restoreCoordinator
@@ -192,6 +230,39 @@ func (h *hub) runRestoreJob(file specsFile, c *restoreCoordinator) {
 	// uma hora: a pergunta do init espera o usuário (que pode estar longe do PC) e o init tem até 30 min
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
+	titles := make([]string, 0, len(file.Specs))
+	for _, s := range file.Specs {
+		t := strings.TrimSpace(s.Title)
+		if t == "" {
+			t = s.Cwd
+		}
+		if t == "" {
+			t = s.ShellID
+		}
+		if t != "" {
+			titles = append(titles, t)
+		}
+	}
+	h.setRestore(map[string]any{
+		"stage": "ask_restore", "total": len(file.Specs), "done": 0, "titles": titles,
+		"message": fmt.Sprintf("A sessão anterior tinha %d %s. Quer reabrir todos?",
+			len(file.Specs), map[bool]string{true: "terminal", false: "terminais"}[len(file.Specs) == 1]),
+	})
+	ok, err := h.awaitSessionRestore(ctx)
+	if err != nil || !ok {
+		log.Printf("restore: usuário não reabriu a sessão anterior (%v)", err)
+		lifeLog("restauração recusada ou cancelada; sessão anterior mantida na receita")
+		h.setRestore(map[string]any{"stage": "finished", "total": len(file.Specs), "done": 0,
+			"message": "Sessão anterior não foi reaberta."})
+		// Marca o host atual na receita para não perguntar de novo até haver
+		// terminais novos (last_session continua para um host futuro).
+		if cur := settings.hostID(); cur != "" {
+			prev, _ := loadSpecs(specsPath())
+			prev.HostID, prev.SavedAt, prev.Specs = cur, time.Now().Format(time.RFC3339), nil
+			_ = saveSpecs(specsPath(), prev)
+		}
+		return
+	}
 	log.Printf("restore: recriando %d terminais depois da queda do host", len(file.Specs))
 	lifeLog(fmt.Sprintf("host novo e vazio; recriando %d terminais da receita", len(file.Specs)))
 	// copia ANTES de recriar: recordSpawn apaga a aparencia do terminal antigo cujo id coincide com o novo

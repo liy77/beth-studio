@@ -1,9 +1,16 @@
 import { useState } from "react";
 import type { Connection } from "@/lib/connection";
-import { actOnPending, answerRestoreInit, type InitAnswer, type PendingAction, type RestoreBannerInfo } from "@/lib/restoreBanner";
+import {
+  actOnPending,
+  answerRestoreInit,
+  answerSessionRestore,
+  type InitAnswer,
+  type PendingAction,
+  type RestoreBannerInfo,
+} from "@/lib/restoreBanner";
 
-const BTN = "shrink-0 rounded bg-bg-hover px-2 py-0.5 text-text-1 hover:bg-border disabled:opacity-50";
-const BTN_MAIN = "shrink-0 rounded bg-accent px-2 py-0.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-50";
+const BTN = "shrink-0 rounded bg-black/20 px-2.5 py-1 text-text-1 hover:bg-black/35 disabled:opacity-50";
+const BTN_MAIN = "shrink-0 rounded bg-accent px-2.5 py-1 font-semibold text-white hover:bg-accent-hover disabled:opacity-50";
 
 /** Faixa no alto do Studio durante e depois da restauração dos terminais. */
 export function RestoreBanner({ conn, info, onDismiss }: { conn: Connection; info: RestoreBannerInfo; onDismiss: () => void }) {
@@ -12,7 +19,7 @@ export function RestoreBanner({ conn, info, onDismiss }: { conn: Connection; inf
   const [err, setErr] = useState<string | null>(null);
   const failed = info.details.length > 0;
   const pending = info.pending ?? [];
-  const attention = failed || pending.length > 0 || !!info.ask;
+  const attention = failed || pending.length > 0 || !!info.ask || !!info.askRestore;
 
   /** Uma ação por vez: o botão fica parado até a resposta, e o erro aparece na faixa. */
   const run = (f: () => Promise<unknown>) => {
@@ -29,13 +36,25 @@ export function RestoreBanner({ conn, info, onDismiss }: { conn: Connection; inf
     <div
       role="status"
       className={
-        "shrink-0 border-b px-3 py-1.5 text-[13px] text-text-1 " +
-        (attention ? "border-status-warn/40 bg-status-warn/10" : "border-border bg-bg-card")
+        "relative z-50 shrink-0 border-b px-3 py-2 text-[13px] font-medium text-text-1 " +
+        (attention
+          ? "border-[rgb(var(--bt-warn)/0.45)] bg-[rgb(48,36,12)] text-[rgb(252,211,140)]"
+          : "border-border bg-[rgb(var(--bt-bg-card))]")
       }
     >
       <div className="flex items-center gap-3">
         {info.busy && <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-text-3/30 border-t-accent" />}
-        <span className="min-w-0 flex-1">{info.text}</span>
+        <span className="min-w-0 flex-1 leading-snug">{info.text}</span>
+        {info.askRestore && (
+          <>
+            <button className={BTN_MAIN} disabled={working} onClick={() => run(() => answerSessionRestore(conn, true))}>
+              Reabrir todos
+            </button>
+            <button className={BTN} disabled={working} onClick={() => run(() => answerSessionRestore(conn, false))}>
+              Agora não
+            </button>
+          </>
+        )}
         {info.ask && (
           <>
             <button className={BTN_MAIN} disabled={working} onClick={() => answer(info.ask!.distro, "run")}>
@@ -61,7 +80,7 @@ export function RestoreBanner({ conn, info, onDismiss }: { conn: Connection; inf
             {open ? "Esconder detalhes" : "Ver detalhes"}
           </button>
         )}
-        {!info.busy && !info.ask && (
+        {!info.busy && !info.ask && !info.askRestore && (
           <button className="shrink-0 text-text-2 hover:text-text-1" onClick={onDismiss}>
             Fechar
           </button>

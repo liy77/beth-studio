@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"runtime"
 	"testing"
 )
 
@@ -32,6 +33,9 @@ func TestWslDistroFromUNCAndCwdPath(t *testing.T) {
 }
 
 func TestPaneWSL(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("WSL só no Windows")
+	}
 	withDefaultDistro(t, "Padrao")
 	// kind wsl com distro do argv
 	if ok, d := paneWSL(PaneKind{Kind: "wsl", Distro: "Ubuntu"}, "file://pc/home/u"); !ok || d != "Ubuntu" {
@@ -65,7 +69,23 @@ func TestPaneWSL(t *testing.T) {
 	}
 }
 
+func TestPaneWSLNeverOnUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("este corte vale fora do Windows")
+	}
+	// cwd Unix no Mac não pode virar WSL (senão o front exige shell wsl.*).
+	if ok, _ := paneWSL(PaneKind{Kind: "other"}, "file://mac-mini.local/Users/brian"); ok {
+		t.Fatal("pane mac marcado como WSL")
+	}
+	if ok, _ := paneWSL(PaneKind{Kind: "wsl"}, "file://mac/home/u"); ok {
+		t.Fatal("kind wsl no macOS ainda não deveria marcar (WSL inexistente)")
+	}
+}
+
 func TestEnrichListMarksWSLAgentPane(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("WSL só no Windows")
+	}
 	withDefaultDistro(t, "Padrao")
 	list := []byte(`{"ev":"list","panes":[{"pane_id":7,"title":"✳ Claude Code","cwd":"file:///mnt/data/repo/proj"},{"pane_id":8,"title":"PowerShell","cwd":"file:///C:/src"}]}`)
 	out := enrichList(list, map[int][]string{}, map[int]string{})
@@ -93,8 +113,11 @@ func TestLocalFileWSLUNCPaths(t *testing.T) {
 			t.Errorf("%q deveria ser válido: %v", p, err)
 		}
 	}
-	if _, err := validateLocalPath(`\\wsl.localhost\Debian\home\..\..\x.md`); err == nil {
-		t.Error("traversal no UNC do WSL deveria ser recusado")
+	// ".." no UNC: limpa para um caminho absoluto ainda no share — permitido.
+	if got, err := validateLocalPath(`\\wsl.localhost\Debian\home\..\..\x.md`); err != nil {
+		t.Errorf("UNC com .. deveria limpar: %v", err)
+	} else if hasDotDotSegment(got) {
+		t.Errorf("UNC limpo ainda tem ..: %q", got)
 	}
 	if got := wslUNCAlternative(`\\wsl.localhost\Debian\x.md`); got != `\\wsl$\Debian\x.md` {
 		t.Errorf("alternativa = %q", got)

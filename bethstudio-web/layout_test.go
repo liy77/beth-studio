@@ -71,6 +71,17 @@ func TestSanitizeLayout(t *testing.T) {
 	}
 }
 
+func TestSanitizeLayoutKeepsFilesOpen(t *testing.T) {
+	in := mustLayout(t, `{"active":"a","tabs":[{"id":"a","name":"A","files_open":true,"root":{"type":"leaf","pane":1}},{"id":"b","name":"B","root":{"type":"leaf","pane":2}}]}`)
+	out, err := sanitizeLayout(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Tabs[0].FilesOpen || out.Tabs[1].FilesOpen {
+		t.Fatalf("files_open: %+v", out.Tabs)
+	}
+}
+
 func TestResolveLeaves(t *testing.T) {
 	l := mustLayout(t, `{"active":"a","tabs":[{"id":"a","name":"A","root":{"type":"split","dir":"row","sizes":[1,1,1,1],"children":[
 	   {"type":"leaf","pane":1},

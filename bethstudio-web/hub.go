@@ -60,6 +60,8 @@ type hub struct {
 	// andamento por distro, para "continuar assim mesmo" (restore_init.go)
 	initAsk  map[string]chan bool
 	initSkip map[string]chan struct{}
+	// sessionAsk: "reabrir N terminais da sessão anterior?" (restore_wire.go)
+	sessionAsk chan bool
 	// pendingRetry: retentativa automática dos terminais pendentes (restore_pending.go)
 	pendingRetry pendingRetryState
 	// rawList: ultima lista da ponte SEM os tipos (para reclassificar

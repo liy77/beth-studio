@@ -29,7 +29,7 @@ import {
   X,
 } from "lucide-react";
 import type { Connection } from "@/lib/connection";
-import type { PaneInfo, ScreenEvent, ScreenImage, SettingsEvent } from "@/lib/types";
+import type { PaneInfo, ScreenEvent, SettingsEvent } from "@/lib/types";
 import { withVisibleCursor } from "@/lib/uiTheme";
 import { DEFAULT_TERM_THEME, colorsFor, cssFamily, effectiveFor, fontAvailable, resolveFamily, setPane, useCatalog } from "@/lib/appearance";
 
@@ -40,7 +40,7 @@ import { cwdPath, paneLabel, shortCwd } from "@/lib/panes";
 import { applyTabComplete, expandHome, joinDirName, pathSep, splitDirPrefix } from "@/lib/pathComplete";
 import { copyText, readClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
-import { dragMacWindow, zoomMacWindow } from "@/lib/windowFrame";
+import { dragMacWindow, isMacOS, zoomMacWindow } from "@/lib/windowFrame";
 import { IconButton } from "./IconButton";
 import { PasteDialog } from "./PasteDialog";
 import { ImagePastePreview, type PendingPasteImage } from "./ImagePastePreview";
@@ -62,6 +62,15 @@ import { KindIcon } from "./KindIcon";
 import { GlassMenu, MenuItem, MenuRule } from "./GlassMenu";
 import { sftpApi } from "@/lib/sshApi";
 import { registerTerm } from "@/lib/termFocus";
+import { inlineImageBox, TERM_SCREEN_PAD } from "@/lib/termImages";
+import {
+  dropTermImage,
+  ensureTermImageScaled,
+  syncTermImagePlacements,
+  termImageDataUrl,
+  termImageDisplayUrl,
+  type TermImagePlacement,
+} from "@/lib/termImageCache";
 import { ZONE_ICON } from "./SplitShellMenu";
 import { SPLIT_ZONES, ZONE_LABEL, type SplitZone } from "@/lib/splitSpawn";
 
@@ -302,6 +311,60 @@ function LocationBar({
   );
 }
 
+/**
+ * Overlay Kitty/iTerm: URL no placement (blob em cache). Sem content-visibility —
+ * no WKWebView + overflow hidden ele sumia com o print.
+ */
+function TermInlineImage({ im, cellW, cellH }: { im: TermImagePlacement; cellW: number; cellH: number }) {
+  const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
+  const [src, setSrc] = useState(() => im.url || termImageDisplayUrl(im.hash) || "");
+  const { width: w, height: h } = inlineImageBox(im.cols, im.rows, cellW, cellH, nat);
+  useEffect(() => {
+    setSrc(im.url || termImageDisplayUrl(im.hash) || "");
+  }, [im.hash, im.url]);
+  useEffect(() => {
+    let cancelled = false;
+    const protoW = Math.max(1, im.cols) * cellW;
+    const protoH = Math.max(1, im.rows) * cellH;
+    if (protoW < 8 || protoH < 8) return;
+    void ensureTermImageScaled(im.hash, Math.max(protoW, w), Math.max(protoH, h)).then((u) => {
+      if (!cancelled && u) setSrc(u);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [im.hash, im.cols, im.rows, cellW, cellH, w, h]);
+  if (!src || !(cellW > 0) || !(cellH > 0)) return null;
+  return (
+    <img
+      src={src}
+      alt=""
+      decoding="async"
+      draggable={false}
+      className="absolute max-w-none"
+      style={{
+        left: im.col * cellW,
+        top: im.row * cellH,
+        width: w,
+        height: h,
+        zIndex: 5 + im.z,
+        objectFit: "contain",
+      }}
+      onLoad={(e) => {
+        const el = e.currentTarget;
+        if (el.naturalWidth > 0 && el.naturalHeight > 0) {
+          setNat({ w: el.naturalWidth, h: el.naturalHeight });
+        }
+      }}
+      onError={() => {
+        // blob: quebrado no WebView → data: URL do cache
+        const data = termImageDataUrl(im.hash);
+        if (data && data !== src) setSrc(data);
+      }}
+    />
+  );
+}
+
 export function TerminalView({
   conn,
   paneId,
@@ -376,6 +439,8 @@ export function TerminalView({
     [conn, paneId],
   );
   const areaRef = useRef<HTMLDivElement>(null);
+  /** Envolve xterm + overlay: a escala CSS (fonte mínima) aplica nos dois. */
+  const termWrapRef = useRef<HTMLDivElement>(null);
   const termElRef = useRef<HTMLDivElement>(null);
   const repairViewRef = useRef<() => void>(() => {});
   const termRef = useRef<Terminal | null>(null);
@@ -387,7 +452,14 @@ export function TerminalView({
   // Contexto do pane (kind/distro/cwd) para resolver link de arquivo local
   // clicado no terminal (OSC 8 ou solto) — ver lib/localFile.ts.
   const paneCtxRef = useRef<PaneLinkCtx>({});
-  paneCtxRef.current = { paneKind: pane?.kind, paneWsl: pane?.wsl, paneDistro: pane?.wsl_distro || pane?.distro, paneCwd: pane?.cwd };
+  paneCtxRef.current = {
+    paneKind: pane?.kind,
+    paneWsl: pane?.wsl,
+    paneDistro: pane?.wsl_distro || pane?.distro,
+    paneCwd: pane?.cwd,
+    // sem isto, no Mac o cwd /Users/... parece WSL e caminhos relativos/absolutos falham
+    posixLocal: isMacOS(),
+  };
   const onOpenFileRef = useRef(onOpenFile);
   onOpenFileRef.current = onOpenFile;
   // texto cru (com escapes, inclui OSC 8) da última tela recebida, por linha
@@ -407,12 +479,24 @@ export function TerminalView({
   const pastePreviewOn = settings?.paste_image_preview !== false;
   const pastePreviewRef = useRef(pastePreviewOn);
   pastePreviewRef.current = pastePreviewOn;
+  // Ausente / true = mostra Kitty/iTerm; só false esconde o overlay.
+  const termImagesOn = settings?.term_inline_images !== false;
+  const termImagesOnRef = useRef(termImagesOn);
+  termImagesOnRef.current = termImagesOn;
   const pendingImagesRef = useRef(pendingImages);
   pendingImagesRef.current = pendingImages;
   const [toast, setToast] = useState<string | null>(null);
   const [gotScreen, setGotScreen] = useState(false);
   /** Imagens Kitty/iTerm no viewport (overlay sobre o xterm). */
-  const [termImages, setTermImages] = useState<ScreenImage[]>([]);
+  const [termImages, setTermImages] = useState<TermImagePlacement[]>([]);
+  const termImagesRef = useRef<TermImagePlacement[]>([]);
+  termImagesRef.current = termImages;
+  useEffect(() => {
+    if (termImagesOn) return;
+    for (const p of termImagesRef.current) dropTermImage(p.hash);
+    termImagesRef.current = [];
+    setTermImages([]);
+  }, [termImagesOn]);
   const [cellPx, setCellPx] = useState({ w: 8, h: 17 });
   const [noFit, setNoFitState] = useState<{
     cols: number;
@@ -1066,14 +1150,15 @@ export function TerminalView({
     const step = () => {
       raf = 0;
       const area = areaRef.current;
+      const wrap = termWrapRef.current;
       const screen = el.querySelector(".xterm-screen") as HTMLElement | null;
-      if (!area || !screen) return;
+      if (!area || !screen || !wrap) return;
       const aw = area.clientWidth - 12;
       const ah = area.clientHeight - 12;
-      // Mede o tamanho natural (sem escala CSS).
+      // Mede o tamanho natural (sem escala CSS). Escala no wrap (xterm+imagens).
       const prevScale = termScaleRef.current;
       if (prevScale !== 1) {
-        el.style.transform = "";
+        wrap.style.transform = "";
         termScaleRef.current = 1;
       }
       const sw = screen.offsetWidth;
@@ -1106,7 +1191,7 @@ export function TerminalView({
           return;
         }
       }
-      // Fonte no minimo e ainda nao cabe: escala o xterm para a area.
+      // Fonte no minimo e ainda nao cabe: escala o wrap (xterm + imagens).
       let scale = 1;
       const sw2 = screen.offsetWidth;
       const sh2 = screen.offsetHeight;
@@ -1114,16 +1199,16 @@ export function TerminalView({
       if (!fits && sw2 > 0 && sh2 > 0) {
         scale = Math.min(aw / sw2, ah / sh2, 1);
         if (scale < 0.99) {
-          el.style.transform = `scale(${scale})`;
-          el.style.transformOrigin = "left top";
+          wrap.style.transform = `scale(${scale})`;
+          wrap.style.transformOrigin = "left top";
           termScaleRef.current = scale;
           fits = true; // cabe apos escala; nao precisa scroll horizontal
         } else {
-          el.style.transform = "";
+          wrap.style.transform = "";
           termScaleRef.current = 1;
         }
       } else {
-        el.style.transform = "";
+        wrap.style.transform = "";
         termScaleRef.current = 1;
       }
       fitsRef.current = fits || scale < 1;
@@ -1266,20 +1351,35 @@ export function TerminalView({
         setScroll({ offset: off, scrollback: sb, rows: ev.rows });
       }
       rawRowsRef.current = ev.text.split("\r\n");
-      // Só redesenha o overlay quando placement/payload muda (evita re-render a cada poll).
-      const imgs = ev.images?.length ? ev.images : [];
-      const imgSig = imgs
-        .map((im) => `${im.hash ?? ""}:${im.row},${im.col},${im.cols}x${im.rows},${im.z ?? 0},${im.mime},${im.data?.length ?? 0}`)
-        .join("|");
-      if (imgSig !== lastImgSig) {
-        lastImgSig = imgSig;
-        setTermImages(imgs);
+      // Overlay: state só com placement (sem base64). Blob fica no cache por hash.
+      if (!termImagesOnRef.current) {
+        if (lastImgSig !== "off") {
+          lastImgSig = "off";
+          for (const p of termImagesRef.current) dropTermImage(p.hash);
+          termImagesRef.current = [];
+          setTermImages([]);
+        }
+      } else {
+        const raw = ev.images?.length ? ev.images : [];
+        const imgSig = raw
+          .filter((im) => im.data)
+          .map((im) => `${im.hash || ""}:${im.row},${im.col},${im.cols}x${im.rows},${im.z ?? 0},${im.data?.length ?? 0}`)
+          .join("|");
+        if (imgSig !== lastImgSig) {
+          lastImgSig = imgSig;
+          const next = syncTermImagePlacements(termImagesRef.current, raw);
+          termImagesRef.current = next;
+          setTermImages(next);
+        }
       }
-      // Mede a célula atual para posicionar o overlay das imagens.
+      // Célula = tela do xterm / cols do xterm (não ev.cols: se diverge, a
+      // imagem fica grande demais e o overflow corta a direita).
       const scr = termElRef.current?.querySelector(".xterm-screen") as HTMLElement | null;
-      if (scr && ev.cols > 0 && ev.rows > 0) {
-        const cw = scr.offsetWidth / ev.cols;
-        const ch = scr.offsetHeight / ev.rows;
+      const tcols = term.cols;
+      const trows = term.rows;
+      if (scr && tcols > 0 && trows > 0) {
+        const cw = scr.offsetWidth / tcols;
+        const ch = scr.offsetHeight / trows;
         if (cw > 0 && ch > 0 && (Math.abs(cw - lastCellW) > 0.05 || Math.abs(ch - lastCellH) > 0.05)) {
           lastCellW = cw;
           lastCellH = ch;
@@ -1326,6 +1426,8 @@ export function TerminalView({
       screenEl?.removeEventListener("mouseup", markMouse);
       screenEl?.removeEventListener("mousemove", markMouse);
       hideLinkTip();
+      for (const p of termImagesRef.current) dropTermImage(p.hash);
+      termImagesRef.current = [];
       rendererRef.current?.dispose();
       rendererRef.current = null;
       term.dispose();
@@ -1711,33 +1813,23 @@ Arraste para outra aba ou para a borda de outro terminal`
             if (el.scrollLeft !== next.scrollLeft) el.scrollLeft = next.scrollLeft;
           }}
         >
-          <div className="relative shrink-0">
+          <div ref={termWrapRef} className="relative shrink-0">
             <div ref={termElRef} className="select-text p-1.5" />
-            {/* Kitty / iTerm2: imagens no terminal (como no Ghostty). */}
-            {termImages.length > 0 && (
-              <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden p-1.5" aria-hidden>
-                {termImages.map((im, i) => {
-                  // WebView2 (Windows) e WKWebView (Mac): data URL com mime explícito.
-                  const mime = im.mime && im.mime.startsWith("image/") ? im.mime : "image/png";
-                  if (!im.data) return null;
-                  return (
-                    <img
-                      key={im.hash || `${im.row}-${im.col}-${im.cols}x${im.rows}-${i}`}
-                      src={`data:${mime};base64,${im.data}`}
-                      alt=""
-                      draggable={false}
-                      className="absolute max-w-none"
-                      style={{
-                        left: im.col * cellPx.w,
-                        top: im.row * cellPx.h,
-                        width: Math.max(1, im.cols) * cellPx.w,
-                        height: Math.max(1, im.rows) * cellPx.h,
-                        zIndex: 5 + (im.z ?? 0),
-                        objectFit: "fill",
-                      }}
-                    />
-                  );
-                })}
+            {/* Kitty / iTerm2: mesmo padding da grade; escala CSS no wrap. */}
+            {termImagesOn && termImages.length > 0 && (
+              <div
+                className="pointer-events-none absolute z-[5] overflow-visible"
+                style={{ left: TERM_SCREEN_PAD, top: TERM_SCREEN_PAD }}
+                aria-hidden
+              >
+                {termImages.map((im, i) => (
+                  <TermInlineImage
+                    key={im.hash || `${im.row}-${im.col}-${im.cols}x${im.rows}-${i}`}
+                    im={im}
+                    cellW={cellPx.w}
+                    cellH={cellPx.h}
+                  />
+                ))}
               </div>
             )}
           </div>
